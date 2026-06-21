@@ -1,0 +1,45 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+
+# TorchCTS run artifacts
+results/
+reports/
+artifacts/
+
+# Local analysis/debug scripts and generated notes
+scratch/
+project.md
+pushpypi.sh
+
+# Local manifests/config generated while validating external backends
+manifest.py
+
+# Secrets and local machine files
+.env
+.env.*
+*.pem
+*.key
+*token*.txt
+pypi-token.txt
+.DS_Store
+
+# Logs
+*.log
+*.out
+*.err
