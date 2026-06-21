@@ -1,0 +1,33 @@
+import pytest
+import torch
+from torchcts.core.device import synchronize
+
+DOUBLE_BACKWARD_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
+ACTIVATIONS = ["sigmoid", "tanh", "gelu", "silu"]
+
+@pytest.mark.medium
+@pytest.mark.requires("training")
+@pytest.mark.requires("double_backward")
+@pytest.mark.parametrize("dtype", DOUBLE_BACKWARD_DTYPES)
+@pytest.mark.parametrize("op_name", ACTIVATIONS)
+def test_double_backward_ops(dtype, op_name, device, compare, input_gen):
+    x_dev = input_gen((4, 4), dtype, device)
+    x_dev.requires_grad = True
+    
+    x_cpu = x_dev.cpu().detach()
+    x_cpu.requires_grad = True
+    
+    op_fn = getattr(torch, op_name, None) or getattr(torch.nn.functional, op_name)
+    
+    y_dev = op_fn(x_dev)
+    grad_y_dev = torch.autograd.grad(y_dev.sum(), x_dev, create_graph=True)[0]
+    loss_dev = grad_y_dev.pow(2).sum()
+    loss_dev.backward()
+    
+    y_cpu = op_fn(x_cpu)
+    grad_y_cpu = torch.autograd.grad(y_cpu.sum(), x_cpu, create_graph=True)[0]
+    loss_cpu = grad_y_cpu.pow(2).sum()
+    loss_cpu.backward()
+    
+    synchronize(device)
+    compare(x_dev.grad, x_cpu.grad, category="backward", dtype=dtype)

@@ -1,0 +1,35 @@
+import pytest
+import torch
+from torchcts.core.device import synchronize
+
+CAST_DTYPES = [
+    torch.float32, torch.float16, torch.bfloat16,
+    torch.int64, torch.int32, torch.int8, torch.bool
+]
+
+@pytest.mark.medium
+@pytest.mark.parametrize("src_dtype", CAST_DTYPES)
+@pytest.mark.parametrize("dst_dtype", CAST_DTYPES)
+def test_copy_cast_grid(src_dtype, dst_dtype, device, manifest, compare, input_gen):
+    # src_dtype/dst_dtype support is verified at collection time via conftest.
+        
+    # Generate source tensor
+    x_dev = input_gen((16, 16), src_dtype, device)
+    x_cpu = x_dev.cpu()
+    
+    # 1. Device-to-Device Copy & Cast
+    y_dev = x_dev.to(dst_dtype)
+    y_cpu = x_cpu.to(dst_dtype)
+    synchronize(device)
+    # Use 'copy' category or loose comparison depending on lossiness
+    category = "exact" if not (src_dtype.is_floating_point and not dst_dtype.is_floating_point) else "elementwise"
+    compare(y_dev, y_cpu, category=category, dtype=dst_dtype)
+    
+    # 2. Host-to-Device Copy & Cast
+    y_h2d = x_cpu.to(device=device, dtype=dst_dtype)
+    synchronize(device)
+    compare(y_h2d, y_cpu, category=category, dtype=dst_dtype)
+    
+    # 3. Device-to-Host Copy & Cast
+    y_d2h = x_dev.to(device="cpu", dtype=dst_dtype)
+    compare(y_d2h, y_cpu, category=category, dtype=dst_dtype)
