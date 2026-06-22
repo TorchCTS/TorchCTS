@@ -23,6 +23,7 @@ import torch
 from torchcts.core.device import synchronize
 
 @pytest.mark.smoke
+@pytest.mark.requires("generator")
 @pytest.mark.parametrize("seed", [42, 1234])
 def test_rng_reproducibility(seed, device, manifest):
     # 1. Same manual seed -> identical outputs
@@ -37,6 +38,7 @@ def test_rng_reproducibility(seed, device, manifest):
     assert torch.equal(x1.cpu(), x2.cpu()), "manual_seed did not yield reproducible random outputs"
 
 @pytest.mark.smoke
+@pytest.mark.requires("generator")
 @pytest.mark.parametrize("seed", [123, 456])
 def test_rng_generator_seeding(seed, device, manifest):
     # 2. Per-Generator seeding
@@ -57,6 +59,7 @@ def test_rng_generator_seeding(seed, device, manifest):
 
 
 @pytest.mark.smoke
+@pytest.mark.requires("generator")
 def test_rng_sequential_calls_differ(device, manifest):
     """Two consecutive randn calls with the same seed context must produce different tensors."""
     torch.manual_seed(42)
@@ -66,6 +69,7 @@ def test_rng_sequential_calls_differ(device, manifest):
 
 
 @pytest.mark.smoke
+@pytest.mark.requires("generator")
 def test_uniform_reproducibility(device, manifest):
     """uniform_() must be reproducible across manual_seed resets."""
     torch.manual_seed(42)
@@ -76,6 +80,7 @@ def test_uniform_reproducibility(device, manifest):
 
 
 @pytest.mark.smoke
+@pytest.mark.requires("generator")
 def test_bernoulli_reproducibility(device, manifest):
     """bernoulli_() must be reproducible across manual_seed resets."""
     torch.manual_seed(42)
@@ -84,3 +89,73 @@ def test_bernoulli_reproducibility(device, manifest):
     b = torch.empty(100, device=device).bernoulli_(0.5).cpu()
     assert torch.equal(a, b), "bernoulli_() not reproducible with same seed"
 
+
+@pytest.mark.smoke
+@pytest.mark.requires("generator")
+@pytest.mark.parametrize("seed", [42, 1234])
+def test_normal_reproducibility(seed, device, manifest):
+    mean = torch.zeros(100, device=device)
+    std = torch.ones(100, device=device)
+    torch.manual_seed(seed)
+    a = torch.normal(mean, std).cpu()
+    torch.manual_seed(seed)
+    b = torch.normal(mean, std).cpu()
+    assert torch.equal(a, b), "torch.normal() not reproducible with same seed"
+
+
+@pytest.mark.smoke
+@pytest.mark.requires("generator")
+@pytest.mark.parametrize("seed", [42, 1234])
+def test_multinomial_reproducibility(seed, device, manifest):
+    probs = torch.tensor([0.1, 0.2, 0.3, 0.4], device=device)
+    torch.manual_seed(seed)
+    a = torch.multinomial(probs, num_samples=50, replacement=True).cpu()
+    torch.manual_seed(seed)
+    b = torch.multinomial(probs, num_samples=50, replacement=True).cpu()
+    assert torch.equal(a, b), "torch.multinomial() not reproducible with same seed"
+
+
+@pytest.mark.medium
+@pytest.mark.requires("generator")
+def test_uniform_distribution_properties(device, manifest):
+    torch.manual_seed(42)
+    x = torch.empty(10000, device=device).uniform_().cpu().float()
+    assert x.min() >= 0.0, f"uniform_() produced value below 0: {x.min()}"
+    assert x.max() <= 1.0, f"uniform_() produced value above 1: {x.max()}"
+    assert abs(x.mean().item() - 0.5) < 0.05, f"uniform_() mean {x.mean().item()} not ≈ 0.5"
+    expected_std = 1.0 / (12 ** 0.5)
+    assert abs(x.std().item() - expected_std) < 0.05, (
+        f"uniform_() std {x.std().item()} not ≈ {expected_std}"
+    )
+
+
+@pytest.mark.medium
+@pytest.mark.requires("generator")
+def test_normal_distribution_properties(device, manifest):
+    torch.manual_seed(42)
+    x = torch.randn(10000, device=device).cpu().float()
+    assert abs(x.mean().item()) < 0.1, f"randn mean {x.mean().item()} not ≈ 0.0"
+    assert abs(x.std().item() - 1.0) < 0.1, f"randn std {x.std().item()} not ≈ 1.0"
+
+
+@pytest.mark.medium
+@pytest.mark.requires("generator")
+def test_bernoulli_distribution_properties(device, manifest):
+    p = 0.3
+    torch.manual_seed(42)
+    x = torch.empty(10000, device=device).bernoulli_(p).cpu().float()
+    freq = x.mean().item()
+    assert abs(freq - p) < 0.05, f"bernoulli_({p}) frequency {freq} not ≈ {p}"
+
+
+@pytest.mark.medium
+@pytest.mark.requires("generator")
+def test_multinomial_distribution_properties(device, manifest):
+    probs = torch.tensor([0.1, 0.2, 0.3, 0.4], device=device)
+    torch.manual_seed(42)
+    samples = torch.multinomial(probs, num_samples=10000, replacement=True).cpu()
+    for i, expected_p in enumerate(probs.cpu().tolist()):
+        empirical_p = (samples == i).float().mean().item()
+        assert abs(empirical_p - expected_p) < 0.05, (
+            f"multinomial category {i}: empirical {empirical_p} vs expected {expected_p}"
+        )

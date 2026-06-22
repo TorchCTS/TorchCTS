@@ -25,6 +25,7 @@ from torchcts.core.device import synchronize
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.stress
+@pytest.mark.requires("deterministic")
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("shapes", [
     (64, 128, 64),

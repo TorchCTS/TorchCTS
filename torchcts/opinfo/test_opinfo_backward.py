@@ -41,6 +41,7 @@ if not op_tests:
 
 @pytest.mark.opinfo
 @pytest.mark.parametrize("op_name, dtype_str", op_tests)
+@pytest.mark.requires("training")
 def test_op_backward(op_name, dtype_str, device, compare):
     if op_name == "dummy":
         pytest.skip("No OpInfo autograd tests matched the manifest filters.")

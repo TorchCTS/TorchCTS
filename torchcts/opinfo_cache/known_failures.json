@@ -80,5 +80,21 @@
       "linalg.lu@torch.float64": "RuntimeError: linalg.lu_factor: LU without pivoting is not implemented on the CPU",
       "linalg.lu@torch.float32": "RuntimeError: linalg.lu_factor: LU without pivoting is not implemented on the CPU"
     }
+  },
+  "2.12.1": {
+    "backward": {
+      "add@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "mul@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "sub@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "block_diag@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "masked_fill@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "svd@torch.complex64": "bwd RuntimeError: svd_backward: The singular vectors in the complex case are specified up to multiplication by e^{i phi}. The specified loss function depends on this phase term, making it ill-defined.",
+      "index_fill@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "index_put@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "where@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "norm@torch.complex32": "bwd NotImplementedError: \"div_cpu\" not implemented for 'ComplexHalf'",
+      "repeat_interleave@torch.complex32": "bwd NotImplementedError: \"sum_cpu\" not implemented for 'ComplexHalf'",
+      "linalg.svd@torch.complex64": "bwd RuntimeError: svd_backward: The singular vectors in the complex case are specified up to multiplication by e^{i phi}. The specified loss function depends on this phase term, making it ill-defined."
+    }
   }
 }

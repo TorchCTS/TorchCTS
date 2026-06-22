@@ -24,6 +24,7 @@ from torchcts.core.device import get_device_module
 
 @pytest.mark.gate
 @pytest.mark.smoke
+@pytest.mark.requires("device_api")
 @pytest.mark.parametrize("index", [0])
 def test_device_construction(index, device):
     dev1 = torch.device(device)
@@ -34,6 +35,7 @@ def test_device_construction(index, device):
     assert dev2.index == index
 
 @pytest.mark.smoke
+@pytest.mark.requires("device_api")
 @pytest.mark.parametrize("mode", ["standard"])
 def test_device_module_methods(mode, device, manifest):
     # CPU and missing-device-module checks handled at collection time in conftest.
@@ -58,6 +60,7 @@ def test_device_module_methods(mode, device, manifest):
     mod.empty_cache()  # should run without raising errors
 
 @pytest.mark.smoke
+@pytest.mark.requires("device_api")
 @pytest.mark.parametrize("mode", ["standard"])
 def test_device_memory_query(mode, device):
     # CPU and missing-device-module checks handled at collection time in conftest.
@@ -78,6 +81,7 @@ def test_device_memory_query(mode, device):
 
 @pytest.mark.gate
 @pytest.mark.smoke
+@pytest.mark.requires("device_api")
 @pytest.mark.parametrize("shape", [(10, 10), (5, 5)])
 def test_tensor_infrastructure(shape, device):
     # Create tensor on device
@@ -114,6 +118,7 @@ def test_tensor_infrastructure(shape, device):
 
 @pytest.mark.gate
 @pytest.mark.smoke
+@pytest.mark.requires("device_api")
 def test_matmul_on_device(device, compare):
     """1024x1024 matmul that proves the backend is actually dispatching, not
     silently falling back to CPU."""

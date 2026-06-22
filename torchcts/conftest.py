@@ -248,37 +248,6 @@ def get_required_capabilities(item):
     for m in item.iter_markers(name="requires"):
         for arg in m.args:
             reqs.add(arg)
-            
-    filepath = str(item.fspath).replace("\\", "/")
-    if "autograd/" in filepath or "test_opinfo_backward" in filepath:
-        reqs.add("training")
-    if "test_double_backward" in filepath:
-        reqs.add("double_backward")
-    if "test_gradcheck" in filepath:
-        reqs.add("gradcheck")
-    if "test_mixed_precision" in filepath:
-        reqs.add("autocast")
-    if "test_dataloader" in filepath:
-        reqs.add("dataloader")
-    if "test_module_hooks" in filepath:
-        reqs.add("module_hooks")
-    if "channels_last" in filepath:
-        reqs.add("channels_last")
-    if "sparse" in filepath:
-        reqs.add("sparse")
-    if "compiler/" in filepath:
-        reqs.add("compile")
-    if "serialization/" in filepath:
-        reqs.add("serialization")
-    if "rng/" in filepath:
-        reqs.add("generator")
-    if "device_api/" in filepath:
-        reqs.add("device_api")
-    if "multi_device/" in filepath:
-        reqs.add("multi_device")
-    if "guard_alloc" in filepath:
-        reqs.add("guard_alloc")
-        
     return reqs
 
 def pytest_configure(config):
@@ -444,6 +413,14 @@ def pytest_configure(config):
                     caps[cap] = False
                     print(f"Probe: {cap} -> disabled (subprocess probe failed)")
 
+        # Hard prerequisite: inference must be True
+        if not caps.get("inference", True):
+            pytest.exit(
+                "FATAL: capability 'inference' is False. A backend that cannot "
+                "perform inference cannot be tested.",
+                returncode=1,
+            )
+
     # 3. Hardware details
     _HARDWARE_KEY = get_hardware_key(_DEVICE_NAME, _MANIFEST)
     _RESULTS_DIR = config.getoption("--results-dir")
@@ -478,6 +455,19 @@ def pytest_configure(config):
 
     # Start timing
     _START_TIME = time.time()
+
+    # Append custom_test_dirs from manifest to pytest collection paths
+    custom_dirs = _MANIFEST.get("custom_test_dirs", [])
+    for cdir in custom_dirs:
+        abs_cdir = os.path.abspath(cdir)
+        if os.path.isdir(abs_cdir):
+            if abs_cdir not in config.args:
+                config.args.append(abs_cdir)
+        else:
+            print(
+                f"Warning: custom_test_dirs entry '{cdir}' is not a valid directory, skipping.",
+                file=sys.stderr,
+            )
     
     # 4. Prepare shared test data on device
     if not _SHOW_SKIPS and not _SUBPROCESS_MODE and not _COLLECT_ONLY:
@@ -862,6 +852,12 @@ def device():
 def manifest():
     global _MANIFEST
     return _MANIFEST
+
+@pytest.fixture
+def ref_device():
+    global _MANIFEST
+    ref = _MANIFEST.get("reference_device")
+    return ref if ref else "cpu"
 
 @pytest.fixture
 def compare():
