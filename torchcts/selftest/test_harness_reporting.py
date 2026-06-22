@@ -1,3 +1,23 @@
+# Copyright (c) 2026 Kris Bailey <kris@krisbailey.com>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import json
 from pathlib import Path
 
@@ -296,3 +316,56 @@ def test_benchmark_mode_runs_marked_tests(monkeypatch):
     assert harness.pytest_pyfunc_call(item) is True
     assert item.calls == 110
     assert item.bench_stats["repetitions"] == 100
+
+
+def test_check_hardware_alignment_macos_warning(monkeypatch, capsys):
+    monkeypatch.setattr(device_module.sys, "platform", "darwin")
+    # Mock MPS to be unavailable
+    if hasattr(device_module.torch, "backends") and hasattr(device_module.torch.backends, "mps"):
+        monkeypatch.setattr(device_module.torch.backends.mps, "is_available", lambda: False)
+    if hasattr(device_module.torch, "mps") and hasattr(device_module.torch.mps, "is_available"):
+        monkeypatch.setattr(device_module.torch.mps, "is_available", lambda: False)
+
+    assert device_module._check_hardware_alignment() is True
+    captured = capsys.readouterr()
+    assert "WARNING: Running on macOS, but the installed PyTorch does not have MPS" in captured.err
+
+
+def test_check_hardware_alignment_windows_cuda_error(monkeypatch, capsys):
+    monkeypatch.setattr(device_module.sys, "platform", "win32")
+    monkeypatch.setattr(device_module.shutil, "which", lambda cmd: "/usr/bin/nvidia-smi" if cmd == "nvidia-smi" else None)
+    monkeypatch.setattr(device_module.torch.cuda, "is_available", lambda: False)
+
+    assert device_module._check_hardware_alignment() is False
+    captured = capsys.readouterr()
+    assert "ERROR: NVIDIA GPU hardware detected via nvidia-smi" in captured.err
+
+
+def test_check_hardware_alignment_windows_rocm_error(monkeypatch, capsys):
+    monkeypatch.setattr(device_module.sys, "platform", "win32")
+    monkeypatch.setattr(device_module.shutil, "which", lambda cmd: "/usr/bin/rocm-smi" if cmd == "rocm-smi" else None)
+    monkeypatch.setattr(device_module.torch.cuda, "is_available", lambda: False)
+
+    assert device_module._check_hardware_alignment() is False
+    captured = capsys.readouterr()
+    assert "ERROR: AMD ROCm GPU hardware detected" in captured.err
+
+
+def test_check_hardware_alignment_windows_intel_error(monkeypatch, capsys):
+    monkeypatch.setattr(device_module.sys, "platform", "win32")
+    monkeypatch.setattr(device_module.shutil, "which", lambda cmd: "/usr/bin/xpu-smi" if cmd == "xpu-smi" else None)
+    if hasattr(device_module.torch, "xpu"):
+        monkeypatch.setattr(device_module.torch.xpu, "is_available", lambda: False)
+    else:
+        # Mock class/module if xpu isn't present
+        class FakeXPU:
+            @staticmethod
+            def is_available():
+                return False
+        monkeypatch.setattr(device_module.torch, "xpu", FakeXPU, raising=False)
+
+    assert device_module._check_hardware_alignment() is False
+    captured = capsys.readouterr()
+    assert "ERROR: Intel GPU hardware detected" in captured.err
+
+

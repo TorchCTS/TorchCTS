@@ -24,8 +24,9 @@ artifacts/
 
 # Local analysis/debug scripts and generated notes
 scratch/
-project.md
 pushpypi.sh
+createvenv.sh
+createpackage.sh
 
 # Local manifests/config generated while validating external backends
 manifest.py

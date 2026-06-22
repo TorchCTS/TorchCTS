@@ -1,3 +1,23 @@
+# Copyright (c) 2026 Kris Bailey <kris@krisbailey.com>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import os
 import sys
 import site
@@ -6,6 +26,7 @@ import torch
 import importlib
 import importlib.util
 import re
+import shutil
 
 # Regex to parse backend name from registration calls.
 # Handles: rename_privateuse1_backend("name"), register_privateuse1_backend('name'),
@@ -19,7 +40,7 @@ _SCAN_SKIP_DIRS = frozenset({
     'torch', 'pip', 'setuptools', 'numpy', 'pytest', 'scipy', 'pandas',
     'matplotlib', 'sympy', 'networkx', 'jinja2', 'markupsafe', 'mpmath',
     'filelock', 'typing_extensions', 'psutil', 'distutils', 'wheel',
-    'pkg_resources', '__pycache__',
+    'pkg_resources', '__pycache__', 'torchcts',
 })
 
 
@@ -218,6 +239,54 @@ def _validate_backend_import(import_path, expected_name, timeout=10):
         return False
 
 
+def _check_hardware_alignment():
+    """Detect OS and check if PyTorch is compiled with support for present hardware backends."""
+    # 1. macOS / MPS check
+    if sys.platform == "darwin":
+        has_mps = (
+            (hasattr(torch, "backends") and hasattr(torch.backends, "mps") and torch.backends.mps.is_available()) or
+            (hasattr(torch, "mps") and hasattr(torch.mps, "is_available") and torch.mps.is_available())
+        )
+        if not has_mps:
+            print("\n" + "="*80, file=sys.stderr)
+            print("WARNING: Running on macOS, but the installed PyTorch does not have MPS (Metal)", file=sys.stderr)
+            print("support enabled. You may be running an x86_64 or CPU-only PyTorch build.", file=sys.stderr)
+            print("To use GPU acceleration, please install a native macOS PyTorch build.", file=sys.stderr)
+            print("="*80 + "\n", file=sys.stderr)
+
+    # 2. Windows / Linux checks
+    elif sys.platform == "win32" or sys.platform.startswith("linux"):
+        # Check NVIDIA (CUDA)
+        if shutil.which("nvidia-smi") is not None:
+            if not torch.cuda.is_available():
+                print("\n" + "="*80, file=sys.stderr)
+                print("ERROR: NVIDIA GPU hardware detected via nvidia-smi, but the installed PyTorch", file=sys.stderr)
+                print("version is not compiled with CUDA support (it is likely CPU-only).", file=sys.stderr)
+                print("Please install a PyTorch build with CUDA enabled.", file=sys.stderr)
+                print("="*80 + "\n", file=sys.stderr)
+                
+        # Check AMD (ROCm)
+        elif (shutil.which("rocm-smi") is not None or 
+              shutil.which("rocminfo") is not None or 
+              shutil.which("hipinfo") is not None):
+            if not torch.cuda.is_available():
+                print("\n" + "="*80, file=sys.stderr)
+                print("ERROR: AMD ROCm GPU hardware detected, but the installed PyTorch version is", file=sys.stderr)
+                print("not compiled with ROCm/CUDA support (it is likely CPU-only).", file=sys.stderr)
+                print("Please install a PyTorch build with ROCm/CUDA enabled.", file=sys.stderr)
+                print("="*80 + "\n", file=sys.stderr)
+
+        # Check Intel (XPU)
+        elif shutil.which("sycl-ls") is not None or shutil.which("xpu-smi") is not None:
+            has_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
+            if not has_xpu:
+                print("\n" + "="*80, file=sys.stderr)
+                print("ERROR: Intel GPU hardware detected, but the installed PyTorch version is not", file=sys.stderr)
+                print("compiled with XPU support (it is likely CPU-only).", file=sys.stderr)
+                print("Please install a PyTorch build with XPU enabled.", file=sys.stderr)
+                print("="*80 + "\n", file=sys.stderr)
+
+
 def detect_backends(non_interactive=False):
     """Detect available device backends (in-tree and custom PrivateUse1).
     
@@ -225,6 +294,7 @@ def detect_backends(non_interactive=False):
     (name, type, import_path) tuples for custom backends. No custom
     backends are imported in-process during detection.
     """
+    _check_hardware_alignment()
     print("Probing backends...", flush=True)
     backends = []
     
