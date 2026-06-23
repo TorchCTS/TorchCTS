@@ -20,7 +20,7 @@
 
 import torch
 import math
-from torchcts.core.tolerances import get_tolerance, Tol
+from torchcts.core.tolerances import get_tolerance, Tol, TieredTol
 
 # Global dictionary to track metrics of the currently running test comparison
 _ACTIVE_TEST_METRICS = {
@@ -28,7 +28,10 @@ _ACTIVE_TEST_METRICS = {
     "max_rel_err": 0.0,
     "cosim": 1.0,
     "passed": True,
-    "error_msg": None
+    "error_msg": None,
+    "golden_pass": True,
+    "usable_pass": True,
+    "quality_warning": None,
 }
 
 def clear_metrics():
@@ -38,7 +41,10 @@ def clear_metrics():
         "max_rel_err": 0.0,
         "cosim": 1.0,
         "passed": True,
-        "error_msg": None
+        "error_msg": None,
+        "golden_pass": True,
+        "usable_pass": True,
+        "quality_warning": None,
     }
 
 def get_metrics():
@@ -107,9 +113,11 @@ def compare_tensors(actual, expected, category, dtype, manifest_overrides=None, 
         exp_size = expected.element_size()
         effective_dtype = actual.dtype if act_size <= exp_size else expected.dtype
 
-    tol = get_tolerance(category, effective_dtype, manifest_overrides)
+    golden_tol = get_tolerance(category, effective_dtype, tier="golden", manifest_overrides=manifest_overrides)
+    usable_tol = get_tolerance(category, effective_dtype, tier="usable", manifest_overrides=manifest_overrides)
     if scale_factor != 1.0:
-        tol = tol.scaled(scale_factor)
+        golden_tol = golden_tol.scaled(scale_factor)
+        usable_tol = usable_tol.scaled(scale_factor)
         
     # 2. Check shapes
     if actual.shape != expected.shape:
@@ -165,16 +173,103 @@ def compare_tensors(actual, expected, category, dtype, manifest_overrides=None, 
     _ACTIVE_TEST_METRICS["max_rel_err"] = max(_ACTIVE_TEST_METRICS["max_rel_err"], max_rel)
     _ACTIVE_TEST_METRICS["cosim"] = min(_ACTIVE_TEST_METRICS["cosim"], cosim)
 
-    # 5. Assertion check
+    # 5. Two-tier assertion check (golden then usable)
+    golden_passed = True
+    golden_error = None
     try:
         torch.testing.assert_close(
             act_cpu,
             exp_cpu,
-            rtol=tol.rtol,
-            atol=tol.atol,
+            rtol=golden_tol.rtol,
+            atol=golden_tol.atol,
             equal_nan=equal_nan
         )
     except AssertionError as e:
-        _ACTIVE_TEST_METRICS["passed"] = False
-        _ACTIVE_TEST_METRICS["error_msg"] = str(e)
-        raise e
+        golden_passed = False
+        golden_error = e
+
+    if golden_passed:
+        # Both tiers pass
+        _ACTIVE_TEST_METRICS["golden_pass"] = _ACTIVE_TEST_METRICS["golden_pass"] and True
+        _ACTIVE_TEST_METRICS["usable_pass"] = _ACTIVE_TEST_METRICS["usable_pass"] and True
+        return
+
+    # Golden failed — try usable tier
+    usable_passed = True
+    try:
+        torch.testing.assert_close(
+            act_cpu,
+            exp_cpu,
+            rtol=usable_tol.rtol,
+            atol=usable_tol.atol,
+            equal_nan=equal_nan
+        )
+    except AssertionError:
+        usable_passed = False
+
+    _ACTIVE_TEST_METRICS["golden_pass"] = _ACTIVE_TEST_METRICS["golden_pass"] and golden_passed
+    _ACTIVE_TEST_METRICS["usable_pass"] = _ACTIVE_TEST_METRICS["usable_pass"] and usable_passed
+
+    if usable_passed:
+        # Usable passed but golden failed — record warning, don't raise
+        warning_msg = (
+            f"Quality warning: passed usable tolerance "
+            f"(rtol={usable_tol.rtol}, atol={usable_tol.atol}) "
+            f"but failed golden tolerance "
+            f"(rtol={golden_tol.rtol}, atol={golden_tol.atol}): {golden_error}"
+        )
+        _ACTIVE_TEST_METRICS["quality_warning"] = warning_msg
+        return
+
+    # Both tiers failed — raise the golden error
+    _ACTIVE_TEST_METRICS["passed"] = False
+    _ACTIVE_TEST_METRICS["error_msg"] = str(golden_error)
+    raise golden_error
+
+def compare_nan_propagation(actual, expected):
+    """Check that NaN positions match between actual and expected."""
+    __tracebackhide__ = True
+    act_cpu = prepare_compare_tensor(actual)
+    exp_cpu = prepare_compare_tensor(expected)
+    
+    if act_cpu.shape != exp_cpu.shape:
+        raise AssertionError(f"Shape mismatch: {act_cpu.shape} vs {exp_cpu.shape}")
+    
+    act_nan = torch.isnan(act_cpu)
+    exp_nan = torch.isnan(exp_cpu)
+    
+    if not torch.equal(act_nan, exp_nan):
+        mismatch = (act_nan != exp_nan)
+        n_mismatch = mismatch.sum().item()
+        device_extra_nan = (act_nan & ~exp_nan).sum().item()
+        device_missing_nan = (~act_nan & exp_nan).sum().item()
+        raise AssertionError(
+            f"NaN propagation mismatch: {n_mismatch} positions differ. "
+            f"Device has {device_extra_nan} extra NaNs, missing {device_missing_nan} NaNs."
+        )
+
+def compare_inf_propagation(actual, expected):
+    """Check that Inf positions and signs match between actual and expected."""
+    __tracebackhide__ = True
+    act_cpu = prepare_compare_tensor(actual)
+    exp_cpu = prepare_compare_tensor(expected)
+    
+    if act_cpu.shape != exp_cpu.shape:
+        raise AssertionError(f"Shape mismatch: {act_cpu.shape} vs {exp_cpu.shape}")
+    
+    act_inf = torch.isinf(act_cpu)
+    exp_inf = torch.isinf(exp_cpu)
+    
+    if not torch.equal(act_inf, exp_inf):
+        mismatch = (act_inf != exp_inf)
+        raise AssertionError(
+            f"Inf propagation mismatch: {mismatch.sum().item()} positions differ."
+        )
+    
+    # Where both are inf, check sign matches
+    both_inf = act_inf & exp_inf
+    if both_inf.any():
+        act_sign = torch.sign(act_cpu[both_inf])
+        exp_sign = torch.sign(exp_cpu[both_inf])
+        if not torch.equal(act_sign, exp_sign):
+            raise AssertionError("Inf sign mismatch at some positions.")

@@ -36,6 +36,31 @@ def get_template_path(name):
     if os.path.exists(root_template):
         return root_template
     return None
+def _discover_templates():
+    """Scan the templates directory for manifest.*.py files.
+    
+    Returns list of (name, description) tuples, sorted by name.
+    Descriptions are read from '# Description: ...' comment lines in each file.
+    """
+    pkg_dir = os.path.dirname(__file__)
+    templates_dir = os.path.join(pkg_dir, "templates")
+    templates = []
+    if os.path.isdir(templates_dir):
+        for f in sorted(os.listdir(templates_dir)):
+            if f.startswith("manifest.") and f.endswith(".py"):
+                name = f[len("manifest."):-len(".py")]
+                desc = name  # fallback
+                filepath = os.path.join(templates_dir, f)
+                try:
+                    with open(filepath, "r", encoding="utf-8") as fh:
+                        for line in fh:
+                            if line.startswith("# Description:"):
+                                desc = line[len("# Description:"):].strip()
+                                break
+                except Exception:
+                    pass
+                templates.append((name, desc))
+    return templates
 
 def init_manifest(template_name=None, non_interactive=False):
     manifest_path = os.path.join(os.getcwd(), "manifest.py")
@@ -48,23 +73,28 @@ def init_manifest(template_name=None, non_interactive=False):
             print("Aborted.")
             return 0
 
-    templates = ["complete", "training", "inference", "minimal"]
+    templates = _discover_templates()
+    if not templates:
+        print("Error: No templates found.", file=sys.stderr)
+        return 1
+
+    template_names = [t[0] for t in templates]
+
     if not template_name:
         if non_interactive:
-            template_name = "complete"
+            template_name = "complete" if "complete" in template_names else template_names[0]
         else:
             print("\nSelect a template:")
-            print("  [1] complete    — broadest template, intended for explicit opt-in only (Default)")
-            print("  [2] training    — full training loop: autograd, optimizers, autocast, DataLoader")
-            print("  [3] inference   — production inference, all dtypes, full OpInfo sweep")
-            print("  [4] minimal     — device registration + ~20 core ops (float32/int64/bool only)")
+            for i, (name, desc) in enumerate(templates, 1):
+                default_tag = " (Default)" if name == "complete" else ""
+                print(f"  [{i}] {name:<14s}— {desc}{default_tag}")
             
             try:
-                val = input("Template [1-4, default 1]: ").strip()
+                val = input(f"Template [1-{len(templates)}, default 1]: ").strip()
                 if val == "":
-                    template_name = "complete"
-                elif val in ("1", "2", "3", "4"):
-                    template_name = templates[int(val) - 1]
+                    template_name = "complete" if "complete" in template_names else template_names[0]
+                elif val.isdigit() and 1 <= int(val) <= len(templates):
+                    template_name = template_names[int(val) - 1]
                 else:
                     print("Invalid choice. Aborted.", file=sys.stderr)
                     return 1
@@ -249,6 +279,23 @@ def main():
             if not has_tb_option:
                 pytest_args.append("--tb=no")
 
+        # --- Parallel execution warning ---
+        # Detect -n (pytest-xdist) and warn about GPU contention
+        detected_n = 0
+        for idx, a in enumerate(pytest_args):
+            if a == "-n" and idx + 1 < len(pytest_args):
+                try:
+                    detected_n = int(pytest_args[idx + 1])
+                except ValueError:
+                    pass
+                break
+        if detected_n > 0:
+            print(f"\n  ⚡ Parallel mode: {detected_n} workers")
+            print("  ⚠  Some GPU drivers hang under multi-process contention.")
+            print("     MPS (Apple Silicon) is known to deadlock on heavy linalg ops.")
+            print("     If the run hangs, kill it — partial results are saved to disk.")
+            print("     Re-run without -n to finish remaining tests.\n")
+
         # --- Backend selection (before pytest captures stdin) ---
         # If user didn't pass --device, detect backends now and prompt if
         # multiple are found. Pass the result to pytest via --device.
@@ -336,7 +383,9 @@ def main():
     report_parser.add_argument("--from-file", dest="from_file", help="Path to the results JSON file")
 
     # Sync-opinfo subcommand
-    subparsers.add_parser("sync-opinfo", help="Force-rebuild the OpInfo registry cache")
+    sync_parser = subparsers.add_parser("sync-opinfo", help="Force-rebuild the OpInfo registry cache")
+    sync_parser.add_argument("--discover-ieee754-undefined", action="store_true",
+                             help="Discover ops with undefined CPU NaN/Inf behavior")
 
     # Check-manifest subcommand
     check_parser = subparsers.add_parser("check-manifest", help="Validate manifest.py syntax and schema")
@@ -379,6 +428,15 @@ def main():
             fwd_count = len(known.get("forward", {}))
             bwd_count = len(known.get("backward", {}))
             print(f"Known CPU failures: {fwd_count} forward, {bwd_count} backward")
+            if getattr(args, 'discover_ieee754_undefined', False):
+                from torchcts.core.opinfo_adapter import discover_ieee754_undefined_ops, save_ieee754_undefined
+                print("Discovering ops with undefined CPU NaN/Inf behavior...")
+                undefined = discover_ieee754_undefined_ops()
+                save_ieee754_undefined(undefined)
+                print(f"Found {len(undefined)} ops with undefined NaN/Inf behavior")
+                if undefined:
+                    for name in sorted(undefined):
+                        print(f"  - {name}")
             sys.exit(0)
         except Exception as e:
             print(f"Error loading OpInfo database: {e}", file=sys.stderr)

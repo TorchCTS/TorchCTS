@@ -21,6 +21,7 @@
 import os
 import sys
 import json
+import glob
 import time
 import datetime
 import subprocess
@@ -66,7 +67,11 @@ _SUBPROCESS_MODE = False
 _MEMORY_MODE = "balanced"
 _CLEANUP_THRESHOLD = 80
 
-_HARDWARE_UNSUPPORTED_PATTERNS = [
+# pytest-xdist parallel execution support
+_XDIST_WORKER_ID = os.environ.get("PYTEST_XDIST_WORKER")  # e.g. "gw0", "gw1" or None
+_IS_XDIST_WORKER = _XDIST_WORKER_ID is not None
+
+_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL = [
     # PyTorch dispatcher: op not registered for backend
     r"Could not run '.*' with arguments from the '.*' backend",
     r"Could not run '.*' from the '.*' device",
@@ -83,7 +88,29 @@ _HARDWARE_UNSUPPORTED_PATTERNS = [
     r"Only float is supported",
     # tensor_split device mismatch (framework limitation)
     r"tensor_split expected .* to be on cpu, but it's on",
+    # Generic kernel/dtype restrictions
+    r"not supported on (?:MPS|CUDA|XPU)",
+    r"Convolution is supported only for Floating types",
+    r"Failed to create function state object for:",
+    r"does not support automatic differentiation for outputs with complex dtype",
+    r"memory format option is only supported by strided tensors",
+    r"only supports floating-point dtypes",
+    r"value cannot be converted to type .* without overflow",
 ]
+
+_HARDWARE_UNSUPPORTED_PATTERNS_MPS = [
+    r"Adaptive pool MPS: input sizes must be divisible by output sizes",
+    r"grid_sampler_3d: Unsupported Nearest interpolation",
+    r"linalg_inv: not supported for complex types yet",
+    r"cholesky_inverse: MPS only supports float type",
+    r"index_reduce for MPS does not support torch\.long",
+    r"ConvTranspose 3D with BF16 or FP16 types is not supported on MPS",
+    r"the MPS framework doesn't support",
+]
+
+# Effective pattern list — built during pytest_configure based on device
+_HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
+
 _MAX_DEVICE_MEM = None
 _MAX_TENSOR_SIZE = None
 _COLLECT_ONLY = False
@@ -134,6 +161,9 @@ def _extract_result_metadata(item):
         "op": None,
         "dtype": None,
         "shapes": None,
+        "golden_pass": True,
+        "usable_pass": True,
+        "quality_warning": False,
     }
 
     filepath = str(item.fspath)
@@ -168,6 +198,10 @@ def _extract_result_metadata(item):
                         if isinstance(arg, torch.Tensor):
                             shapes.append(list(arg.shape))
                 metadata["shapes"] = shapes
+
+    # Input condition tier (opinfo tests)
+    if hasattr(item, "callspec") and "input_condition" in item.callspec.params:
+        metadata["input_condition"] = item.callspec.params["input_condition"]
 
     return metadata
 
@@ -295,18 +329,20 @@ def pytest_configure(config):
             "module_hooks": True,
             "channels_last": True,
             "sparse": True,
-            "nested": True,
+            "nested": False,  # nested SDPA requires accelerator (CPU fallback has different semantics)
             "foreach": True,
             "fp8": True,
             "quantized": True,
             "compile": True,
             "pinned_memory": True,
             "deterministic": True,
+            "native_quantization": True,
             "device_api": False,
             "guard_alloc": False,
             "streams": False,
             "events": False,
             "multi_device": False,
+            "ieee754": True,
         }
         _MANIFEST["supported_dtypes"] = {
             torch.float32: True,
@@ -324,6 +360,9 @@ def pytest_configure(config):
         }
         _MANIFEST["skip_ops"] = []
         _MANIFEST["device_count"] = 1
+        _MANIFEST.setdefault("ieee754_seed", 67)
+        _MANIFEST.setdefault("max_samples", 10)
+        _MANIFEST.setdefault("max_samples_ieee754", 3)
     else:
         if _COLLECT_ONLY or config.getoption("--show-skips"):
             configured_name = _MANIFEST.get("device_name", "auto")
@@ -388,40 +427,45 @@ def pytest_configure(config):
 
     # Probes and capability overrides (only when executing, not in validation/collectonly modes)
     if not is_validation and not _COLLECT_ONLY:
-        # Dynamic Dtype Probing
+        # Dynamic Dtype Probing — in-process torch.zeros, safe for all processes
         supported_dtypes = _MANIFEST.setdefault("supported_dtypes", {})
         probed_supported = {}
         for dt, val in list(supported_dtypes.items()):
-            # Only probe if the dtype was mapped to True or a pattern
             if val:
                 try:
-                    # Try allocating a small tensor on target device
                     torch.zeros(1, dtype=dt, device=_DEVICE_NAME)
                     probed_supported[dt] = val
                 except Exception:
-                    # Device does not support this dtype, remove it
                     pass
         supported_dtypes.clear()
         supported_dtypes.update(probed_supported)
 
-        # Dynamic Capability Probing (pinned_memory, sparse)
-        from torchcts.core.device import probe_capability
-        caps = _MANIFEST.setdefault("capabilities", {})
-        for cap in ["pinned_memory", "sparse"]:
-            if caps.get(cap, False):
-                if not probe_capability(_DEVICE_NAME, cap):
-                    caps[cap] = False
-                    print(f"Probe: {cap} -> disabled (subprocess probe failed)")
+        # Dynamic Capability Probing (pinned_memory, sparse) — subprocess-based.
+        # Skip in xdist workers: concurrent subprocess probes cause hangs.
+        if not _IS_XDIST_WORKER:
+            from torchcts.core.device import probe_capability
+            caps = _MANIFEST.setdefault("capabilities", {})
+            for cap in ["pinned_memory", "sparse"]:
+                if caps.get(cap, False):
+                    if not probe_capability(_DEVICE_NAME, cap):
+                        caps[cap] = False
+                        print(f"Probe: {cap} -> disabled (subprocess probe failed)")
 
-        # Hard prerequisite: inference must be True
-        if not caps.get("inference", True):
-            pytest.exit(
-                "FATAL: capability 'inference' is False. A backend that cannot "
-                "perform inference cannot be tested.",
-                returncode=1,
-            )
+            # Hard prerequisite: inference must be True
+            if not caps.get("inference", True):
+                pytest.exit(
+                    "FATAL: capability 'inference' is False. A backend that cannot "
+                    "perform inference cannot be tested.",
+                    returncode=1,
+                )
 
     # 3. Hardware details
+    # Build effective hardware unsupported patterns based on device
+    global _HARDWARE_UNSUPPORTED_PATTERNS
+    _HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
+    if _DEVICE_NAME == "mps":
+        _HARDWARE_UNSUPPORTED_PATTERNS.extend(_HARDWARE_UNSUPPORTED_PATTERNS_MPS)
+
     _HARDWARE_KEY = get_hardware_key(_DEVICE_NAME, _MANIFEST)
     _RESULTS_DIR = config.getoption("--results-dir")
     
@@ -434,7 +478,7 @@ def pytest_configure(config):
     
     # Memory configurations
     _MEMORY_MODE = config.getoption("--memory-mode")
-    _CLEANUP_THRESHOLD = _MANIFEST.get("resource_limits", {}).get("cleanup_threshold_pct", 80)
+    _CLEANUP_THRESHOLD = int(_MANIFEST.get("resource_limits", {}).get("cleanup_threshold_pct", 80))
     
     cli_max_mem = config.getoption("--max-device-memory")
     _MAX_DEVICE_MEM = cli_max_mem if cli_max_mem is not None else _MANIFEST.get("resource_limits", {}).get("max_device_memory_mb")
@@ -445,6 +489,15 @@ def pytest_configure(config):
     # Load baseline results for regression detection
     _BASELINE_RESULTS = {}
     if _ARTIFACT_WRITES_ENABLED:
+        # Merge orphaned xdist worker files from a previously killed parallel run.
+        # Workers flush after every test, so these contain all results up to the hang.
+        if not _IS_XDIST_WORKER:
+            orphan_pattern = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.gw*.json")
+            if glob.glob(orphan_pattern):
+                print("Recovering partial result file(s) from a previous parallel run...")
+                count = _merge_xdist_worker_files(_RESULTS_DIR, _HARDWARE_KEY)
+                print(f"  Merged {count} result(s) into {_HARDWARE_KEY}_latest.json")
+
         latest_json_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
         if os.path.exists(latest_json_path):
             try:
@@ -543,57 +596,11 @@ def pytest_collection_modifyitems(session, config, items):
         config.hook.pytest_deselected(items=deselected_items)
         items[:] = filtered_items
 
-    # Check capabilities and supported dtypes
-    is_validation = config.getoption("--validation")
-    if is_validation:
-        caps = {
-            "inference": True,
-            "training": True,
-            "serialization": True,
-            "generator": True,
-            "double_backward": True,
-            "gradcheck": True,
-            "gradient_checkpointing": True,
-            "autocast": True,
-            "fused_optimizer": True,
-            "dataloader": True,
-            "module_hooks": True,
-            "channels_last": True,
-            "sparse": True,
-            "nested": True,
-            "foreach": True,
-            "fp8": True,
-            "quantized": True,
-            "compile": False,
-            "pinned_memory": True,
-            "deterministic": True,
-            "device_api": False,
-            "guard_alloc": False,
-            "streams": False,
-            "events": False,
-            "multi_device": False,
-        }
-        supported_dtypes = {
-            torch.float32: True,
-            torch.float64: True,
-            torch.float16: True,
-            torch.bfloat16: True,
-            torch.int64: True,
-            torch.int32: True,
-            torch.int16: True,
-            torch.int8: True,
-            torch.uint8: True,
-            torch.bool: True,
-            torch.complex64: True,
-            torch.complex128: True,
-        }
-        skip_ops = set()
-        device_count = 1
-    else:
-        caps = _MANIFEST.get("capabilities", {})
-        supported_dtypes = _MANIFEST.get("supported_dtypes", {})
-        skip_ops = set(_MANIFEST.get("skip_ops", []))
-        device_count = _MANIFEST.get("effective_device_count", _MANIFEST.get("device_count", 1))
+    # Read capabilities and dtypes from _MANIFEST (already configured by pytest_configure)
+    caps = _MANIFEST.get("capabilities", {})
+    supported_dtypes = _MANIFEST.get("supported_dtypes", {})
+    skip_ops = set(_MANIFEST.get("skip_ops", []))
+    device_count = _MANIFEST.get("effective_device_count", _MANIFEST.get("device_count", 1))
     
     # Dynamic compiler functional check
     if caps.get("compile", False) and not (_COLLECT_ONLY or _SHOW_SKIPS):
@@ -805,9 +812,78 @@ def flush_results_to_disk():
         "skips": _SESSION_SKIPS if _REPORT_SKIPS else {}
     }
     
-    latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
+    
+    # Under xdist, each worker writes to its own file to avoid clobbering
+    if _IS_XDIST_WORKER:
+        latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.{_XDIST_WORKER_ID}.json")
+    else:
+        latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
     with open(latest_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
+    """Merge per-worker result files into a single latest.json.
+    
+    Used by both: (1) controller at session end, (2) startup recovery of
+    orphaned files from a killed parallel run.
+    Returns the number of merged results, or 0 if no worker files found.
+    """
+    pattern = os.path.join(results_dir, f"{hardware_key}_latest.gw*.json")
+    worker_files = sorted(glob.glob(pattern))
+    if not worker_files:
+        return 0
+    
+    if latest_path is None:
+        latest_path = os.path.join(results_dir, f"{hardware_key}_latest.json")
+    
+    # Load existing latest.json as base (if any)
+    merged_results = {}
+    merged_skips = {}
+    merged_metadata = None
+    total_elapsed = 0.0
+    if os.path.exists(latest_path):
+        try:
+            with open(latest_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            merged_results = existing.get("results", {})
+            merged_skips = existing.get("skips", {})
+            merged_metadata = existing.get("metadata")
+        except Exception:
+            pass
+    
+    # Merge worker files on top
+    for wf in worker_files:
+        try:
+            with open(wf, "r", encoding="utf-8") as f:
+                wdata = json.load(f)
+            merged_results.update(wdata.get("results", {}))
+            merged_skips.update(wdata.get("skips", {}))
+            wm = wdata.get("metadata", {})
+            total_elapsed = max(total_elapsed, wm.get("elapsed_sec", 0.0))
+            if merged_metadata is None:
+                merged_metadata = wm
+        except Exception:
+            continue
+    
+    if merged_metadata and total_elapsed > 0:
+        merged_metadata["elapsed_sec"] = total_elapsed
+    
+    merged_data = {
+        "metadata": merged_metadata or {},
+        "results": merged_results,
+        "skips": merged_skips,
+    }
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(merged_data, f, indent=2)
+    
+    # Clean up worker files
+    for wf in worker_files:
+        try:
+            os.remove(wf)
+        except Exception:
+            pass
+    
+    return len(merged_results)
 
 @pytest.fixture(autouse=True)
 def test_setup_teardown(request):
@@ -820,7 +896,13 @@ def test_setup_teardown(request):
     
     # Teardown / Memory management cleanup
     global _DEVICE_NAME, _MEMORY_MODE, _CLEANUP_THRESHOLD
-    if _MEMORY_MODE == "conservative":
+    if _IS_XDIST_WORKER:
+        # Under xdist: ALWAYS synchronize + empty cache after each test.
+        # Multiple workers pile up uncommitted GPU work and cached allocations;
+        # without aggressive cleanup the Metal driver deadlocks under contention.
+        synchronize(_DEVICE_NAME)
+        empty_cache(_DEVICE_NAME)
+    elif _MEMORY_MODE == "conservative":
         synchronize(_DEVICE_NAME)
         empty_cache(_DEVICE_NAME)
     elif _MEMORY_MODE == "balanced":
@@ -828,10 +910,12 @@ def test_setup_teardown(request):
         allocated = memory_allocated(_DEVICE_NAME)
         # device_memory_gb contains memory pool size
         dev_mem_list = _MANIFEST.get("hardware", {}).get("device_memory_gb", [24])
-        dev_mem_limit = dev_mem_list[0] * (1024 ** 3)
-        if allocated > dev_mem_limit * _CLEANUP_THRESHOLD / 100:
-            synchronize(_DEVICE_NAME)
-            empty_cache(_DEVICE_NAME)
+        # Skip memory threshold check if device memory is not resolved (e.g. "auto")
+        if isinstance(dev_mem_list, (list, tuple)) and dev_mem_list and not isinstance(dev_mem_list[0], str):
+            dev_mem_limit = float(dev_mem_list[0]) * (1024 ** 3)
+            if allocated > dev_mem_limit * int(_CLEANUP_THRESHOLD) / 100:
+                synchronize(_DEVICE_NAME)
+                empty_cache(_DEVICE_NAME)
 
     if (
         _MANIFEST.get("capabilities", {}).get("compile", False)
@@ -936,6 +1020,10 @@ def pytest_runtest_makereport(item, call):
             "dtype": metadata["dtype"],
             "maxerr": metrics["max_abs_err"] if status == "PASS" or metrics["max_abs_err"] > 0 else None,
             "cosim": metrics["cosim"] if status == "PASS" else None,
+            "golden_pass": metrics.get("golden_pass", True) if status == "PASS" else None,
+            "usable_pass": metrics.get("usable_pass", True) if status == "PASS" else None,
+            "quality_warning": metrics.get("quality_warning"),
+            "input_condition": metadata.get("input_condition"),
             "error_message": err_msg,
             "error_type": err_type,
             "shapes": metadata["shapes"],
@@ -947,6 +1035,17 @@ def pytest_runtest_makereport(item, call):
             record["bench_stats"] = item.bench_stats
             
         _SESSION_RESULTS[item.nodeid] = record
+        
+        # Attach diagnosis for failures/errors
+        if status in ("FAIL", "ERROR") and err_msg and err_type:
+            from torchcts.core.diagnose import diagnose
+            diag = diagnose(err_type, err_msg)
+            if diag:
+                record["diagnosis"] = {
+                    "likely_cause": diag.likely_cause,
+                    "remediation": diag.remediation,
+                    "confidence": diag.confidence,
+                }
         
         # Flush result immediately for crash resilience
         flush_results_to_disk()
@@ -1000,7 +1099,7 @@ def pytest_runtest_protocol(item, nextitem):
                     err_msg = "OOM KILLED (exit code -9)"
                     
                 metadata = _extract_result_metadata(item)
-                _SESSION_RESULTS[item.nodeid] = {
+                record = {
                     "status": status,
                     "suite": metadata["suite"],
                     "test_kind": metadata["test_kind"],
@@ -1017,12 +1116,22 @@ def pytest_runtest_protocol(item, nextitem):
                     "duration_ms": duration,
                     "last_tested": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
                 }
+                # Attach diagnosis for crash
+                from torchcts.core.diagnose import diagnose
+                diag = diagnose(err_type, err_msg, res.returncode)
+                if diag:
+                    record["diagnosis"] = {
+                        "likely_cause": diag.likely_cause,
+                        "remediation": diag.remediation,
+                        "confidence": diag.confidence,
+                    }
+                _SESSION_RESULTS[item.nodeid] = record
                 flush_results_to_disk()
                 
         except subprocess.TimeoutExpired:
             duration = (time.time() - start_t) * 1000
             metadata = _extract_result_metadata(item)
-            _SESSION_RESULTS[item.nodeid] = {
+            record = {
                 "status": "ERROR",
                 "suite": metadata["suite"],
                 "test_kind": metadata["test_kind"],
@@ -1039,6 +1148,16 @@ def pytest_runtest_protocol(item, nextitem):
                 "duration_ms": duration,
                 "last_tested": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
             }
+            # Attach diagnosis for timeout
+            from torchcts.core.diagnose import diagnose
+            diag = diagnose("TimeoutError", "TIMEOUT (exceeded 30 seconds)")
+            if diag:
+                record["diagnosis"] = {
+                    "likely_cause": diag.likely_cause,
+                    "remediation": diag.remediation,
+                    "confidence": diag.confidence,
+                }
+            _SESSION_RESULTS[item.nodeid] = record
             flush_results_to_disk()
             
         return True # Handled protocol, don't run test in parent process
@@ -1054,7 +1173,14 @@ def pytest_sessionfinish(session, exitstatus):
     
     # Save the latest JSON file
     flush_results_to_disk()
-    
+
+    # Under xdist: workers just flush and return; controller merges
+    if _IS_XDIST_WORKER:
+        return  # Worker done — controller will merge our file
+
+    # Check if we're the xdist controller (workers wrote per-worker files)
+    _merge_xdist_worker_files(_RESULTS_DIR, _HARDWARE_KEY)
+
     # Load the completed latest.json
     latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
     if os.path.exists(latest_path):

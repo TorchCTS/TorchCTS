@@ -18,6 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Description: full training loop: autograd, optimizers, autocast, DataLoader
+
 import torch
 
 manifest = {
@@ -40,6 +42,9 @@ manifest = {
         torch.bool: True,
     },
     "device_count": 1,
+    "ieee754_seed": 67,
+    "max_samples": 10,            # Max passing samples per test node (clean tier). 0 = no cap.
+    "max_samples_ieee754": 3,     # Max passing samples per test node (NaN/Inf tiers). 0 = no cap.
     "hardware": {
         "memory_model": "discrete",
         "device_memory_gb": "auto",
@@ -76,6 +81,7 @@ manifest = {
         "events": False,
         "deterministic": False,
         "guard_alloc": False,
+        "ieee754": True,
     },
     "skip_ops": [
         "aten.grid_sampler",

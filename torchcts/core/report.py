@@ -227,12 +227,33 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             capability_counts["multi_device"]["skipped"] = True
 
     # Count passes and totals from results
+    # IEEE 754 compliance tracking (NaN/Inf tiers)
+    ieee754_pass = 0
+    ieee754_fail = 0
+    ieee754_skip = 0
+    quality_warnings = 0
+
     for nodeid, res in results.items():
         if res.get("is_plumbing", False):
             continue
         status = res.get("status")
         if status == "SKIP":
             continue
+
+        input_cond = res.get("input_condition")
+
+        # Track quality warnings
+        if res.get("quality_warning"):
+            quality_warnings += 1
+
+        # NaN/Inf tier tests go to IEEE 754 section, not capability counts
+        if input_cond and input_cond != "clean":
+            if status == "PASS":
+                ieee754_pass += 1
+            elif status in ("FAIL", "ERROR"):
+                ieee754_fail += 1
+            continue
+
         cap_matched = capability_for(nodeid, res)
         if res.get("suite") == "strides" and "channels_last" in nodeid:
             cap_matched = "channels_last"
@@ -282,6 +303,10 @@ def build_report(current_data, baseline_data=None, include_skips=False):
                 # Truncate exception message
                 msg_summary = err_msg.split("\n")[0][:40]
                 failures_summary.append(f"  {op:<22} {dt:<9} {res.get('status')}: {msg_summary}")
+            # Append diagnostic hint if available
+            diag = res.get("diagnosis")
+            if diag:
+                failures_summary.append(f"    ↳ Hint: {diag['likely_cause']}")
 
     # ── Regressions ──
     regressions_text = []
@@ -383,6 +408,20 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         summary_lines.append("  ".join(line_parts))
     summary_lines.append("")
 
+    # IEEE 754 Compliance section (NaN/Inf tiers)
+    ieee754_total = ieee754_pass + ieee754_fail
+    if ieee754_total > 0:
+        ieee754_indicator = "✅" if ieee754_fail == 0 else "❌"
+        summary_lines.append("  IEEE 754 COMPLIANCE")
+        summary_lines.append("  " + "─" * 19)
+        summary_lines.append(f"  {ieee754_indicator}  NaN/Inf propagation  {ieee754_pass}/{ieee754_total} passed")
+        summary_lines.append("")
+
+    # Quality warnings
+    if quality_warnings > 0:
+        summary_lines.append(f"  QUALITY WARNINGS: {quality_warnings} tests passed at usable tolerance but failed golden tier")
+        summary_lines.append("")
+
     if num_fail > 0:
         summary_lines.append(f"  FAILURES ({num_fail})")
         summary_lines.append("  " + "─" * 12)
@@ -432,6 +471,14 @@ def build_report(current_data, baseline_data=None, include_skips=False):
                 md_lines.append(err_msg)
                 md_lines.append("```")
                 md_lines.append("")
+                
+                # Diagnostic hint
+                diag = res.get("diagnosis")
+                if diag:
+                    md_lines.append("> [!CAUTION]")
+                    md_lines.append(f"> **Likely Cause**: {diag['likely_cause']}")
+                    md_lines.append(f"> **Remediation**: {diag['remediation']}")
+                    md_lines.append("")
                 
                 # Check baseline for regression notes
                 if baseline_data:

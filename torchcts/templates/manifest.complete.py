@@ -18,6 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Description: broadest template, intended for explicit opt-in only
+
 import torch
 
 manifest = {
@@ -43,6 +45,9 @@ manifest = {
         torch.complex128: True,
     },
     "device_count": 1,  # Opt in to multi-device only after runtime validation on real hardware.
+    "ieee754_seed": 67,
+    "max_samples": 10,            # Max passing samples per test node (clean tier). 0 = no cap.
+    "max_samples_ieee754": 3,     # Max passing samples per test node (NaN/Inf tiers). 0 = no cap.
     "hardware": {
         "memory_model": "discrete",
         "device_memory_gb": "auto",
@@ -79,6 +84,8 @@ manifest = {
         "events": True,
         "deterministic": True,
         "guard_alloc": True,
+        "native_quantization": True,
+        "ieee754": True,
     },
     "skip_ops": [],
     "tolerance_overrides": {},

@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Description: production inference, all dtypes, full OpInfo sweep
+# Description: fast broad sweep: every op, float32 only, 1 sample, no NaN/Inf
 
 import torch
 
@@ -27,24 +27,12 @@ manifest = {
     "device_name": "auto",
     "backend_import": None,
     "supported_dtypes": {
-        torch.float16: True,
         torch.float32: True,
-        torch.float64: True,
-        torch.bfloat16: r"^(?!aten\.linalg_|aten\.fft_)",
-        torch.int8: True,
-        torch.int16: True,
-        torch.int32: True,
-        torch.int64: True,
-        torch.uint8: True,
-        torch.uint16: True,
-        torch.uint32: True,
-        torch.uint64: True,
-        torch.bool: True,
     },
     "device_count": 1,
     "ieee754_seed": 67,
-    "max_samples": 10,            # Max passing samples per test node (clean tier). 0 = no cap.
-    "max_samples_ieee754": 3,     # Max passing samples per test node (NaN/Inf tiers). 0 = no cap.
+    "max_samples": 1,             # 1 sample per op — just prove it runs
+    "max_samples_ieee754": 1,     # Irrelevant (ieee754 disabled) but set for consistency
     "hardware": {
         "memory_model": "discrete",
         "device_memory_gb": "auto",
@@ -60,8 +48,8 @@ manifest = {
     "capabilities": {
         "inference": True,
         "training": False,
-        "serialization": True,
-        "generator": True,
+        "serialization": False,
+        "generator": False,
         "double_backward": False,
         "gradcheck": False,
         "gradient_checkpointing": False,
@@ -69,7 +57,7 @@ manifest = {
         "fused_optimizer": False,
         "dataloader": False,
         "module_hooks": False,
-        "channels_last": True,
+        "channels_last": False,
         "sparse": False,
         "nested": False,
         "foreach": False,
@@ -81,12 +69,9 @@ manifest = {
         "events": False,
         "deterministic": False,
         "guard_alloc": False,
-        "ieee754": True,
+        "ieee754": False,
     },
-    "skip_ops": [
-        "aten.grid_sampler",
-        "aten._weight_norm_interface",
-    ],
+    "skip_ops": [],
     "tolerance_overrides": {},
     "supported_container_formats": {},
     "custom_container_decoders": {},

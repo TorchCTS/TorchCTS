@@ -27,6 +27,8 @@ from torchcts.core.opinfo_adapter import (
     str_to_dtype,
     record_known_failure,
     is_cpu_reference_failure,
+    classify_sample,
+    InputCondition,
 )
 from torchcts.core.device import synchronize
 
@@ -50,8 +52,13 @@ def test_op_backward(op_name, dtype_str, device, compare):
     op_info = get_live_opinfo(op_name)
 
     # Generate sample inputs with requires_grad=True
-    samples = list(op_info.sample_inputs(device, dtype, requires_grad=True))
-    assert samples, f"No trainable sample inputs generated for {op_name} with {dtype_str}"
+    all_samples = list(op_info.sample_inputs(device, dtype, requires_grad=True))
+    assert all_samples, f"No trainable sample inputs generated for {op_name} with {dtype_str}"
+
+    # Filter to clean samples only — backward through NaN/Inf is not well-specified
+    samples = [s for s in all_samples if classify_sample(s) == InputCondition.CLEAN]
+    if not samples:
+        pytest.skip(f"No clean (NaN/Inf-free) samples for backward test of {op_name} with {dtype_str}")
 
     op_fn = op_info.op
     category = "matmul_backward" if "mm" in op_name or "matmul" in op_name else "backward"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchcts"
-version = "0.2.1"
+version = "0.2.2"
 description = "A comprehensive PyTorch backend validation and benchmarking suite"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,3 +35,32 @@ torchcts = ["templates/*.py", "opinfo_cache/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]
+filterwarnings = [
+    # PyTorch deprecated API warnings (triggered by OpInfo samples, not our code)
+    "ignore:torch\\.cholesky is deprecated:UserWarning",
+    "ignore:torch\\.lu is deprecated:UserWarning",
+    "ignore:torch\\.lu_solve is deprecated:UserWarning",
+    "ignore:torch\\.qr is deprecated:UserWarning",
+    "ignore:torch\\.triangular_solve is deprecated:UserWarning",
+    "ignore:Using torch\\.cross without specifying the dim:UserWarning",
+    "ignore:`nn\\.functional\\.upsample_bilinear` is deprecated:UserWarning",
+    "ignore:`nn\\.functional\\.upsample_nearest` is deprecated:UserWarning",
+    "ignore:dropout2d.*channel-wise 1D dropout:UserWarning",
+    "ignore:index_reduce\\(\\) is in beta:UserWarning",
+    "ignore:indexing with dtype torch\\.uint8 is now deprecated:UserWarning",
+    "ignore:ComplexHalf support is experimental:UserWarning",
+    "ignore:Using padding='same' with even kernel lengths:UserWarning",
+    "ignore:Using a target size.*that is different to the input size:UserWarning",
+    # PyTorch internal output resize deprecation (FFT, gather, cat, etc.)
+    "ignore:An output with one or more elements was resized:UserWarning",
+    # MPS backend fallback to CPU
+    "ignore:The operator .* is not currently supported on the MPS backend:UserWarning",
+    # Sparse CSR beta warning
+    "ignore:Sparse CSR tensor support is in beta:UserWarning",
+    # STFT rectangular window warning
+    "ignore:A window was not provided:UserWarning",
+    # Pluggy teardown warning from our hardware-unsupported skip hookwrapper
+    "ignore::pluggy.PluggyTeardownRaisedWarning",
+    # torch.jit.script_method deprecation on Python 3.14+
+    "ignore:`torch\\.jit\\.script_method` is not supported:DeprecationWarning",
+]

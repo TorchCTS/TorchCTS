@@ -18,6 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Description: device registration + ~20 core ops (float32/int64/bool only)
+
 import torch
 
 manifest = {
@@ -30,6 +32,9 @@ manifest = {
         torch.bool: True,
     },
     "device_count": 1,
+    "ieee754_seed": 67,
+    "max_samples": 10,            # Max passing samples per test node (clean tier). 0 = no cap.
+    "max_samples_ieee754": 3,     # Max passing samples per test node (NaN/Inf tiers). 0 = no cap.
     "hardware": {
         "memory_model": "discrete",
         "device_memory_gb": "auto",
@@ -66,6 +71,7 @@ manifest = {
         "events": False,
         "deterministic": False,
         "guard_alloc": False,
+        "ieee754": False,
     },
     "skip_ops": [],
     "tolerance_overrides": {},

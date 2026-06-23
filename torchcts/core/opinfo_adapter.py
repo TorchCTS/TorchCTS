@@ -29,6 +29,198 @@ try:
 except ImportError:
     fcntl = None
 
+# ---------------------------------------------------------------------------
+# Input Condition Tiers
+# ---------------------------------------------------------------------------
+
+class InputCondition:
+    """Classification of opinfo sample inputs by NaN/Inf content."""
+    CLEAN = "clean"      # All finite values, no NaN/Inf
+    HAS_NAN = "has_nan"  # NaN + ±Inf present — tests NaN dominance
+    HAS_INF = "has_inf"  # ±Inf present, no NaN — tests Inf arithmetic
+
+
+def classify_sample(sample):
+    """Classify a SampleInput by whether its tensors contain NaN/Inf.
+
+    Returns InputCondition.CLEAN, HAS_NAN, or HAS_INF.
+    When both NaN and Inf are present, returns HAS_NAN (NaN dominates).
+    """
+    has_nan = False
+    has_inf = False
+
+    def _check(obj):
+        nonlocal has_nan, has_inf
+        if isinstance(obj, torch.Tensor) and (obj.is_floating_point() or obj.is_complex()):
+            if obj.is_complex():
+                real_view = torch.view_as_real(obj)
+            else:
+                real_view = obj
+            flat = real_view.detach().reshape(-1)
+            if torch.isnan(flat).any():
+                has_nan = True
+            if torch.isinf(flat).any():
+                has_inf = True
+        elif isinstance(obj, (list, tuple)):
+            for item in obj:
+                _check(item)
+        elif isinstance(obj, dict):
+            for item in obj.values():
+                _check(item)
+
+    _check(sample.input)
+    _check(sample.args)
+    _check(sample.kwargs)
+
+    if has_nan:
+        return InputCondition.HAS_NAN  # NaN dominates — has_both maps here
+    if has_inf:
+        return InputCondition.HAS_INF
+    return InputCondition.CLEAN
+
+
+def _transform_tensor(t, target_condition, seed):
+    """Transform a single float/complex tensor toward target_condition.
+
+    Returns transformed tensor (cloned). Original untouched.
+    """
+    if not isinstance(t, torch.Tensor):
+        return t
+    if not (t.is_floating_point() or t.is_complex()):
+        return t
+
+    t = t.clone()
+
+    # For complex, work on the real view
+    is_complex = t.is_complex()
+    if is_complex:
+        work = torch.view_as_real(t)
+    else:
+        work = t
+
+    flat = work.reshape(-1)
+    n = flat.numel()
+    if n == 0:
+        return t
+
+    cur_nan = torch.isnan(flat)
+    cur_inf = torch.isinf(flat)
+
+    if target_condition == InputCondition.CLEAN:
+        # Scrub all NaN/Inf -> finite values
+        if cur_nan.any() or cur_inf.any():
+            finfo = torch.finfo(flat.dtype)
+            safe_max = finfo.max / 2
+            flat = torch.nan_to_num(flat, nan=0.0, posinf=safe_max, neginf=-safe_max)
+            work.copy_(flat.view_as(work))
+        return t
+
+    # Deterministic RNG for injection positions
+    g = torch.Generator()
+    g.manual_seed(seed ^ n)
+    n_inject = max(1, n // 20)  # ~5% of elements
+
+    if target_condition == InputCondition.HAS_NAN:
+        # Must have NaN + ±Inf. Scrub nothing, add what's missing.
+        need_nan = not cur_nan.any()
+        need_pinf = not (flat == float('inf')).any()
+        need_ninf = not (flat == float('-inf')).any()
+
+        if need_nan or need_pinf or need_ninf:
+            # Get injection positions from finite elements only
+            finite_mask = torch.isfinite(flat)
+            finite_indices = finite_mask.nonzero(as_tuple=False).squeeze(-1)
+            if finite_indices.numel() > 0:
+                perm = torch.randperm(finite_indices.numel(), generator=g)
+                pos = 0
+                if need_nan:
+                    count = max(1, n_inject // 2)
+                    for i in range(min(count, perm.numel() - pos)):
+                        flat[finite_indices[perm[pos + i]]] = float('nan')
+                    pos += count
+                if need_pinf:
+                    count = max(1, n_inject // 4)
+                    for i in range(min(count, perm.numel() - pos)):
+                        flat[finite_indices[perm[pos + i]]] = float('inf')
+                    pos += count
+                if need_ninf:
+                    count = max(1, n_inject // 4)
+                    for i in range(min(count, perm.numel() - pos)):
+                        flat[finite_indices[perm[pos + i]]] = float('-inf')
+            work.copy_(flat.view_as(work))
+
+    elif target_condition == InputCondition.HAS_INF:
+        # Must have ±Inf, must NOT have NaN.
+        # First scrub NaN
+        if cur_nan.any():
+            flat[cur_nan] = 0.0
+
+        need_pinf = not (flat == float('inf')).any()
+        need_ninf = not (flat == float('-inf')).any()
+
+        if need_pinf or need_ninf:
+            finite_mask = torch.isfinite(flat)
+            finite_indices = finite_mask.nonzero(as_tuple=False).squeeze(-1)
+            if finite_indices.numel() > 0:
+                perm = torch.randperm(finite_indices.numel(), generator=g)
+                pos = 0
+                if need_pinf:
+                    count = max(1, n_inject // 2)
+                    for i in range(min(count, perm.numel() - pos)):
+                        flat[finite_indices[perm[pos + i]]] = float('inf')
+                    pos += count
+                if need_ninf:
+                    count = max(1, n_inject // 2)
+                    for i in range(min(count, perm.numel() - pos)):
+                        flat[finite_indices[perm[pos + i]]] = float('-inf')
+        work.copy_(flat.view_as(work))
+
+    return t
+
+
+def _transform_obj(obj, target_condition, seed):
+    """Recursively transform all float/complex tensors in a nested structure."""
+    if isinstance(obj, torch.Tensor):
+        return _transform_tensor(obj, target_condition, seed)
+    elif isinstance(obj, (list, tuple)):
+        transformed = [_transform_obj(item, target_condition, seed + i) for i, item in enumerate(obj)]
+        return type(obj)(transformed)
+    elif isinstance(obj, dict):
+        return {k: _transform_obj(v, target_condition, seed + hash(k) % (2**31)) for k, v in obj.items()}
+    return obj
+
+
+def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0):
+    """Clone sample and transform ALL float tensors to match the target condition.
+
+    Transforms all float/complex tensors in sample.input, sample.args,
+    and sample.kwargs. Complex tensors handled via view_as_real internally.
+
+    Args:
+        sample: opinfo SampleInput
+        target_condition: InputCondition.CLEAN, HAS_NAN, or HAS_INF
+        ieee754_seed: base seed from manifest (default 67)
+        sample_index: index of this sample in the op's sample list
+
+    Returns new SampleInput. Original untouched.
+    """
+    from torch.testing._internal.opinfo.core import SampleInput
+
+    if target_condition == InputCondition.CLEAN:
+        natural = classify_sample(sample)
+        if natural == InputCondition.CLEAN:
+            return sample  # Already clean, no clone needed
+
+    seed = ieee754_seed ^ (sample_index * 2654435761)  # Knuth multiplicative hash
+
+    new_input = _transform_obj(sample.input, target_condition, seed)
+    new_args = _transform_obj(sample.args, target_condition, seed + 1000000)
+    new_kwargs = _transform_obj(sample.kwargs, target_condition, seed + 2000000)
+
+    return SampleInput(new_input, args=new_args, kwargs=new_kwargs)
+
+
+
 DTYPE_TO_STR = {
     torch.float32: "torch.float32",
     torch.float64: "torch.float64",
@@ -186,16 +378,70 @@ def _dtype_matches_manifest(dt, dt_str, supported_dtypes, op_name):
     return False
 
 # ---------------------------------------------------------------------------
+# IEEE 754 undefined ops + capability check
+# ---------------------------------------------------------------------------
+
+# Ops where CPU NaN/Inf behavior is undefined or non-deterministic.
+# Excluded from NaN/Inf testing even when ieee754 capability is True.
+# Discovery: sync-opinfo --discover-ieee754-undefined
+_IEEE754_UNDEFINED_OPS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "opinfo_cache", "ieee754_undefined.json"
+)
+
+def _load_ieee754_undefined():
+    """Load the set of ops with undefined CPU NaN/Inf behavior."""
+    version = torch.__version__
+    if os.path.exists(_IEEE754_UNDEFINED_OPS_PATH):
+        try:
+            with open(_IEEE754_UNDEFINED_OPS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return frozenset(data.get(version, []))
+        except Exception:
+            pass
+    return frozenset()
+
+_IEEE754_UNDEFINED_OPS = _load_ieee754_undefined()
+
+
+def _ieee754_enabled_for_op(op_name, ieee754_cap):
+    """Check if IEEE 754 testing is enabled for this op.
+
+    ieee754_cap can be:
+        True      - all float ops (minus _IEEE754_UNDEFINED_OPS)
+        False     - disabled
+        str       - single regex matched against op_name
+        list[str] - array of regexes, any match enables the op
+    """
+    if ieee754_cap is False or ieee754_cap is None:
+        return False
+    if op_name in _IEEE754_UNDEFINED_OPS:
+        return False
+    if ieee754_cap is True:
+        return True
+    if isinstance(ieee754_cap, str):
+        return bool(re.search(ieee754_cap, op_name))
+    if isinstance(ieee754_cap, (list, tuple)):
+        return any(re.search(pat, op_name) for pat in ieee754_cap)
+    return False
+
+# ---------------------------------------------------------------------------
 # Test list builders (replace get_filtered_op_tests + probing)
 # ---------------------------------------------------------------------------
 
+
 def get_forward_op_tests(manifest):
-    """Build forward test list from op_db metadata + known failures. No probing."""
+    """Build forward test list from op_db metadata + known failures.
+    
+    Returns list of (op_name, dtype_str, input_condition) triples.
+    For float/complex dtypes with ieee754 enabled: emits clean + has_nan + has_inf.
+    For int/bool dtypes or ieee754 disabled: emits clean only.
+    """
     import torch.testing._internal.common_methods_invocations as cmi
 
     supported_dtypes = manifest.get("supported_dtypes", {})
     skip_ops = set(manifest.get("skip_ops", [])) | SKIP_OPS
     capabilities = manifest.get("capabilities", {})
+    ieee754_cap = capabilities.get("ieee754", True)
     known = load_known_failures().get("forward", {})
     tests = []
 
@@ -211,15 +457,19 @@ def get_forward_op_tests(manifest):
             if not capabilities.get("sparse", False):
                 continue
 
-        for d in op.dtypes:
+        for d in sorted(op.dtypes, key=lambda x: str(x)):
             dt_str = dtype_to_str(d)
 
-            # Rule 4: skip previously-discovered CPU failures
+            # Skip previously-discovered CPU failures
             if f"{op.name}@{dt_str}" in known:
                 continue
 
             if _dtype_matches_manifest(d, dt_str, supported_dtypes, op.name):
-                tests.append((op.name, dt_str))
+                tests.append((op.name, dt_str, InputCondition.CLEAN))
+                # Add IEEE 754 tiers for float/complex dtypes
+                if (d.is_floating_point or d.is_complex) and _ieee754_enabled_for_op(op.name, ieee754_cap):
+                    tests.append((op.name, dt_str, InputCondition.HAS_NAN))
+                    tests.append((op.name, dt_str, InputCondition.HAS_INF))
 
     return tests
 
@@ -256,7 +506,7 @@ def get_backward_op_tests(manifest):
             if not capabilities.get("sparse", False):
                 continue
 
-        for d in op.backward_dtypes:
+        for d in sorted(op.backward_dtypes, key=lambda x: str(x)):
             # Rule 1: only differentiable dtypes
             if d not in DIFFERENTIABLE:
                 continue
@@ -271,6 +521,160 @@ def get_backward_op_tests(manifest):
                 tests.append((op.name, dt_str))
 
     return tests
+
+
+# Ops that use iterative algorithms converging to a solution.
+# NaN/Inf inputs prevent convergence, causing infinite loops or extreme slowness.
+# These are pre-classified as having undefined NaN/Inf behavior.
+_CONVERGENCE_OPS = frozenset({
+    # Eigendecomposition (iterative QR/divide-and-conquer)
+    "linalg.eig", "linalg.eigh", "linalg.eigvals", "linalg.eigvalsh",
+    "eig", "eigvals",
+    # SVD (iterative bidiagonal reduction)
+    "linalg.svd", "linalg.svdvals", "svd",
+    # Matrix decompositions that iterate
+    "linalg.cholesky", "linalg.cholesky_ex", "cholesky",
+    "linalg.qr", "qr", "geqrf", "ormqr", "linalg.householder_product",
+    "linalg.lu", "linalg.lu_factor", "linalg.lu_factor_ex", "lu",
+    # Solvers (forward/back substitution with pivoting)
+    "linalg.solve", "linalg.solve_triangular", "linalg.solve_ex",
+    "linalg.lstsq", "triangular_solve", "lu_solve",
+    # Inverse (uses LU internally)
+    "linalg.inv", "linalg.inv_ex", "linalg.pinv",
+    # Matrix functions (series expansion / eigendecomposition)
+    "linalg.matrix_exp", "matrix_exp", "linalg.matrix_power",
+    # Determinant / norm (can loop on degenerate inputs)
+    "linalg.det", "linalg.slogdet", "det", "slogdet", "logdet",
+    # Condition number
+    "linalg.cond",
+})
+
+def discover_ieee754_undefined_ops():
+    """Discover ops where CPU NaN/Inf behavior is non-deterministic.
+
+    For each float op, injects NaN/Inf and runs twice on CPU.
+    If outputs don't match, the op has undefined NaN/Inf behavior.
+
+    Returns set of op names with undefined behavior.
+    """
+    import warnings
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    undefined = set(_CONVERGENCE_OPS)
+    seen = set(_CONVERGENCE_OPS)
+
+    # Suppress PyTorch deprecation/beta warnings during discovery
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        # Per-op timeout to catch linalg ops that hang with NaN/Inf
+        import signal
+
+        class _OpTimeout(Exception):
+            pass
+
+        def _timeout_handler(signum, frame):
+            raise _OpTimeout()
+
+        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+
+        try:
+            for op in cmi.op_db:
+                if op.name in seen or op.name in SKIP_OPS:
+                    continue
+                seen.add(op.name)
+
+                # Only test with float32
+                if torch.float32 not in op.dtypes:
+                    continue
+
+                try:
+                    signal.alarm(5)  # 5 second timeout per op
+                    samples = list(op.sample_inputs("cpu", torch.float32, requires_grad=False))
+                    if not samples:
+                        signal.alarm(0)
+                        continue
+
+                    sample = samples[0]
+                    for condition in (InputCondition.HAS_NAN, InputCondition.HAS_INF):
+                        prepared = prepare_sample(sample, condition, ieee754_seed=67, sample_index=0)
+
+                        try:
+                            result1 = op.op(prepared.input, *prepared.args, **prepared.kwargs)
+                            result2 = op.op(prepared.input, *prepared.args, **prepared.kwargs)
+                        except (_OpTimeout, KeyboardInterrupt):
+                            raise
+                        except Exception:
+                            # Both raise = consistent rejection, not undefined
+                            continue
+
+                    # Compare outputs (NaN-aware: matching NaN positions = equal)
+                    def _bitwise_equal(a, b):
+                        """True if tensors are identical including NaN positions."""
+                        if a.shape != b.shape or a.dtype != b.dtype:
+                            return False
+                        if a.is_floating_point() or a.is_complex():
+                            # NaN == NaN should be True for this check
+                            nan_match = torch.isnan(a) == torch.isnan(b)
+                            if not nan_match.all():
+                                return False
+                            finite = ~torch.isnan(a)
+                            if finite.any():
+                                return torch.equal(a[finite], b[finite])
+                            return True
+                        return torch.equal(a, b)
+
+                    try:
+                        if isinstance(result1, torch.Tensor) and isinstance(result2, torch.Tensor):
+                            if not _bitwise_equal(result1, result2):
+                                undefined.add(op.name)
+                                break
+                        elif isinstance(result1, (tuple, list)):
+                            for r1, r2 in zip(result1, result2):
+                                if isinstance(r1, torch.Tensor) and isinstance(r2, torch.Tensor):
+                                    if not _bitwise_equal(r1, r2):
+                                        undefined.add(op.name)
+                                        break
+                    except (_OpTimeout, KeyboardInterrupt):
+                        raise
+                    except Exception:
+                        undefined.add(op.name)
+                        break
+
+                    signal.alarm(0)  # cancel alarm after successful op
+                except _OpTimeout:
+                    # Op hung with NaN/Inf input — mark as undefined
+                    undefined.add(op.name)
+                    continue
+                except Exception:
+                    # Skip ops that crash during sample generation or have
+                    # unsupported tensor types (e.g. sparse CSR)
+                    signal.alarm(0)
+                    continue
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+
+    return undefined
+
+
+def save_ieee754_undefined(undefined_ops):
+    """Save discovered undefined ops to cache file."""
+    version = torch.__version__
+    path = _IEEE754_UNDEFINED_OPS_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    data = {}
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+
+    data[version] = sorted(undefined_ops)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 
 def get_error_op_tests(manifest):
@@ -308,7 +712,7 @@ def get_backward_dtypes(op_name):
         return []
     if not getattr(op, "supports_autograd", True):
         return []
-    return [d for d in op.backward_dtypes if d in DIFFERENTIABLE]
+    return [d for d in sorted(op.backward_dtypes, key=lambda x: str(x)) if d in DIFFERENTIABLE]
 
 # ---------------------------------------------------------------------------
 # Live OpInfo access

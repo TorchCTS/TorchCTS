@@ -241,6 +241,7 @@ def _validate_backend_import(import_path, expected_name, timeout=10):
 
 def _check_hardware_alignment():
     """Detect OS and check if PyTorch is compiled with support for present hardware backends."""
+    ok = True
     # 1. macOS / MPS check
     if sys.platform == "darwin":
         has_mps = (
@@ -264,6 +265,7 @@ def _check_hardware_alignment():
                 print("version is not compiled with CUDA support (it is likely CPU-only).", file=sys.stderr)
                 print("Please install a PyTorch build with CUDA enabled.", file=sys.stderr)
                 print("="*80 + "\n", file=sys.stderr)
+                ok = False
 
         # Check AMD (ROCm)
         if (shutil.which("rocm-smi") is not None or 
@@ -275,6 +277,7 @@ def _check_hardware_alignment():
                 print("not compiled with ROCm/CUDA support (it is likely CPU-only).", file=sys.stderr)
                 print("Please install a PyTorch build with ROCm/CUDA enabled.", file=sys.stderr)
                 print("="*80 + "\n", file=sys.stderr)
+                ok = False
 
         # Check Intel (XPU)
         if shutil.which("sycl-ls") is not None or shutil.which("xpu-smi") is not None:
@@ -285,8 +288,9 @@ def _check_hardware_alignment():
                 print("compiled with XPU support (it is likely CPU-only).", file=sys.stderr)
                 print("Please install a PyTorch build with XPU enabled.", file=sys.stderr)
                 print("="*80 + "\n", file=sys.stderr)
+                ok = False
 
-    return True
+    return ok
 
 
 def detect_backends(non_interactive=False):
