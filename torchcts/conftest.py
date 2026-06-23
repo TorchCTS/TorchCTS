@@ -66,6 +66,7 @@ _REPORT_SKIPS = False
 _SUBPROCESS_MODE = False
 _MEMORY_MODE = "balanced"
 _CLEANUP_THRESHOLD = 80
+_RUN_LOG_FH = None
 
 # pytest-xdist parallel execution support
 _XDIST_WORKER_ID = os.environ.get("PYTEST_XDIST_WORKER")  # e.g. "gw0", "gw1" or None
@@ -509,6 +510,14 @@ def pytest_configure(config):
     # Start timing
     _START_TIME = time.time()
 
+    # Open per-test run log for hang diagnosis
+    global _RUN_LOG_FH
+    if _ARTIFACT_WRITES_ENABLED:
+        log_suffix = f".{_XDIST_WORKER_ID}" if _IS_XDIST_WORKER else ""
+        run_log_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_runlog{log_suffix}.txt")
+        _RUN_LOG_FH = open(run_log_path, "w", encoding="utf-8")
+        print(f"  Run log: {run_log_path}")
+
     # Append custom_test_dirs from manifest to pytest collection paths
     custom_dirs = _MANIFEST.get("custom_test_dirs", [])
     for cdir in custom_dirs:
@@ -744,6 +753,12 @@ def pytest_collection_modifyitems(session, config, items):
                 if torch.float64 not in supported_dtypes:
                     skip_reason = "dtype_not_listed"
                     detail = "float64 not in supported_dtypes (required for gradcheck)"
+
+        # 10. MPS index_reduce NaN hang workaround
+        if not skip_reason and _DEVICE_NAME == "mps" and op_name == "index_reduce":
+            if hasattr(item, "callspec") and item.callspec.params.get("input_condition") == "has_nan":
+                skip_reason = "framework_bug"
+                detail = "index_reduce hangs infinitely on MPS when input/destination contains NaN (CAS loop GPU thread deadlock)"
 
         if skip_reason:
             metadata = _extract_result_metadata(item)
@@ -1050,6 +1065,18 @@ def pytest_runtest_makereport(item, call):
         # Flush result immediately for crash resilience
         flush_results_to_disk()
 
+def pytest_runtest_logstart(nodeid, location):
+    """Write each test's node ID to the run log before it executes.
+
+    The file is flushed immediately so that if the process hangs,
+    the last line in the log is the test that caused the freeze.
+    """
+    if _RUN_LOG_FH is not None:
+        elapsed = time.time() - _START_TIME
+        _RUN_LOG_FH.write(f"{elapsed:8.1f}s  {nodeid}\n")
+        _RUN_LOG_FH.flush()
+
+
 def pytest_runtest_protocol(item, nextitem):
     global _SUBPROCESS_MODE, _SESSION_RESULTS
     
@@ -1166,7 +1193,15 @@ def pytest_runtest_protocol(item, nextitem):
 
 def pytest_sessionfinish(session, exitstatus):
     global _SESSION_RESULTS, _RESULTS_DIR, _HARDWARE_KEY, _BASELINE_RESULTS
-    global _ARTIFACT_WRITES_ENABLED
+    global _ARTIFACT_WRITES_ENABLED, _RUN_LOG_FH
+
+    # Close run log
+    if _RUN_LOG_FH is not None:
+        try:
+            _RUN_LOG_FH.close()
+        except Exception:
+            pass
+        _RUN_LOG_FH = None
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
