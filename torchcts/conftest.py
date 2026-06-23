@@ -819,7 +819,7 @@ def flush_results_to_disk():
             "device_name": _DEVICE_NAME,
             "hardware_key": _HARDWARE_KEY,
             "pytorch_version": torch.__version__,
-            "timestamp": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "elapsed_sec": elapsed,
             "collect_only": _COLLECT_ONLY,
         },
@@ -1043,7 +1043,7 @@ def pytest_runtest_makereport(item, call):
             "error_type": err_type,
             "shapes": metadata["shapes"],
             "duration_ms": call.duration * 1000,
-            "last_tested": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+            "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         }
         
         if hasattr(item, "bench_stats"):
@@ -1141,7 +1141,7 @@ def pytest_runtest_protocol(item, nextitem):
                     "error_type": err_type,
                     "shapes": metadata["shapes"],
                     "duration_ms": duration,
-                    "last_tested": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+                    "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                 }
                 # Attach diagnosis for crash
                 from torchcts.core.diagnose import diagnose
@@ -1173,7 +1173,7 @@ def pytest_runtest_protocol(item, nextitem):
                 "error_type": "TimeoutError",
                 "shapes": metadata["shapes"],
                 "duration_ms": duration,
-                "last_tested": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+                "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
             }
             # Attach diagnosis for timeout
             from torchcts.core.diagnose import diagnose
@@ -1226,7 +1226,7 @@ def pytest_sessionfinish(session, exitstatus):
         history_dir = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_history")
         os.makedirs(history_dir, exist_ok=True)
         
-        timestamp_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+        timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
         history_path = os.path.join(history_dir, f"{timestamp_str}.json")
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump(current_data, f, indent=2)

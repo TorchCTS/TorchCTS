@@ -50,7 +50,7 @@ if ($Uninstall) {
     } else {
         Write-Host "[..] Nothing to remove - TorchCTS is not installed." -ForegroundColor Yellow
     }
-    exit 0
+    return
 }
 
 # ── Banner ───────────────────────────────────────────────────────────────────
@@ -77,7 +77,8 @@ if (-not $Python) {
     Write-Host ""
     Write-Host "  Install Python from https://python.org or the Microsoft Store."
     Write-Host "  Make sure to check 'Add python.exe to PATH' during installation."
-    exit 1
+    Write-Host ""
+    return
 }
 
 # For 'py' launcher, use 'py -3' to ensure Python 3
@@ -95,7 +96,8 @@ $pyVersion = "$pyMajor.$pyMinor"
 
 if ($pyMajor -lt $MinMajor -or ($pyMajor -eq $MinMajor -and $pyMinor -lt $MinMinor)) {
     Write-Host "ERROR: Python ${MinMajor}.${MinMinor}+ required, found ${pyVersion}." -ForegroundColor Red
-    exit 1
+    Write-Host ""
+    return
 }
 
 Write-Host "[OK] Found Python ${pyVersion}" -ForegroundColor Green
@@ -110,12 +112,31 @@ try {
     $null = & nvidia-smi 2>&1
     $GpuType = "cuda"
 } catch {
-    # Check for AMD GPU (ROCm)
-    try {
-        $null = & rocm-smi 2>&1
+    # Check for AMD GPU — try rocm-smi / amd-smi first, then fall back to WMI
+    $amdFound = $false
+    foreach ($tool in @("rocm-smi", "amd-smi")) {
+        try {
+            $null = & $tool 2>&1
+            $amdFound = $true
+            break
+        } catch {}
+    }
+    if (-not $amdFound) {
+        # Check Windows GPU hardware via WMI for AMD/Radeon
+        try {
+            $gpus = Get-CimInstance Win32_VideoController -ErrorAction Stop
+            foreach ($gpu in $gpus) {
+                if ($gpu.Name -match "AMD|Radeon|ATI") {
+                    $amdFound = $true
+                    break
+                }
+            }
+        } catch {}
+    }
+    if ($amdFound) {
         $GpuType = "rocm"
         $TorchIndexArgs = @("--extra-index-url", "https://download.pytorch.org/whl/rocm6.3")
-    } catch {
+    } else {
         # CPU-only
         $GpuType = "cpu"
         $TorchIndexArgs = @("--extra-index-url", "https://download.pytorch.org/whl/cpu")

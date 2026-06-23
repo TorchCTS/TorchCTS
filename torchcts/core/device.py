@@ -239,6 +239,63 @@ def _validate_backend_import(import_path, expected_name, timeout=10):
         return False
 
 
+def _detect_amd_gpu_windows():
+    """Detect AMD GPU on Windows via WMI (Win32_VideoController).
+    
+    Returns True if at least one AMD/Radeon/ATI GPU is found.
+    Only meaningful on Windows; returns False on other platforms.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        result = subprocess.run(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_VideoController | Where-Object {"
+                " $_.Name -match 'AMD|Radeon|ATI' -or"
+                " $_.AdapterCompatibility -match 'AMD|Advanced Micro Devices' -or"
+                " $_.PNPDeviceID -match 'VEN_1002'"
+                "}) -ne $null"
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.returncode == 0 and result.stdout.strip().lower() == "true"
+    except Exception:
+        return False
+
+
+def _detect_amd_gpu_linux():
+    """Detect AMD GPU on Linux via CLI tools or sysfs.
+    
+    Returns True if rocm-smi, amd-smi, /dev/kfd, or lspci reports an AMD GPU.
+    """
+    if not sys.platform.startswith("linux"):
+        return False
+    # Check CLI tools
+    for tool in ("rocm-smi", "amd-smi", "rocminfo", "hipinfo"):
+        if shutil.which(tool) is not None:
+            return True
+    # Check kernel device
+    if os.path.exists("/dev/kfd"):
+        return True
+    # Check lspci
+    if shutil.which("lspci") is not None:
+        try:
+            result = subprocess.run(
+                ["lspci"], capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    low = line.lower()
+                    if ("amd" in low or "radeon" in low) and any(
+                        tag in low for tag in ("vga", "3d", "display")
+                    ):
+                        return True
+        except Exception:
+            pass
+    return False
+
+
 def _check_hardware_alignment():
     """Detect OS and check if PyTorch is compiled with support for present hardware backends."""
     ok = True
@@ -267,13 +324,12 @@ def _check_hardware_alignment():
                 print("="*80 + "\n", file=sys.stderr)
                 ok = False
 
-        # Check AMD (ROCm)
-        if (shutil.which("rocm-smi") is not None or 
-              shutil.which("rocminfo") is not None or 
-              shutil.which("hipinfo") is not None):
+        # Check AMD (ROCm) — platform-specific detection
+        amd_detected = _detect_amd_gpu_linux() or _detect_amd_gpu_windows()
+        if amd_detected:
             if not torch.cuda.is_available():
                 print("\n" + "="*80, file=sys.stderr)
-                print("ERROR: AMD ROCm GPU hardware detected, but the installed PyTorch version is", file=sys.stderr)
+                print("ERROR: AMD GPU hardware detected, but the installed PyTorch version is", file=sys.stderr)
                 print("not compiled with ROCm/CUDA support (it is likely CPU-only).", file=sys.stderr)
                 print("Please install a PyTorch build with ROCm/CUDA enabled.", file=sys.stderr)
                 print("="*80 + "\n", file=sys.stderr)
@@ -384,6 +440,14 @@ def get_device_backend(device_name="auto", backend_import=None, non_interactive=
             except (KeyboardInterrupt, EOFError):
                 raise KeyboardInterrupt("Interrupted backend selection.")
         else:
+            # No backends detected via torch — check if AMD hardware is present.
+            # ROCm maps to torch.device("cuda") but torch.cuda.is_available()
+            # can return False in some ROCm configurations. Suggest explicit flag.
+            if _detect_amd_gpu_linux() or _detect_amd_gpu_windows():
+                raise ValueError(
+                    "No device backend auto-detected, but AMD GPU hardware was found.\n"
+                    "PyTorch ROCm uses the 'cuda' device. Try: torchcts run --device cuda"
+                )
             raise ValueError("No device backend detected. Install a backend package or set device_name explicitly in manifest.py.")
     # For non-in-tree backends passed via --device, we still need to
     # import the backend module so it registers with PyTorch.

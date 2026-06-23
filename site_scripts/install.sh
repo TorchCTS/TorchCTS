@@ -156,8 +156,12 @@ elif [ "$PLATFORM" = "linux" ]; then
     if command -v nvidia-smi >/dev/null 2>&1 || [ -f /proc/driver/nvidia/version ]; then
         GPU_TYPE="cuda"
         # Default PyPI wheel includes CUDA, no extra index needed.
-    # Check for AMD GPU (ROCm)
-    elif command -v rocm-smi >/dev/null 2>&1 || [ -d /opt/rocm ]; then
+    # Check for AMD GPU — try multiple detection methods
+    elif command -v rocm-smi >/dev/null 2>&1 || \
+         command -v amd-smi >/dev/null 2>&1 || \
+         [ -d /opt/rocm ] || \
+         [ -e /dev/kfd ] || \
+         (command -v lspci >/dev/null 2>&1 && lspci 2>/dev/null | grep -qi 'AMD.*\(VGA\|3D\|Display\)\|Radeon'); then
         GPU_TYPE="rocm"
         TORCH_INDEX_ARGS="--extra-index-url https://download.pytorch.org/whl/rocm6.3"
     else
@@ -212,12 +216,7 @@ echo "  PyTorch:    ${TORCH_VERSION} (${GPU_TYPE})"
 echo "  Venv:       ${VENV_DIR}"
 echo ""
 
-case "$GPU_TYPE" in
-    mps)  echo "  Run:        ${VENV_DIR}/bin/torchcts run --device mps" ;;
-    cuda) echo "  Run:        ${VENV_DIR}/bin/torchcts run --device cuda" ;;
-    rocm) echo "  Run:        ${VENV_DIR}/bin/torchcts run --device cuda" ;;
-    cpu)  echo "  Run:        ${VENV_DIR}/bin/torchcts run --device cpu" ;;
-esac
+echo "  Run:        ${VENV_DIR}/bin/torchcts run"
 
 echo "  Uninstall:  curl -fsSL https://torchcts.ai/scripts/install.sh | sh -s -- --uninstall"
 echo ""

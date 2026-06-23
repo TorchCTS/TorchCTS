@@ -48,7 +48,7 @@ if (-not $Python) {
     Write-Host ""
     Write-Host "  Install Python from https://python.org or the Microsoft Store."
     Write-Host "  Make sure to check 'Add python.exe to PATH' during installation."
-    exit 1
+    return
 }
 
 # For 'py' launcher, use 'py -3' to ensure Python 3
@@ -68,7 +68,7 @@ $pyVersion = "$pyMajor.$pyMinor"
 
 if ($pyMajor -lt $MinMajor -or ($pyMajor -eq $MinMajor -and $pyMinor -lt $MinMinor)) {
     Write-Host "ERROR: Python ${MinMajor}.${MinMinor}+ required, found ${pyVersion}." -ForegroundColor Red
-    exit 1
+    return
 }
 
 Write-Host "[OK] Found Python ${pyVersion}" -ForegroundColor Green

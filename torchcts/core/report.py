@@ -87,7 +87,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     device = metadata.get("device_name", "unknown")
     hw_key = metadata.get("hardware_key", "unknown")
     pytorch_version = metadata.get("pytorch_version", torch.__version__)
-    timestamp = metadata.get("timestamp", datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"))
+    timestamp = metadata.get("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"))
     elapsed = str(datetime.timedelta(seconds=int(metadata.get("elapsed_sec", 0))))
     collect_only = metadata.get("collect_only", False)
 
