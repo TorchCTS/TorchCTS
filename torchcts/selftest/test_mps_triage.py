@@ -613,6 +613,27 @@ def test_known_segfault_matching_canonicalizes_installed_package_nodeids():
     assert known_segfaults.match_known_segfault(item, active)["id"] == "mps-installed-nodeid"
 
 
+def test_packaged_known_segfaults_cover_generated_grid_sampler_crash_nodes():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+
+    expected = {
+        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback[L3]]":
+            "mps-grid-sampler-2d-cpu-fallback-generated-functional-pytorch-2-12",
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out[L3]]":
+            "mps-grid-sampler-2d-cpu-fallback-generated-out-pytorch-2-12",
+    }
+    for nodeid, expected_id in expected.items():
+        match = known_segfaults.match_known_segfault(SimpleNamespace(nodeid=nodeid), active)
+        assert match is not None
+        assert match["id"] == expected_id
+
+
 def test_known_segfault_schema_rejects_duplicate_ids():
     entry = {
         "id": "dup",

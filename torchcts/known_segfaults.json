@@ -40,6 +40,44 @@
       "review_after": "2026-09-30"
     },
     {
+      "id": "mps-grid-sampler-2d-cpu-fallback-generated-functional-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback[L3]]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_grid_segment_dense_split_repro.py",
+        "case": "grid2_cpu_fallback_default"
+      },
+      "reason": "Full generated MPS run on 2026-06-28 segfaulted in PyTorch/MPS while copying the aten::_grid_sampler_2d_cpu_fallback result to CPU for comparison; C stack was in MPSStream::copy_and_sync and AGX blit dispatch. The standalone grid sampler repro covers the same dispatcher path.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-generated-out-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out[L3]]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_grid_segment_dense_split_repro.py",
+        "case": "grid2_cpu_fallback_out"
+      },
+      "reason": "Generated out-variant coverage exercises the same aten::_grid_sampler_2d_cpu_fallback.out dispatcher path as the standalone MPS repro and the internal dispatcher surface known segfault.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
       "id": "mps-grid-sampler-2d-cpu-fallback-backward-pytorch-2-12",
       "backend": "mps",
       "match": "nodeid",
