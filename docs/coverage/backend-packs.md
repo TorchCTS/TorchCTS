@@ -1,0 +1,134 @@
+# Backend Packs
+
+Backend packs cover dispatcher surfaces that are specific to a backend,
+vendor library, or build family. They are not global exclusions. They are
+backend-gated coverage strategies.
+
+## Definition
+
+A backend pack includes:
+
+- exact dispatcher surfaces;
+- a backend or build gate;
+- a safe sample builder;
+- a source-derived reference or property;
+- a direct dispatcher invocation;
+- a structured `backend_not_available` skip path.
+
+Backend-private coverage requires a run on a build that supports the target
+backend and direct dispatcher path. A local run on an unsupported host can
+validate skip behavior and reference-helper selftests, but it does not prove the
+backend-private surface is covered.
+
+## Backend Families
+
+### CPU Build: MKLDNN And NNPACK
+
+MKLDNN and NNPACK surfaces are CPU backend-library surfaces. Their references
+come from public dense CPU operations such as convolution, linear, pooling,
+RNN, and dense metadata transforms.
+
+Promotion requires a CPU build that can execute the direct MKLDNN or NNPACK
+dispatcher path.
+
+### MPS
+
+MPS backend packs cover MPS-specific dispatcher surfaces. Value surfaces use CPU
+references where the contract defines comparable math. Property surfaces use
+backend-specific observable properties.
+
+MPS TinyGEMM int4 pack and matmul are covered by a backend-pack oracle in
+TorchCTS. The accepted contract is recorded in `contract-evidence.md`.
+
+`aten::mps_convolution_backward.out` is intentionally still pending in the
+current macOS MPS validation build. The Python schema exists, but a direct probe
+on 2026-06-28 rejected every real third out tensor as a nullable/uninitialized
+slot and rejected `None` as lacking a device. This surface must not be counted as
+covered until a safe direct invocation path exists.
+
+### FBGEMM
+
+FBGEMM packs cover FBGEMM packed linear and quantized recurrent cell surfaces.
+Packed weight objects must be produced through PyTorch pack operators or public
+quantization flows. Fabricated opaque packed objects are not accepted.
+
+Promotion requires an FBGEMM-enabled build and direct dispatcher validation.
+
+### CUDA
+
+CUDA packs cover cuDNN, cuSparseLt, Triton, fused dropout, and
+semi-structured sparse surfaces.
+
+References use public CPU operations or CPU autograd where the contract defines
+equivalent math. RNG and sparse formats require property checks specific to the
+surface contract.
+
+Promotion requires CUDA hardware and a PyTorch build that executes the direct
+dispatcher path.
+
+### ROCm
+
+ROCm packs cover MIOpen convolution, batch norm, CTC, depthwise convolution,
+and RNN surfaces.
+
+Promotion requires a ROCm build that executes the direct MIOpen dispatcher
+path.
+
+### XLA
+
+XLA-specific surfaces require an XLA build and an accepted property contract.
+They are not covered by CPU, MPS, CUDA, or ROCm runs.
+
+### PrivateUse1 Override Hooks
+
+PrivateUse1 override hooks require exact-dispatch evidence from a backend that
+implements the hook. Public API behavior does not count unless a formal proxy
+proof records exact dispatcher reachability.
+
+## Validation Commands
+
+Run targeted backend-pack tests during development. Full validation belongs at
+the end of a closure batch.
+
+CUDA family:
+
+```bash
+.venv/bin/python -m pytest -q torchcts/generated/test_oracle_surfaces.py --device cuda --level 8 -k 'cudnn or triton or cslt or dropout or sparse'
+```
+
+ROCm family:
+
+```bash
+.venv/bin/python -m pytest -q torchcts/generated/test_oracle_surfaces.py --device cuda --level 8 -k 'miopen'
+```
+
+PyTorch ROCm builds expose HIP devices through the `cuda` device namespace, so
+the TorchCTS device argument for ROCm backend-pack validation is `--device cuda`.
+
+FBGEMM family:
+
+```bash
+.venv/bin/python -m pytest -q torchcts/generated/test_oracle_surfaces.py --device cpu --level 8 -k 'fbgemm or quantized'
+```
+
+MKLDNN and NNPACK family:
+
+```bash
+.venv/bin/python -m pytest -q torchcts/generated/test_oracle_surfaces.py --device cpu --level 8 -k 'mkldnn or nnpack'
+```
+
+## Accepted Result Records
+
+Accepted backend-pack evidence records must include:
+
+- backend family;
+- device;
+- PyTorch version;
+- host/build description;
+- command;
+- direct dispatcher surfaces exercised;
+- reference or property used;
+- result.
+
+Record accepted results in `contract-evidence.md` or another reviewed public
+evidence file. Do not record partial investigation logs in public docs.
