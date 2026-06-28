@@ -1350,6 +1350,8 @@ def test_gate_tests_bypass_suite_filter_but_not_capability_filter(monkeypatch):
     monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
 
     items = [item]
     config = _CollectionConfig(suite="opinfo")
