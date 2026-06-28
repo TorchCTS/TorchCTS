@@ -1,17 +1,16 @@
 [build-system]
-requires = ["setuptools>=61.0.0"]
+requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchcts"
-version = "0.2.3"
-description = "A comprehensive PyTorch backend validation and benchmarking suite"
+version = "0.2.4"
+description = "A manifest-driven PyTorch backend validation and reporting suite"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -31,7 +30,7 @@ where = ["."]
 include = ["torchcts*"]
 
 [tool.setuptools.package-data]
-torchcts = ["templates/*.py", "opinfo_cache/*.json"]
+torchcts = ["templates/*.py", "opinfo_cache/*.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]

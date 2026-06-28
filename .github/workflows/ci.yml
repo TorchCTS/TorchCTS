@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Release hygiene
+        run: python scripts/check_release_hygiene.py
+
+      - name: Selftests
+        run: python -m pytest -q torchcts/selftest --validation
+
+      - name: Validation collect
+        run: python -m pytest --collect-only -q torchcts --validation
+
+      - name: Strict coverage check
+        run: |
+          python -m torchcts coverage audit
+          python -m torchcts coverage check --fail-on-unknown
+
+      - name: Smoke template init
+        run: |
+          tmpdir="$(mktemp -d)"
+          cd "$tmpdir"
+          python -m torchcts init --template smoke --non-interactive
+
+      - name: Template manifest validation
+        run: |
+          for manifest in torchcts/templates/manifest.*.py; do
+            python -m torchcts check-manifest --manifest "$manifest"
+          done

@@ -23,10 +23,12 @@ reports/
 artifacts/
 
 # Local analysis/debug scripts and generated notes
+issues.md
 scratch/
 pushpypi.sh
 createvenv.sh
 createpackage.sh
+install-in-site.sh
 
 # Local manifests/config generated while validating external backends
 manifest.py

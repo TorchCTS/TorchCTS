@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# PyTorch Backend Validator Package
+# TorchCTS package metadata.
 try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version("torchcts")
