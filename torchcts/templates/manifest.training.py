@@ -45,6 +45,7 @@ manifest = {
     "ieee754_seed": 67,
     "max_samples": 10,            # Max passing samples per test node (clean tier). 0 = no cap.
     "max_samples_ieee754": 3,     # Max passing samples per test node (NaN/Inf tiers). 0 = no cap.
+    "semantic_level": 4,          # Broad production training depth.
     "hardware": {
         "memory_model": "discrete",
         "device_memory_gb": "auto",
@@ -61,7 +62,9 @@ manifest = {
         "inference": True,
         "training": True,
         "serialization": True,
-        "generator": True,
+        "rng": True,
+        "device_generator": True,
+        "rng_distributions": True,
         "double_backward": True,
         "gradcheck": True,
         "gradient_checkpointing": True,
@@ -72,9 +75,11 @@ manifest = {
         "channels_last": True,
         "sparse": False,
         "nested": False,
+        "named_tensor": False,
         "foreach": False,
         "fp8": False,
-        "quantized": False,
+        "quantized_container_plumbing": False,
+        "custom_quantized_decode": False,
         "compile": False,
         "pinned_memory": True,
         "streams": False,
@@ -89,7 +94,9 @@ manifest = {
     ],
     "tolerance_overrides": {},
     "supported_container_formats": {},
+    # Optional semantic decode hooks for custom_quantized_decode.
+    # Values are "module:function" callables:
+    # decode(packed, scale, zero_point, shape, dtype, device) -> Tensor.
     "custom_container_decoders": {},
-    "reference_device": None,
     "custom_test_dirs": [],
 }

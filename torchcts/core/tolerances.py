@@ -199,6 +199,62 @@ for dtype in (torch.float8_e4m3fn, torch.float8_e5m2, torch.float8_e4m3fnuz, tor
     DEFAULT_TOLERANCES[("matmul", dtype)] = TieredTol(golden=Tol(1e-1, 1e-1), usable=Tol(3e-1, 3e-1))
     DEFAULT_TOLERANCES[("copy", dtype)] = TieredTol(golden=Tol(1e-2, 1e-2), usable=Tol(1e-2, 1e-2))
 
+def _dtype_from_override_key(dtype_key):
+    if isinstance(dtype_key, torch.dtype):
+        return dtype_key
+    if isinstance(dtype_key, str):
+        name = dtype_key.strip()
+        if name.startswith("torch."):
+            name = name[len("torch."):]
+        value = getattr(torch, name, None)
+        if isinstance(value, torch.dtype):
+            return value
+    return None
+
+def normalize_tolerance_overrides(manifest_overrides):
+    if not manifest_overrides:
+        return {}
+
+    normalized = {}
+    for override_key, val in manifest_overrides.items():
+        if isinstance(override_key, (tuple, list)) and len(override_key) == 2:
+            category, dtype_key = override_key
+        elif isinstance(override_key, str):
+            if ":" in override_key:
+                category, dtype_key = override_key.split(":", 1)
+            elif "/" in override_key:
+                category, dtype_key = override_key.split("/", 1)
+            else:
+                raise ValueError(
+                    "tolerance_overrides string keys must use 'category:dtype' "
+                    f"or 'category/dtype', got {override_key!r}"
+                )
+            category = category.strip()
+            dtype_key = dtype_key.strip()
+        else:
+            raise ValueError(f"Invalid tolerance override key: {override_key!r}")
+
+        if not isinstance(category, str) or not category:
+            raise ValueError(f"Invalid tolerance override category: {category!r}")
+
+        dtype = _dtype_from_override_key(dtype_key)
+        if dtype is None:
+            raise ValueError(f"Invalid tolerance override dtype: {dtype_key!r}")
+
+        normalized[(category, dtype)] = val
+    return normalized
+
+def _override_to_tol(val, default_tol, tier):
+    if isinstance(val, TieredTol):
+        return val.get(tier)
+    if isinstance(val, Tol):
+        return val
+    if isinstance(val, dict):
+        return Tol(val.get("rtol", default_tol.rtol), val.get("atol", default_tol.atol))
+    if isinstance(val, (tuple, list)) and len(val) == 2:
+        return Tol(val[0], val[1])
+    raise ValueError(f"Invalid tolerance override value: {val!r}")
+
 def get_tolerance(category, dtype, tier="golden", manifest_overrides=None):
     # Integer/bool default is exact
     if dtype in (torch.int64, torch.int32, torch.int16, torch.int8,
@@ -224,15 +280,8 @@ def get_tolerance(category, dtype, tier="golden", manifest_overrides=None):
 
     # Apply manifest overrides if present
     if manifest_overrides:
-        # Check both direct key and stringified key
-        for override_key, val in manifest_overrides.items():
-            ok_cat, ok_dt = override_key
-            if ok_cat == category and (ok_dt == dtype or str(ok_dt) == str(dtype)):
-                if isinstance(val, Tol):
-                    return val
-                elif isinstance(val, dict):
-                    return Tol(val.get("rtol", tol.rtol), val.get("atol", tol.atol))
-                elif isinstance(val, (tuple, list)) and len(val) == 2:
-                    return Tol(val[0], val[1])
+        for (ok_cat, ok_dt), val in normalize_tolerance_overrides(manifest_overrides).items():
+            if ok_cat == category and ok_dt == dtype:
+                return _override_to_tol(val, tol, tier)
                 
     return tol

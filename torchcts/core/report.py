@@ -25,6 +25,7 @@ import datetime
 import re
 import torch
 import psutil
+from torchcts.core.manifest_schema import CAPABILITY_ORDER, KNOWN_CAPABILITIES
 
 def get_hardware_key(device_name, manifest=None):
     if device_name == "cuda" and torch.cuda.is_available():
@@ -126,19 +127,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         explicit = res.get("capability")
         if explicit:
             for cap_name in explicit.split(","):
-                if cap_name in {
-                    "inference",
-                    "training",
-                    "autocast",
-                    "compile",
-                    "serialization",
-                    "generator",
-                    "device_api",
-                    "channels_last",
-                    "sparse",
-                    "fp8",
-                    "multi_device",
-                }:
+                if cap_name in KNOWN_CAPABILITIES:
                     return cap_name
 
         suite_name = suite_for(nodeid, res)
@@ -149,7 +138,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             "training": "training",
             "compiler": "compile",
             "serialization": "serialization",
-            "rng": "generator",
+            "rng": "rng",
             "device_api": "device_api",
             "strides": "channels_last",
             "multi_device": "multi_device",
@@ -200,19 +189,10 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         return f"{n / (total_ops_discovered or 1) * 100:.1f}%"
 
     # ── Capability Results ──
-    # We group tests by suite/capabilities: inference, training, autocast, compile, serialization, generator, device_api, channels_last, sparse, fp8, multi_device
+    # We group tests by suite/capabilities.
     capability_counts = {
-        "inference": {"pass": 0, "total": 0, "skipped": False},
-        "training": {"pass": 0, "total": 0, "skipped": False},
-        "autocast": {"pass": 0, "total": 0, "skipped": False},
-        "compile": {"pass": 0, "total": 0, "skipped": False},
-        "serialization": {"pass": 0, "total": 0, "skipped": False},
-        "generator": {"pass": 0, "total": 0, "skipped": False},
-        "device_api": {"pass": 0, "total": 0, "skipped": False},
-        "channels_last": {"pass": 0, "total": 0, "skipped": False},
-        "sparse": {"pass": 0, "total": 0, "skipped": False},
-        "fp8": {"pass": 0, "total": 0, "skipped": False},
-        "multi_device": {"pass": 0, "total": 0, "skipped": False},
+        cap: {"pass": 0, "total": 0, "skipped": False}
+        for cap in CAPABILITY_ORDER
     }
 
     # Inspect skips to see if capability skipped
@@ -255,14 +235,15 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             continue
 
         cap_matched = capability_for(nodeid, res)
-        if res.get("suite") == "strides" and "channels_last" in nodeid:
-            cap_matched = "channels_last"
-        if "sparse" in nodeid:
-            cap_matched = "sparse"
-        if "test_mixed_precision" in nodeid:
-            cap_matched = "autocast"
-        if "fp8" in nodeid:
-            cap_matched = "fp8"
+        if not res.get("capability"):
+            if res.get("suite") == "strides" and "channels_last" in nodeid:
+                cap_matched = "channels_last"
+            if "sparse" in nodeid:
+                cap_matched = "sparse"
+            if "test_mixed_precision" in nodeid:
+                cap_matched = "autocast"
+            if "fp8" in nodeid:
+                cap_matched = "fp8"
 
         if cap_matched:
             capability_counts[cap_matched]["total"] += 1
@@ -287,6 +268,28 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             dtype_counts[dt]["pass"] += 1
         else:
             dtype_counts[dt]["fail"] += 1
+
+    # ── Semantic Level Coverage ──
+    semantic_counts = {}
+    requested_level = metadata.get("semantic_level")
+    requested_selection = metadata.get("semantic_level_selection") or {}
+    for source in (results, skips_dict):
+        for _nodeid, res in source.items():
+            level = res.get("semantic_level")
+            if level is None:
+                continue
+            level = int(level)
+            if requested_level is None:
+                requested_level = res.get("requested_level")
+            semantic_counts.setdefault(level, {"pass": 0, "fail": 0, "skip": 0, "total": 0})
+            semantic_counts[level]["total"] += 1
+            status = res.get("status")
+            if status == "PASS":
+                semantic_counts[level]["pass"] += 1
+            elif status in ("FAIL", "ERROR"):
+                semantic_counts[level]["fail"] += 1
+            else:
+                semantic_counts[level]["skip"] += 1
 
     # ── Failures List ──
     failures_summary = []
@@ -407,6 +410,20 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             line_parts.append(f"  {dt:<10} {stats['pass']}/{stats['total']} {ind}")
         summary_lines.append("  ".join(line_parts))
     summary_lines.append("")
+
+    if semantic_counts:
+        requested_text = requested_selection.get("label")
+        if not requested_text:
+            requested_text = f"requested <= {requested_level}" if requested_level is not None else "requested unknown"
+        summary_lines.append("  SEMANTIC LEVELS")
+        summary_lines.append("  " + "─" * 15)
+        summary_lines.append(f"  {requested_text}")
+        for level in sorted(semantic_counts):
+            stats = semantic_counts[level]
+            summary_lines.append(
+                f"  L{level:<2} pass={stats['pass']:<4} fail={stats['fail']:<4} skip={stats['skip']:<4} total={stats['total']}"
+            )
+        summary_lines.append("")
 
     # IEEE 754 Compliance section (NaN/Inf tiers)
     ieee754_total = ieee754_pass + ieee754_fail
