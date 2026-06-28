@@ -1,0 +1,1688 @@
+{
+  "version": 1,
+  "exclusions": [
+    {
+      "name": "aten::_cudnn_init_dropout_state",
+      "match": "exact",
+      "surface": "factory",
+      "category": "backend_specific_internal",
+      "reason": "CUDA-only internal dropout state helper; not relevant to generic backend conformance.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::.*cudnn.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Vendor cuDNN dispatcher helpers have many exact overload names across PyTorch releases; regex is used because generic backend conformance should test public ATen behavior, not CUDA cuDNN-private entrypoints.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::.*miopen.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Vendor MIOpen dispatcher helpers have many exact overload names across PyTorch releases; regex is used because generic backend conformance should test public ATen behavior, not ROCm MIOpen-private entrypoints.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::.*mkldnn.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Vendor MKLDNN dispatcher helpers have many exact overload names across PyTorch releases; regex is used because generic backend conformance should test public ATen behavior, not CPU MKLDNN-private entrypoints.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::.*mps.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Vendor MPS dispatcher helpers have many exact overload names across PyTorch releases; regex is used because generic backend conformance should test public ATen behavior, not Apple MPS-private entrypoints.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::.*nnpack.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Vendor NNPACK dispatcher helpers have exact overload names that can move across PyTorch releases; regex is used because generic backend conformance should test public ATen behavior, not NNPACK-private entrypoints.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::fbgemm_.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "FBGEMM packed-kernel dispatcher helpers have multiple exact overloads; regex is used because these are CPU FBGEMM-private entrypoints, while generic backend conformance should cover public quantized and linear behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::_triton_.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "Triton-private dispatcher helpers have multiple exact overloads; regex is used because generic backend conformance should cover public attention surfaces rather than implementation-specific Triton kernels.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::_cslt_.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "cuSparseLt-private dispatcher helpers have multiple exact overloads; regex is used because generic backend conformance should cover public sparse/matmul behavior rather than CUDA library-private packing helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_propagate_xla_data",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "XLA data propagation is specific to the XLA bridge and is not a generic ATen backend conformance surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fused_dropout",
+      "match": "exact",
+      "surface": "rng",
+      "category": "unsafe_direct_invocation",
+      "reason": "Internal fused dropout dispatcher surface is not generically callable on CPU; public dropout and native_dropout surfaces are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fused_dropout.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Internal fused dropout out variant is not safe for generic direct invocation; public dropout and native_dropout behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_empty_affine_quantized",
+      "match": "exact",
+      "surface": "factory",
+      "category": "cpu_reference_invalid",
+      "reason": "CPU-only internal quantized allocation helper; generic backend conformance is covered through public quantized construction and qparam surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_make_dep_token",
+      "match": "exact",
+      "surface": "factory",
+      "category": "dispatcher_plumbing",
+      "reason": "Internal dependency-token factory used for dispatcher/autograd plumbing, not a tensor data factory a backend should implement generically.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::_test_.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "PyTorch dispatcher test-only operators have many exact overload names; regex is used because these are internal framework test fixtures, not backend conformance surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "^aten::_foobar.*$",
+      "match": "regex",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "PyTorch foobar dispatcher fixtures have exact overload variants; regex is used because these are internal test fixtures, not backend conformance surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::is_distributed",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "distributed_or_c10d",
+      "reason": "Distributed runtime state query is not a tensor backend conformance surface and is covered by distributed/runtime integration tests when that capability is in scope.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::from_file",
+      "match": "exact",
+      "surface": "factory",
+      "category": "cpu_reference_invalid",
+      "reason": "File-backed CPU storage factory has CPU-only dispatch and cannot validate generic accelerator backend allocation semantics.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::from_file.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "File-backed CPU storage out variant has CPU-storage semantics and cannot validate generic accelerator backend allocation behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::get_gradients",
+      "match": "exact",
+      "surface": "factory",
+      "category": "distributed_or_c10d",
+      "reason": "Distributed autograd context query requires distributed autograd initialization and is not a generic backend tensor factory.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_unsafe_index.Tensor",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe indexing helper bypasses public validation semantics; index and index_put public surfaces are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_unsafe_index_put",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe index-put helper bypasses public validation semantics; index_put public surfaces are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_unsafe_view",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe view helper bypasses public view validation; reshape/view behavior is covered through public alias and copy surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_unsafe_view.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe view out helper bypasses public view validation; reshape/view behavior is covered through public alias and copy surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::unsafe_split.Tensor_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe split Tensor[] out helper requires list-output alias handling and bypasses public split validation; safe split surfaces are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::unsafe_split_with_sizes.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe split-with-sizes Tensor[] out helper requires list-output alias handling and bypasses public split validation; safe split surfaces are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_coo_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse COO constructor bypasses invariant checks; sparse COO behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_compressed_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse compressed constructor bypasses invariant checks; compressed sparse behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_csr_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse CSR constructor bypasses invariant checks; CSR behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_csc_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse CSC constructor bypasses invariant checks; CSC behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_bsr_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse BSR constructor bypasses invariant checks; BSR behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_bsc_tensor_unsafe",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Unsafe sparse BSC constructor bypasses invariant checks; BSC behavior must be tested through public sparse constructor helpers.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_log_softmax.Dimname",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "manual_future_scope",
+      "reason": "PyTorch named-tensor sparse dimname dispatcher is not safely invokable through torch.ops, and the named sparse public API is still incomplete; sparse named behavior should be revisited when PyTorch named tensor support is implemented for this surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_softmax.Dimname",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "manual_future_scope",
+      "reason": "PyTorch named-tensor sparse dimname dispatcher is not safely invokable through torch.ops, and the named sparse public API is still incomplete; sparse named behavior should be revisited when PyTorch named tensor support is implemented for this surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::align_tensors",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "manual_future_scope",
+      "reason": "torch.align_tensors raises not-yet-implemented in PyTorch 2.12, while direct named tensor torch.ops invocation is unsafe; implemented named alignment surfaces are covered through public align_to and align_as tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::all.dimname_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public torch.all with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; revisit when PyTorch enables this named reduction overload.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::any.dimname_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public torch.any with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; revisit when PyTorch enables this named reduction overload.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::gather.dimname_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public torch.gather with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; index and gather integer-dim behavior remains covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::index_copy_.dimname",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "manual_future_scope",
+      "reason": "Public index_copy_ with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; implemented named index_fill_ behavior is covered through public tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::index_select.dimname",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "manual_future_scope",
+      "reason": "Public index_select with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; integer-dim index_select behavior remains covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::index_select.dimname_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public index_select with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; integer-dim index_select out behavior remains covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::norm.names_dtype_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public norm with a named dim routes to linalg_vector_norm and rejects string dimensions in PyTorch 2.12; direct named tensor torch.ops invocation is unsafe, so this should be revisited when PyTorch implements the public named norm overload.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::norm.names_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "manual_future_scope",
+      "reason": "Public norm with a named dim routes to linalg_vector_norm and rejects string dimensions in PyTorch 2.12; direct named tensor torch.ops invocation is unsafe, so this should be revisited when PyTorch implements the public named norm overload.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::rand.generator_with_names_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Public torch.rand rejects the combined names plus out argument form in PyTorch 2.12, while direct dispatcher invocation is not a safe public named-tensor path; rand with names and rand with out are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::rand.names_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Public torch.rand rejects the combined names plus out argument form in PyTorch 2.12, while direct dispatcher invocation is not a safe public named-tensor path; rand with names and rand with out are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::randn.generator_with_names_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Public torch.randn rejects the combined names plus out argument form in PyTorch 2.12, while direct dispatcher invocation is not a safe public named-tensor path; randn with names and randn with out are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::randn.names_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Public torch.randn rejects the combined names plus out argument form in PyTorch 2.12, while direct dispatcher invocation is not a safe public named-tensor path; randn with names and randn with out are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::squeeze_.dimname",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "manual_future_scope",
+      "reason": "Public squeeze_ with a named dim raises not-yet-supported in PyTorch 2.12, and direct named tensor torch.ops invocation is unsafe; non-mutating named squeeze behavior is covered through public tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fill_mem_eff_dropout_mask_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "unsafe_direct_invocation",
+      "reason": "Memory-efficient dropout mask filler is an internal helper with seed/offset protocol details; public dropout, native_dropout, and deterministic in-place dropout variants are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_flash_attention_forward_no_dropout_inplace",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "backend_specific_internal",
+      "reason": "Flash-attention no-dropout in-place helper is an accelerator-specific internal kernel surface; generic backend conformance should cover public scaled-dot-product attention and flash-attention capability tests instead.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_key_fold_in",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox key folding is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic RNG conformance is covered through public random, normal, uniform, and generator tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_key_split",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox key splitting is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic RNG conformance is covered through public random, normal, uniform, and generator tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_normal",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox normal generation is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic normal-distribution conformance is covered through public normal and randn surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_normal.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox normal out variant is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic normal-distribution conformance is covered through public normal and randn out/public surfaces.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_normal_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox normal in-place variant is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic in-place RNG conformance is covered through public normal and distribution tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_uniform",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox uniform generation is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic uniform RNG conformance is covered through public uniform, rand, and generator tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_uniform.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox uniform out variant is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic uniform RNG conformance is covered through public uniform, rand, and generator tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_philox_uniform_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "cpu_reference_invalid",
+      "reason": "Philox uniform in-place variant is an MPS/Meta-only internal RNG helper in PyTorch 2.12 and has no CPU reference kernel; generic in-place uniform RNG conformance is covered through public uniform, rand, and generator tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sobol_engine_draw",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw Sobol engine draw helper requires internal quasi-random engine state protocol and direct probing can abort the test process; add public SobolEngine coverage before revisiting this internal dispatcher surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sobol_engine_ff_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw Sobol fast-forward helper mutates internal quasi-random engine state and direct probing can abort the test process; add public SobolEngine coverage before revisiting this internal dispatcher surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sobol_engine_initialize_state_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw Sobol state initializer mutates internal quasi-random engine state and direct probing can abort the test process; add public SobolEngine coverage before revisiting this internal dispatcher surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sobol_engine_scramble_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw Sobol scramble helper mutates internal quasi-random engine state and direct probing can abort the test process; add public SobolEngine coverage before revisiting this internal dispatcher surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_functional_assert_async.msg",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "Functional async assertion consumes dispatcher dependency tokens and validates compiler/runtime ordering, not backend tensor data semantics; dependency-token creation is excluded separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_functional_assert_scalar",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "Functional scalar assertion consumes dispatcher dependency tokens and validates compiler/runtime ordering, not backend tensor data semantics; dependency-token creation is excluded separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_functional_sym_constrain_range",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "Functional symbolic range constraint consumes dispatcher dependency tokens for compiler shape reasoning, not backend tensor data semantics; dependency-token creation is excluded separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_functional_sym_constrain_range_for_size",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "dispatcher_plumbing",
+      "reason": "Functional symbolic size constraint consumes dispatcher dependency tokens for compiler shape reasoning, not backend tensor data semantics; dependency-token creation is excluded separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_autocast_to_full_precision",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "covered_by_public_surface",
+      "reason": "Raw autocast precision helper follows CPU/CUDA autocast policy flags and is not a stable generic backend surface; public autocast behavior is covered through mixed-precision capability tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_autocast_to_reduced_precision",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "covered_by_public_surface",
+      "reason": "Raw autocast reduced-precision helper follows CPU/CUDA autocast policy flags and is not a stable generic backend surface; public autocast behavior is covered through mixed-precision capability tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_native_batch_norm_legit.no_stats_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw no-stats native batch-norm out helper can abort the process when invoked directly with generic empty out buffers; native_batch_norm and _native_batch_norm_legit surfaces with stable CPU references are covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_stats",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm stats helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_stats.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm stats out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_elemt",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm elementwise helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_elemt.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm elementwise out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_gather_stats",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm gather-stats helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_gather_stats.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm gather-stats out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_gather_stats_with_counts",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm gather-stats-with-counts helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_gather_stats_with_counts.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm gather-stats-with-counts out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_backward_elemt",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm backward elementwise helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm_backward behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_backward_elemt.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm backward elementwise out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm_backward out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_backward_reduce",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm backward reduce helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm_backward behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::batch_norm_backward_reduce.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Split batch-norm backward reduce out helper has no CPU kernel in the supported PyTorch build, so TorchCTS cannot construct a CPU oracle; public native_batch_norm_backward out behavior is covered by generated tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_gru.data",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized GRU data entrypoint requires packed recurrent cell parameters and sequence bookkeeping that should be exercised through public quantized RNN/module APIs, not guessed by a generic dispatcher sample.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_gru.data_legacy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Legacy raw quantized GRU data entrypoint requires packed recurrent parameter tensors and sequence bookkeeping that should be exercised through public quantized RNN/module APIs, not guessed by a generic dispatcher sample.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_gru.input",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized GRU input entrypoint requires packed recurrent CellParamsBase objects that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_gru.input_legacy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Legacy raw quantized GRU input entrypoint requires packed recurrent parameter tensors that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_gru_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized GRU cell entrypoint requires prepacked weight buffers and column offsets whose invariants are backend-specific; public quantized recurrent module coverage should exercise this path.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_lstm.data",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized LSTM data entrypoint requires packed recurrent CellParamsBase objects and sequence bookkeeping that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_lstm.data_legacy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Legacy raw quantized LSTM data entrypoint requires packed recurrent parameter tensors and sequence bookkeeping that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_lstm.input",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized LSTM input entrypoint requires packed recurrent CellParamsBase objects that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_lstm.input_legacy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Legacy raw quantized LSTM input entrypoint requires packed recurrent parameter tensors that are not safe to synthesize generically; public quantized RNN/module APIs should cover this behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_lstm_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized LSTM cell entrypoint requires prepacked weight buffers and column offsets whose invariants are backend-specific; public quantized recurrent module coverage should exercise this path.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_rnn_relu_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized RNN ReLU cell entrypoint requires prepacked weight buffers and column offsets whose invariants are backend-specific; public quantized recurrent module coverage should exercise this path.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::quantized_rnn_tanh_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw quantized RNN tanh cell entrypoint requires prepacked weight buffers and column offsets whose invariants are backend-specific; public quantized recurrent module coverage should exercise this path.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_indices_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "Raw sparse COO indices copy dispatcher surface is not callable on SparseCPU in this PyTorch build, so TorchCTS cannot construct a CPU oracle for exact backend comparison; public sparse indices accessors remain covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_indices_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Raw sparse COO indices copy out variant is not callable on SparseCPU in this PyTorch build, so TorchCTS cannot construct a CPU oracle for exact backend comparison; public sparse indices accessors remain covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::indices_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "Sparse COO indices_copy is not callable on the SparseCPU reference backend in this PyTorch build, while compressed layouts intentionally use crow/col or ccol/row copy accessors that are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::indices_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Sparse COO indices_copy out variant is not callable on the SparseCPU reference backend in this PyTorch build, while compressed layouts intentionally use crow/col or ccol/row copy accessors that are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_values_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "Raw sparse values copy dispatcher surface is not callable on SparseCPU or SparseCsrCPU in this PyTorch build, so TorchCTS cannot construct a CPU oracle; public compressed values_copy is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_values_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Raw sparse values copy out variant is not callable on SparseCPU or SparseCsrCPU in this PyTorch build, so TorchCTS cannot construct a CPU oracle; public compressed values_copy out coverage is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_broadcast_to_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "The sparse broadcast-to-copy dispatcher surface is not callable on the SparseCPU reference backend in this PyTorch build, while aliasing broadcast behavior is covered through aten::_sparse_broadcast_to.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_broadcast_to_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The sparse broadcast-to-copy out variant is not callable on the SparseCPU reference backend in this PyTorch build, while aliasing broadcast behavior is covered through aten::_sparse_broadcast_to.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_addmm",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse addmm requires encoded metadata and hardware-specific kernel invariants that are not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_apply",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse apply requires thread masks and encoded metadata invariants that are not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_apply_dense",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse apply-dense requires thread masks and encoded metadata invariants that are not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_linear",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse linear requires packed weight metadata and hardware-specific sparse kernel invariants that are not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_mm",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse matrix multiply requires encoded metadata and hardware-specific sparse kernel invariants that are not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_semi_structured_tile",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw semistructured sparse tiling returns packed metadata tensors whose invariants are CUDA/CUTLASS-oriented and not safe to synthesize generically; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_to_sparse_semi_structured",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw dense-to-semistructured sparse conversion emits packed data and metadata with hardware-specific invariants; public semistructured sparse APIs should cover this when enabled.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fused_rms_norm_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "The fused RMS norm backward dispatcher surface is not callable on the CPU reference backend in this PyTorch build, while fused RMS norm forward and unfused RMS norm semantics are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_efficient_attention_forward",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw efficient-attention fused kernel requires backend-specific dispatch and metadata invariants; public scaled_dot_product_attention coverage is the stable conformance surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_efficient_attention_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "Raw efficient-attention backward fused kernel requires backend-specific dispatch and RNG metadata invariants; public scaled_dot_product_attention forward/backward workloads are the stable conformance surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_flash_attention_forward",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw flash-attention fused kernel requires backend-specific dispatch and sequence metadata invariants; public scaled_dot_product_attention coverage is the stable conformance surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_flash_attention_forward.quantized",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw quantized flash-attention fused kernel requires backend-specific quantization descriptors and sequence metadata; public scaled_dot_product_attention and quantized attention coverage should exercise supported behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_flash_attention_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "Raw flash-attention backward fused kernel requires backend-specific dispatch and RNG metadata invariants; public scaled_dot_product_attention forward/backward workloads are the stable conformance surface.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_efficient_attention",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw efficient SDPA fused kernel is selected behind the public scaled_dot_product_attention API and has no stable generic CPU oracle for direct invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_efficient_attention_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "Raw efficient SDPA backward fused kernel is selected behind the public scaled_dot_product_attention API and has no stable generic CPU oracle for direct invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_flash_attention",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw flash SDPA fused kernel is selected behind the public scaled_dot_product_attention API and has no stable generic CPU oracle for direct invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_flash_attention.quantized",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw quantized flash SDPA fused kernel is selected behind public attention APIs and requires quantization descriptor invariants that are not safe to synthesize generically.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_flash_attention_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "Raw flash SDPA backward fused kernel is selected behind the public scaled_dot_product_attention API and has no stable generic CPU oracle for direct invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_flash_attention_for_cpu",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "CPU-specific flash-attention helper is not a generic backend conformance surface; public scaled_dot_product_attention coverage checks backend-visible behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_flash_attention_for_cpu_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "backend_specific_internal",
+      "reason": "CPU-specific flash-attention backward helper is not a generic backend conformance surface; public scaled_dot_product_attention backward workloads check backend-visible behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_fused_attention_overrideable",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "PrivateUse1 fused-attention override hook is selected through public scaled_dot_product_attention and is not directly callable with a CPU oracle.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_dot_product_fused_attention_overrideable_backward",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "PrivateUse1 fused-attention backward override hook is selected through public scaled_dot_product_attention and is not directly callable with a CPU oracle.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fused_sdp_choice",
+      "match": "exact",
+      "surface": "metadata_device",
+      "category": "dispatcher_plumbing",
+      "reason": "SDPA kernel-choice query reports dispatcher/backend selection rather than tensor result semantics; public scaled_dot_product_attention tests cover selected behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_convert_weight_to_int4pack",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Generic int4 weight packing dispatcher surface is not callable on the CPU reference backend in this PyTorch build; int4 behavior should be validated with a TorchCTS-owned unpacking oracle rather than a synthetic CPU kernel.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_convert_weight_to_int4pack_for_cpu",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "CPU-specific int4 weight packing helper is not a generic backend conformance surface; backend int4 behavior should be validated through public quantized/int4 paths and a TorchCTS unpacking oracle.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_dyn_quant_pack_4bit_weight",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Dynamic 4-bit quantized packing requires byte-level packed-weight and scale/zero layout invariants that are not safe to guess generically; validate through structured int4 sample/oracle coverage instead.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_dyn_quant_matmul_4bit",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Dynamic 4-bit matmul requires packed weight buffers produced with matching private layout invariants; validate public int4 behavior through structured int4 sample/oracle coverage instead.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_weight_int4pack_mm",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Generic int4 packed-weight matmul dispatcher surface is not callable on the CPU reference backend in this PyTorch build; a backend-neutral int4 oracle should decode packed weights and compare against ordinary matmul.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_weight_int4pack_mm_for_cpu",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "backend_specific_internal",
+      "reason": "CPU-specific int4 packed-weight matmul helper is not a generic backend conformance surface; backend int4 behavior should be validated through public int4 paths and a TorchCTS unpacking oracle.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_weight_int4pack_mm_with_scales_and_zeros",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Generic int4 packed-weight matmul with explicit scales and zeros is not callable on the CPU reference backend in this PyTorch build; a backend-neutral int4 oracle should decode packed weights and compare against ordinary matmul.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_wrapped_linear_prepack",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Wrapped linear prepack returns opaque packed-weight state whose invariants are backend-specific; test through public linear/quantized-linear behavior rather than direct opaque buffer construction.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_wrapped_quantized_linear_prepacked",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Wrapped quantized linear prepacked entrypoint consumes opaque packed-weight state whose invariants are backend-specific; test through public quantized-linear behavior rather than direct opaque buffer invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_from_padded.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested out variant raises a NestedTensorImpl internal size error; non-out padded-to-nested behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_from_padded_and_nested_example.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested out variant is not implemented for NestedTensorCPU; non-out padded-to-nested-with-example behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_get_values_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested values copy helper is not implemented in this PyTorch build; aliasing values access is covered through _nested_get_values.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_get_values_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested values copy out helper is not implemented in this PyTorch build; aliasing values access is covered through _nested_get_values.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_select_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "unsafe_direct_invocation",
+      "reason": "Direct invocation rejects public-style nested gradients with internal contiguous-buffer requirements; public nested select/autograd coverage should be used rather than guessing the private buffer protocol.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_from_mask.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested-from-mask out variant raises a NestedTensorImpl internal size error; non-out nested-from-mask behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_from_tensor_list.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested tensor-list out variant raises a NestedTensorImpl internal size error; public nested_tensor construction is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_size.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested metadata out variant is not implemented for NestedTensorCPU; non-out nested size metadata is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_softmax_with_shape",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "unsafe_direct_invocation",
+      "reason": "Raw nested transformer softmax helper requires private query nested-tensor invariants and raises internal assertions for public-style inputs; public nested attention/softmax behavior should cover supported paths.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_storage_offsets.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested metadata out variant is not implemented for NestedTensorCPU; non-out nested storage-offset metadata is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_tensor_strides.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested metadata out variant is not implemented for NestedTensorCPU; non-out nested strides metadata is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_view_from_buffer_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested view-from-buffer copy out variant raises a NestedTensorImpl internal size error; default view and copy variants are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_view_from_jagged_copy",
+      "match": "exact",
+      "surface": "layout_storage",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested jagged copy helper is not implemented in this PyTorch build; jagged view behavior is covered through _nested_view_from_jagged.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_nested_view_from_jagged_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this raw nested jagged copy out helper is not implemented in this PyTorch build; jagged view behavior is covered through _nested_view_from_jagged.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::to_padded_tensor.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this nested to-padded out variant is not implemented for NestedTensorCPU; non-out to_padded_tensor behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_resize_output",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference backend does not implement the raw _resize_output dispatcher helper in this PyTorch build; public resize and resize_as behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_resize_output.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference backend does not implement the raw _resize_output out dispatcher helper in this PyTorch build; public resize and resize_as out behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_resize_output_",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference backend does not implement the raw in-place _resize_output_ dispatcher helper in this PyTorch build; public resize_ and resize_as_ behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::max_pool2d_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw max_pool2d_backward dispatcher surface has no CPU reference kernel in this PyTorch build; max_pool2d_with_indices_backward and public max-pool backward semantics are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::max_pool2d_backward.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw max_pool2d_backward out dispatcher surface has no CPU reference kernel in this PyTorch build; max_pool2d_with_indices_backward and public max-pool backward semantics are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::addmm.dtype_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The dtype_out addmm dispatcher overload is not implemented for the CPU reference backend in this PyTorch build; ordinary addmm and addmm out behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::baddbmm.dtype_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The dtype_out baddbmm dispatcher overload is not implemented for the CPU reference backend in this PyTorch build; ordinary baddbmm and baddbmm out behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::bmm.dtype_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The dtype_out bmm dispatcher overload is not implemented for the CPU reference backend in this PyTorch build; ordinary bmm and bmm out behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::linear_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw linear_backward dispatcher helper is MPS/Meta/Nested-only in this PyTorch build and has no CPU reference kernel; public linear backward behavior is covered through training and matmul tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::linear_backward.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw linear_backward out dispatcher helper is MPS/Meta/Nested-only in this PyTorch build and has no CPU reference kernel; public linear backward behavior is covered through training and matmul tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::matmul_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw matmul_backward dispatcher helper is MPS/Meta/Nested-only in this PyTorch build and has no CPU reference kernel; public matmul backward behavior is covered through training and matmul tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::matmul_backward.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw matmul_backward out dispatcher helper is MPS/Meta/Nested-only in this PyTorch build and has no CPU reference kernel; public matmul backward behavior is covered through training and matmul tests.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::mm.dtype_out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The dtype_out mm dispatcher overload is not implemented for the CPU reference backend in this PyTorch build; ordinary mm and mm out behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_log_softmax_backward_data.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this sparse backward out variant attempts unsupported sparse resize/copy behavior; non-out sparse log-softmax backward is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_softmax_backward_data.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this sparse backward out variant attempts unsupported sparse resize/copy behavior; non-out sparse softmax backward is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_sparse_sum_backward.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "The CPU reference path for this sparse sum backward out variant cannot copy a sparse result into the provided dense out tensor; non-out sparse sum backward is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fw_primal_copy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Forward-AD primal copy is an internal copy helper that rejects direct forward-AD invocation in this PyTorch build; _fw_primal and public forward-AD unpack behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_fw_primal_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Forward-AD primal copy out is an internal copy helper that rejects direct forward-AD invocation in this PyTorch build; _fw_primal and public forward-AD unpack behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_make_dual_copy",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "unsafe_direct_invocation",
+      "reason": "Forward-AD make-dual copy asserts on direct invocation unless private inference-mode invariants are satisfied; _make_dual and _unpack_dual behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_make_dual_copy.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "unsafe_direct_invocation",
+      "reason": "Forward-AD make-dual copy out asserts on direct invocation unless private inference-mode invariants are satisfied; _make_dual and _unpack_dual behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_mixed_dtypes_linear",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw mixed-dtypes linear dispatcher helper is MPS/Meta-only in this PyTorch build and has no CPU reference kernel; public linear and dtype conversion behavior are covered separately.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_pin_memory",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "covered_by_public_surface",
+      "reason": "Raw pin-memory helpers depend on host allocator and accelerator runtime state; public pinned-memory capability coverage and dataloader pinning tests cover supported behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_pin_memory.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "covered_by_public_surface",
+      "reason": "Raw pin-memory out helpers depend on host allocator and accelerator runtime state; public pinned-memory capability coverage and dataloader pinning tests cover supported behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_spsolve",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Sparse solve is MPS/Meta-only for the probed sparse CSR inputs in this PyTorch build and has no CPU reference kernel; sparse matmul/reduction behavior is covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::pin_memory",
+      "match": "exact",
+      "surface": "view_or_alias",
+      "category": "covered_by_public_surface",
+      "reason": "Public pin_memory depends on host allocator and accelerator runtime state; TorchCTS covers it through pinned-memory capability and dataloader tests rather than raw direct invocation.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::record_stream",
+      "match": "exact",
+      "surface": "mutating_or_inplace",
+      "category": "covered_by_public_surface",
+      "reason": "record_stream mutates allocator stream-lifetime metadata rather than tensor values; stream/event capability tests cover supported backend stream semantics.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_grouped_mm",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "The raw scaled grouped-matmul helper has no CPU reference kernel in this PyTorch build; grouped matmul and public matmul behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_scaled_grouped_mm_v2",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "The v2 scaled grouped-matmul helper has no CPU reference kernel in this PyTorch build; grouped matmul and public matmul behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_gru_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN GRU cell is not CPU-reference callable in this PyTorch build; public GRU overloads and differentiable GRU cell backward are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_gru_cell.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN GRU cell out variant is not CPU-reference callable in this PyTorch build; public GRU overloads and differentiable GRU cell backward are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_gru_cell_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN GRU backward requires workspace from a fused cell kernel that is not CPU-reference callable in this PyTorch build; public GRU and differentiable GRU backward behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_gru_cell_backward.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN GRU backward out variant requires workspace from a fused cell kernel that is not CPU-reference callable in this PyTorch build; public GRU and differentiable GRU backward behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_lstm_cell",
+      "match": "exact",
+      "surface": "functional_data",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN LSTM cell is not CPU-reference callable in this PyTorch build; public LSTM overloads and differentiable LSTM cell backward are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_lstm_cell.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN LSTM cell out variant is not CPU-reference callable in this PyTorch build; public LSTM overloads and differentiable LSTM cell backward are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_lstm_cell_backward",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN LSTM backward requires workspace from a fused cell kernel that is not CPU-reference callable in this PyTorch build; public LSTM and differentiable LSTM backward behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_lstm_cell_backward_impl",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN LSTM backward implementation requires workspace from a fused cell kernel that is not CPU-reference callable in this PyTorch build; public LSTM and differentiable LSTM backward behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::_thnn_fused_lstm_cell_backward_impl.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "cpu_reference_invalid",
+      "reason": "Fused THNN LSTM backward implementation out variant requires workspace from a fused cell kernel that is not CPU-reference callable in this PyTorch build; public LSTM and differentiable LSTM backward behavior are covered directly.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::convolution_backward_overrideable",
+      "match": "exact",
+      "surface": "autograd_backward",
+      "category": "dispatcher_plumbing",
+      "reason": "convolution_backward_overrideable is an override extension point that raises NotImplementedError under direct CPU reference invocation; public convolution_backward and convolution tests cover backend behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    },
+    {
+      "name": "aten::convolution_backward_overrideable.out",
+      "match": "exact",
+      "surface": "out_variant",
+      "category": "dispatcher_plumbing",
+      "reason": "convolution_backward_overrideable out is an override extension point that raises NotImplementedError under direct CPU reference invocation; public convolution_backward and convolution tests cover backend behavior.",
+      "owner": "torchcts",
+      "review_after": "2026-09-01"
+    }
+  ]
+}
