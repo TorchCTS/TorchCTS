@@ -52,6 +52,14 @@ def make_binary_inputs(op_name, shape, dtype, device, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::atan2")
+@pytest.mark.covers("aten::div.Tensor")
+@pytest.mark.covers("aten::fmod.Tensor")
+@pytest.mark.covers("aten::mul.Tensor")
+@pytest.mark.covers("aten::pow.Tensor_Tensor")
+@pytest.mark.covers("aten::remainder.Tensor")
+@pytest.mark.covers("aten::sub.Tensor")
 @pytest.mark.parametrize("op_name", _BINARY_FLOAT_OPS)
 @pytest.mark.parametrize("dtype", BINARY_FLOAT_DTYPES)
 def test_binary_float_op(op_name, dtype, device, manifest, compare, input_gen):
@@ -72,6 +80,12 @@ def test_binary_float_op(op_name, dtype, device, manifest, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::div.Tensor")
+@pytest.mark.covers("aten::fmod.Tensor")
+@pytest.mark.covers("aten::mul.Tensor")
+@pytest.mark.covers("aten::remainder.Tensor")
+@pytest.mark.covers("aten::sub.Tensor")
 @pytest.mark.parametrize("op_name", _BINARY_INT_OPS)
 @pytest.mark.parametrize("dtype", BINARY_INT_DTYPES)
 def test_binary_int_op(op_name, dtype, device, manifest, compare, input_gen):

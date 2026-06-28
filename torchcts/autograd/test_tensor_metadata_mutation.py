@@ -18,38 +18,43 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from __future__ import annotations
+
 import pytest
 import torch
+
 from torchcts.core.device import synchronize
 
-pytestmark = pytest.mark.covers_category("double_backward")
 
-DOUBLE_BACKWARD_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
-ACTIVATIONS = ["sigmoid", "tanh", "gelu", "silu"]
+@pytest.mark.smoke
+@pytest.mark.covers("aten::get_device")
+def test_get_device_metadata(device):
+    tensor = torch.empty((2, 3), device=device)
+    actual = torch.ops.aten.get_device.default(tensor)
+    expected = -1 if tensor.device.type == "cpu" else (tensor.device.index or 0)
+    assert actual == expected
 
-@pytest.mark.medium
-@pytest.mark.requires("training")
-@pytest.mark.requires("double_backward")
-@pytest.mark.parametrize("dtype", DOUBLE_BACKWARD_DTYPES)
-@pytest.mark.parametrize("op_name", ACTIVATIONS)
-def test_double_backward_ops(dtype, op_name, device, compare, input_gen):
-    x_dev = input_gen((4, 4), dtype, device)
-    x_dev.requires_grad = True
-    
-    x_cpu = x_dev.cpu().detach()
-    x_cpu.requires_grad = True
-    
-    op_fn = getattr(torch, op_name, None) or getattr(torch.nn.functional, op_name)
-    
-    y_dev = op_fn(x_dev)
-    grad_y_dev = torch.autograd.grad(y_dev.sum(), x_dev, create_graph=True)[0]
-    loss_dev = grad_y_dev.pow(2).sum()
-    loss_dev.backward()
-    
-    y_cpu = op_fn(x_cpu)
-    grad_y_cpu = torch.autograd.grad(y_cpu.sum(), x_cpu, create_graph=True)[0]
-    loss_cpu = grad_y_cpu.pow(2).sum()
-    loss_cpu.backward()
-    
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::detach_")
+@pytest.mark.covers("aten::requires_grad_")
+@pytest.mark.covers("aten::retain_grad")
+def test_autograd_metadata_mutation_surfaces(device):
+    leaf = torch.randn((2, 3), dtype=torch.float32, device=device)
+    returned = torch.ops.aten.requires_grad_.default(leaf, True)
+    assert returned is leaf
+    assert leaf.requires_grad
+
+    non_leaf = leaf * 2
+    torch.ops.aten.retain_grad.default(non_leaf)
+    loss = non_leaf.sum()
+    loss.backward()
     synchronize(device)
-    compare(x_dev.grad, x_cpu.grad, category="backward", dtype=dtype)
+    assert non_leaf.grad is not None
+    torch.testing.assert_close(non_leaf.grad.detach().cpu(), torch.ones((2, 3), dtype=torch.float32))
+
+    detached = non_leaf.clone()
+    returned = torch.ops.aten.detach_.default(detached)
+    assert returned is detached
+    assert not detached.requires_grad
+    assert detached.grad_fn is None

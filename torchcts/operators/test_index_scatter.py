@@ -25,6 +25,7 @@ from torchcts.core.device import synchronize
 INDEX_DTYPES = [torch.float32, torch.int64]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::index_select")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 def test_index_select(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -38,6 +39,7 @@ def test_index_select(dtype, device, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::index_fill_.int_Scalar")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 def test_index_fill(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -52,6 +54,7 @@ def test_index_fill(dtype, device, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::index_copy_")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 def test_index_copy(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -66,6 +69,7 @@ def test_index_copy(dtype, device, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::index_add_")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 def test_index_add(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -80,6 +84,7 @@ def test_index_add(dtype, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::gather")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 def test_gather(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -93,6 +98,8 @@ def test_gather(dtype, device, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::scatter_.src")
+@pytest.mark.covers("aten::scatter_add_")
 @pytest.mark.parametrize("dtype", INDEX_DTYPES)
 @pytest.mark.parametrize("op_name", ["scatter", "scatter_add"])
 def test_scatter_ops(dtype, op_name, device, compare, input_gen):

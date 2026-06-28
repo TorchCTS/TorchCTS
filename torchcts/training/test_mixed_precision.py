@@ -22,6 +22,92 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("autocast")
+
+
+def _amp_grad_inputs(device):
+    return [
+        torch.tensor([2.0, -4.0, 0.0], dtype=torch.float32, device=device),
+        torch.tensor([float("nan"), float("inf"), -8.0], dtype=torch.float32, device=device),
+    ]
+
+
+def _compare_tensor_lists(actual, expected, compare, *, category="exact", dtype=torch.float32):
+    assert len(actual) == len(expected)
+    for actual_item, expected_item in zip(actual, expected):
+        compare(actual_item, expected_item, category=category, dtype=dtype)
+
+
+def _run_amp_non_finite_unscale(target_device, *, variant):
+    grads = _amp_grad_inputs(target_device)
+    found_inf = torch.tensor(0.0, dtype=torch.float32, device=target_device)
+    inv_scale = torch.tensor(0.25, dtype=torch.float32, device=target_device)
+
+    if variant == "functional":
+        return torch.ops.aten._amp_foreach_non_finite_check_and_unscale(
+            grads,
+            found_inf,
+            inv_scale,
+        )
+    if variant == "out":
+        outputs = [torch.empty_like(grad) for grad in grads]
+        returned = torch.ops.aten._amp_foreach_non_finite_check_and_unscale.out(
+            grads,
+            found_inf,
+            inv_scale,
+            out=outputs,
+        )
+        return returned, outputs, found_inf, grads
+    if variant == "inplace":
+        returned = torch.ops.aten._amp_foreach_non_finite_check_and_unscale_(
+            grads,
+            found_inf,
+            inv_scale,
+        )
+        return returned, grads, found_inf
+
+    raise AssertionError(f"unknown AMP non-finite variant: {variant}")
+
+
+def _run_amp_update_scale(target_device, *, found_inf_value, variant):
+    scale = torch.tensor(8.0, dtype=torch.float32, device=target_device)
+    growth_tracker = torch.tensor(1, dtype=torch.int32, device=target_device)
+    found_inf = torch.tensor(found_inf_value, dtype=torch.float32, device=target_device)
+
+    if variant == "functional":
+        return torch.ops.aten._amp_update_scale(
+            scale,
+            growth_tracker,
+            found_inf,
+            2.0,
+            0.5,
+            2,
+        )
+    if variant == "out":
+        out = torch.empty_like(scale)
+        returned = torch.ops.aten._amp_update_scale.out(
+            scale,
+            growth_tracker,
+            found_inf,
+            2.0,
+            0.5,
+            2,
+            out=out,
+        )
+        return returned, out, scale, growth_tracker
+    if variant == "inplace":
+        returned = torch.ops.aten._amp_update_scale_(
+            scale,
+            growth_tracker,
+            found_inf,
+            2.0,
+            0.5,
+            2,
+        )
+        return returned, scale, growth_tracker
+
+    raise AssertionError(f"unknown AMP scale update variant: {variant}")
+
 @pytest.mark.medium
 @pytest.mark.requires("training")
 @pytest.mark.requires("autocast")
@@ -114,3 +200,87 @@ def test_grad_scaler(device, manifest):
     scaler.update()
     assert scaler.get_scale() > 0
 
+
+@pytest.mark.medium
+@pytest.mark.requires("training")
+@pytest.mark.requires("autocast")
+@pytest.mark.covers("aten::_amp_foreach_non_finite_check_and_unscale")
+@pytest.mark.covers("aten::_amp_foreach_non_finite_check_and_unscale.out")
+@pytest.mark.covers("aten::_amp_foreach_non_finite_check_and_unscale_")
+def test_amp_foreach_non_finite_check_and_unscale_variants(device, compare):
+    actual_grads, actual_found_inf = _run_amp_non_finite_unscale(device, variant="functional")
+    expected_grads, expected_found_inf = _run_amp_non_finite_unscale("cpu", variant="functional")
+    synchronize(device)
+    _compare_tensor_lists(actual_grads, expected_grads, compare)
+    compare(actual_found_inf, expected_found_inf, category="exact", dtype=torch.float32)
+
+    returned_dev, out_dev, found_inf_dev, original_dev = _run_amp_non_finite_unscale(device, variant="out")
+    returned_cpu, out_cpu, found_inf_cpu, original_cpu = _run_amp_non_finite_unscale("cpu", variant="out")
+    assert returned_dev is None and returned_cpu is None
+    synchronize(device)
+    _compare_tensor_lists(out_dev, out_cpu, compare)
+    _compare_tensor_lists(original_dev, original_cpu, compare)
+    compare(found_inf_dev, found_inf_cpu, category="exact", dtype=torch.float32)
+
+    returned_dev, grads_dev, found_inf_dev = _run_amp_non_finite_unscale(device, variant="inplace")
+    returned_cpu, grads_cpu, found_inf_cpu = _run_amp_non_finite_unscale("cpu", variant="inplace")
+    assert returned_dev is None and returned_cpu is None
+    synchronize(device)
+    _compare_tensor_lists(grads_dev, grads_cpu, compare)
+    compare(found_inf_dev, found_inf_cpu, category="exact", dtype=torch.float32)
+
+
+@pytest.mark.medium
+@pytest.mark.requires("training")
+@pytest.mark.requires("autocast")
+@pytest.mark.covers("aten::_amp_update_scale")
+@pytest.mark.covers("aten::_amp_update_scale.out")
+@pytest.mark.covers("aten::_amp_update_scale_")
+@pytest.mark.parametrize("found_inf_value", [0.0, 1.0])
+def test_amp_update_scale_variants(found_inf_value, device, compare):
+    actual_scale, actual_growth_tracker = _run_amp_update_scale(
+        device,
+        found_inf_value=found_inf_value,
+        variant="functional",
+    )
+    expected_scale, expected_growth_tracker = _run_amp_update_scale(
+        "cpu",
+        found_inf_value=found_inf_value,
+        variant="functional",
+    )
+    synchronize(device)
+    compare(actual_scale, expected_scale, category="exact", dtype=torch.float32)
+    compare(actual_growth_tracker, expected_growth_tracker, category="exact", dtype=torch.int32)
+
+    returned_dev, out_dev, scale_dev, growth_tracker_dev = _run_amp_update_scale(
+        device,
+        found_inf_value=found_inf_value,
+        variant="out",
+    )
+    returned_cpu, out_cpu, scale_cpu, growth_tracker_cpu = _run_amp_update_scale(
+        "cpu",
+        found_inf_value=found_inf_value,
+        variant="out",
+    )
+    synchronize(device)
+    assert returned_dev is out_dev
+    assert returned_cpu is out_cpu
+    compare(out_dev, out_cpu, category="exact", dtype=torch.float32)
+    compare(scale_dev, scale_cpu, category="exact", dtype=torch.float32)
+    compare(growth_tracker_dev, growth_tracker_cpu, category="exact", dtype=torch.int32)
+
+    returned_dev, scale_dev, growth_tracker_dev = _run_amp_update_scale(
+        device,
+        found_inf_value=found_inf_value,
+        variant="inplace",
+    )
+    returned_cpu, scale_cpu, growth_tracker_cpu = _run_amp_update_scale(
+        "cpu",
+        found_inf_value=found_inf_value,
+        variant="inplace",
+    )
+    synchronize(device)
+    assert returned_dev is scale_dev
+    assert returned_cpu is scale_cpu
+    compare(scale_dev, scale_cpu, category="exact", dtype=torch.float32)
+    compare(growth_tracker_dev, growth_tracker_cpu, category="exact", dtype=torch.int32)

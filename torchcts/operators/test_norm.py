@@ -24,7 +24,21 @@ from torchcts.core.device import synchronize
 
 NORM_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
+
+def _compare_tensor_tuple(actual, expected, compare, *, category, dtype=torch.float32):
+    assert len(actual) == len(expected)
+    for actual_item, expected_item in zip(actual, expected):
+        compare(actual_item, expected_item, category=category, dtype=dtype)
+
+
+def _assert_returned_outputs(returned, outputs):
+    assert len(returned) == len(outputs)
+    for returned_item, output_item in zip(returned, outputs):
+        assert returned_item is output_item
+
+
 @pytest.mark.smoke
+@pytest.mark.covers("aten::layer_norm")
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_layer_norm(dtype, device, compare, input_gen):
     shape = (4, 16, 32)
@@ -41,6 +55,7 @@ def test_layer_norm(dtype, device, compare, input_gen):
     compare(actual, expected, category="norm", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::group_norm")
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_group_norm(dtype, device, compare, input_gen):
     shape = (2, 8, 16, 16)
@@ -69,6 +84,7 @@ def test_group_norm(dtype, device, compare, input_gen):
     compare(actual, expected, category="norm", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::batch_norm")
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_batch_norm(dtype, device, compare, input_gen):
     if device == "cpu" and dtype in (torch.float16, torch.bfloat16):
@@ -112,6 +128,7 @@ def test_batch_norm(dtype, device, compare, input_gen):
     compare(actual, expected, category="norm", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::instance_norm")
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_instance_norm(dtype, device, compare, input_gen):
     shape = (2, 4, 16, 16)
@@ -131,6 +148,11 @@ def test_instance_norm(dtype, device, compare, input_gen):
     compare(actual, expected, category="norm", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::mean.dim")
+@pytest.mark.covers("aten::mul.Tensor")
+@pytest.mark.covers("aten::pow.Tensor_Scalar")
+@pytest.mark.covers("aten::rsqrt")
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_rms_norm_custom(dtype, device, compare, input_gen):
     shape = (4, 16, 32)
@@ -150,3 +172,331 @@ def test_rms_norm_custom(dtype, device, compare, input_gen):
     synchronize(device)
     
     compare(actual, expected, category="norm", dtype=dtype)
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::native_layer_norm.out")
+@pytest.mark.covers("aten::native_layer_norm_backward")
+@pytest.mark.covers("aten::native_layer_norm_backward.out")
+def test_native_layer_norm_dispatcher_variants(device, compare):
+    input_cpu = torch.linspace(-1.5, 1.5, steps=24, dtype=torch.float32).reshape(2, 3, 4)
+    weight_cpu = torch.tensor([0.5, 1.0, 1.5, 2.0], dtype=torch.float32)
+    bias_cpu = torch.tensor([-0.25, 0.0, 0.25, 0.5], dtype=torch.float32)
+    input_dev = input_cpu.to(device)
+    weight_dev = weight_cpu.to(device)
+    bias_dev = bias_cpu.to(device)
+
+    expected = torch.ops.aten.native_layer_norm(input_cpu, [4], weight_cpu, bias_cpu, 1e-5)
+    actual = torch.ops.aten.native_layer_norm(input_dev, [4], weight_dev, bias_dev, 1e-5)
+    synchronize(device)
+
+    out_cpu = [torch.empty_like(expected[0]), torch.empty_like(expected[1]), torch.empty_like(expected[2])]
+    out_dev = [torch.empty_like(actual[0]), torch.empty_like(actual[1]), torch.empty_like(actual[2])]
+    expected_return = torch.ops.aten.native_layer_norm.out(
+        input_cpu,
+        [4],
+        weight_cpu,
+        bias_cpu,
+        1e-5,
+        out0=out_cpu[0],
+        out1=out_cpu[1],
+        out2=out_cpu[2],
+    )
+    actual_return = torch.ops.aten.native_layer_norm.out(
+        input_dev,
+        [4],
+        weight_dev,
+        bias_dev,
+        1e-5,
+        out0=out_dev[0],
+        out1=out_dev[1],
+        out2=out_dev[2],
+    )
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="norm")
+
+    grad_cpu = torch.linspace(0.25, 2.5, steps=24, dtype=torch.float32).reshape_as(input_cpu)
+    grad_dev = grad_cpu.to(device)
+    expected_backward = torch.ops.aten.native_layer_norm_backward(
+        grad_cpu,
+        input_cpu,
+        [4],
+        expected[1],
+        expected[2],
+        weight_cpu,
+        bias_cpu,
+        [True, True, True],
+    )
+    actual_backward = torch.ops.aten.native_layer_norm_backward(
+        grad_dev,
+        input_dev,
+        [4],
+        actual[1],
+        actual[2],
+        weight_dev,
+        bias_dev,
+        [True, True, True],
+    )
+    synchronize(device)
+    _compare_tensor_tuple(actual_backward, expected_backward, compare, category="backward")
+
+    out_cpu = [torch.empty_like(item) for item in expected_backward]
+    out_dev = [torch.empty_like(item) for item in actual_backward]
+    expected_return = torch.ops.aten.native_layer_norm_backward.out(
+        grad_cpu,
+        input_cpu,
+        [4],
+        expected[1],
+        expected[2],
+        weight_cpu,
+        bias_cpu,
+        [True, True, True],
+        out0=out_cpu[0],
+        out1=out_cpu[1],
+        out2=out_cpu[2],
+    )
+    actual_return = torch.ops.aten.native_layer_norm_backward.out(
+        grad_dev,
+        input_dev,
+        [4],
+        actual[1],
+        actual[2],
+        weight_dev,
+        bias_dev,
+        [True, True, True],
+        out0=out_dev[0],
+        out1=out_dev[1],
+        out2=out_dev[2],
+    )
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="backward")
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::native_group_norm")
+@pytest.mark.covers("aten::native_group_norm.out")
+@pytest.mark.covers("aten::native_group_norm_backward")
+@pytest.mark.covers("aten::native_group_norm_backward.out")
+def test_native_group_norm_dispatcher_variants(device, compare):
+    input_cpu = torch.linspace(-2.0, 2.0, steps=24, dtype=torch.float32).reshape(2, 4, 3)
+    weight_cpu = torch.tensor([0.5, 1.0, 1.5, 2.0], dtype=torch.float32)
+    bias_cpu = torch.tensor([-0.5, -0.25, 0.25, 0.5], dtype=torch.float32)
+    input_dev = input_cpu.to(device)
+    weight_dev = weight_cpu.to(device)
+    bias_dev = bias_cpu.to(device)
+
+    expected = torch.ops.aten.native_group_norm(input_cpu, weight_cpu, bias_cpu, 2, 4, 3, 2, 1e-5)
+    actual = torch.ops.aten.native_group_norm(input_dev, weight_dev, bias_dev, 2, 4, 3, 2, 1e-5)
+    synchronize(device)
+    _compare_tensor_tuple(actual, expected, compare, category="norm")
+
+    out_cpu = [torch.empty_like(item) for item in expected]
+    out_dev = [torch.empty_like(item) for item in actual]
+    expected_return = torch.ops.aten.native_group_norm.out(
+        input_cpu,
+        weight_cpu,
+        bias_cpu,
+        2,
+        4,
+        3,
+        2,
+        1e-5,
+        out0=out_cpu[0],
+        out1=out_cpu[1],
+        out2=out_cpu[2],
+    )
+    actual_return = torch.ops.aten.native_group_norm.out(
+        input_dev,
+        weight_dev,
+        bias_dev,
+        2,
+        4,
+        3,
+        2,
+        1e-5,
+        out0=out_dev[0],
+        out1=out_dev[1],
+        out2=out_dev[2],
+    )
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="norm")
+
+    grad_cpu = torch.linspace(0.25, 2.5, steps=24, dtype=torch.float32).reshape_as(input_cpu)
+    grad_dev = grad_cpu.to(device)
+    expected_backward = torch.ops.aten.native_group_norm_backward(
+        grad_cpu,
+        input_cpu,
+        expected[1],
+        expected[2],
+        weight_cpu,
+        2,
+        4,
+        3,
+        2,
+        [True, True, True],
+    )
+    actual_backward = torch.ops.aten.native_group_norm_backward(
+        grad_dev,
+        input_dev,
+        actual[1],
+        actual[2],
+        weight_dev,
+        2,
+        4,
+        3,
+        2,
+        [True, True, True],
+    )
+    synchronize(device)
+    _compare_tensor_tuple(actual_backward, expected_backward, compare, category="backward")
+
+    out_cpu = [torch.empty_like(item) for item in expected_backward]
+    out_dev = [torch.empty_like(item) for item in actual_backward]
+    expected_return = torch.ops.aten.native_group_norm_backward.out(
+        grad_cpu,
+        input_cpu,
+        expected[1],
+        expected[2],
+        weight_cpu,
+        2,
+        4,
+        3,
+        2,
+        [True, True, True],
+        out0=out_cpu[0],
+        out1=out_cpu[1],
+        out2=out_cpu[2],
+    )
+    actual_return = torch.ops.aten.native_group_norm_backward.out(
+        grad_dev,
+        input_dev,
+        actual[1],
+        actual[2],
+        weight_dev,
+        2,
+        4,
+        3,
+        2,
+        [True, True, True],
+        out0=out_dev[0],
+        out1=out_dev[1],
+        out2=out_dev[2],
+    )
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="backward")
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::_weight_norm")
+@pytest.mark.covers("aten::_weight_norm_interface")
+@pytest.mark.covers("aten::_weight_norm_interface.out")
+@pytest.mark.covers("aten::_weight_norm_interface_backward")
+@pytest.mark.covers("aten::_weight_norm_interface_backward.out")
+@pytest.mark.covers("aten::_weight_norm_differentiable_backward")
+def test_weight_norm_dispatcher_variants(device, compare):
+    v_cpu = torch.linspace(-1.5, 1.5, steps=12, dtype=torch.float32).reshape(3, 4)
+    g_cpu = torch.tensor([[1.0, 1.5, 2.0, 2.5]], dtype=torch.float32)
+    v_dev = v_cpu.to(device)
+    g_dev = g_cpu.to(device)
+
+    expected_weight = torch.ops.aten._weight_norm(v_cpu, g_cpu, 1)
+    actual_weight = torch.ops.aten._weight_norm(v_dev, g_dev, 1)
+    synchronize(device)
+    compare(actual_weight, expected_weight, category="norm", dtype=torch.float32)
+
+    expected_interface = torch.ops.aten._weight_norm_interface(v_cpu, g_cpu, 1)
+    actual_interface = torch.ops.aten._weight_norm_interface(v_dev, g_dev, 1)
+    synchronize(device)
+    _compare_tensor_tuple(actual_interface, expected_interface, compare, category="norm")
+
+    out_cpu = [torch.empty_like(item) for item in expected_interface]
+    out_dev = [torch.empty_like(item) for item in actual_interface]
+    expected_return = torch.ops.aten._weight_norm_interface.out(v_cpu, g_cpu, 1, out0=out_cpu[0], out1=out_cpu[1])
+    actual_return = torch.ops.aten._weight_norm_interface.out(v_dev, g_dev, 1, out0=out_dev[0], out1=out_dev[1])
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="norm")
+
+    grad_cpu = torch.linspace(0.25, 1.75, steps=12, dtype=torch.float32).reshape_as(v_cpu)
+    grad_dev = grad_cpu.to(device)
+    expected_backward = torch.ops.aten._weight_norm_interface_backward(
+        grad_cpu,
+        v_cpu,
+        g_cpu,
+        expected_interface[1],
+        1,
+    )
+    actual_backward = torch.ops.aten._weight_norm_interface_backward(
+        grad_dev,
+        v_dev,
+        g_dev,
+        actual_interface[1],
+        1,
+    )
+    synchronize(device)
+    _compare_tensor_tuple(actual_backward, expected_backward, compare, category="backward")
+
+    out_cpu = [torch.empty_like(item) for item in expected_backward]
+    out_dev = [torch.empty_like(item) for item in actual_backward]
+    expected_return = torch.ops.aten._weight_norm_interface_backward.out(
+        grad_cpu,
+        v_cpu,
+        g_cpu,
+        expected_interface[1],
+        1,
+        out0=out_cpu[0],
+        out1=out_cpu[1],
+    )
+    actual_return = torch.ops.aten._weight_norm_interface_backward.out(
+        grad_dev,
+        v_dev,
+        g_dev,
+        actual_interface[1],
+        1,
+        out0=out_dev[0],
+        out1=out_dev[1],
+    )
+    synchronize(device)
+    _assert_returned_outputs(expected_return, out_cpu)
+    _assert_returned_outputs(actual_return, out_dev)
+    _compare_tensor_tuple(out_dev, out_cpu, compare, category="backward")
+
+    expected_differentiable = torch.ops.aten._weight_norm_differentiable_backward(
+        grad_cpu,
+        v_cpu,
+        g_cpu,
+        expected_interface[1],
+        1,
+    )
+    actual_differentiable = torch.ops.aten._weight_norm_differentiable_backward(
+        grad_dev,
+        v_dev,
+        g_dev,
+        actual_interface[1],
+        1,
+    )
+    synchronize(device)
+    _compare_tensor_tuple(actual_differentiable, expected_differentiable, compare, category="backward")
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::_fused_rms_norm")
+def test_fused_rms_norm_dispatcher_variant(device, compare):
+    input_cpu = torch.linspace(-1.0, 1.0, steps=8, dtype=torch.float32).reshape(2, 4)
+    weight_cpu = torch.tensor([0.5, 1.0, 1.5, 2.0], dtype=torch.float32)
+    input_dev = input_cpu.to(device)
+    weight_dev = weight_cpu.to(device)
+
+    expected = torch.ops.aten._fused_rms_norm(input_cpu, [4], weight_cpu, 1e-5)
+    actual = torch.ops.aten._fused_rms_norm(input_dev, [4], weight_dev, 1e-5)
+    synchronize(device)
+    _compare_tensor_tuple(actual, expected, compare, category="norm")

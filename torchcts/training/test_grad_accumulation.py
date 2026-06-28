@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("training_workflow")
+
 @pytest.mark.medium
 @pytest.mark.requires("training")
 @pytest.mark.parametrize("dtype", [torch.float32])

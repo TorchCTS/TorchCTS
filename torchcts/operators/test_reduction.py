@@ -26,6 +26,12 @@ REDUCTION_FLOAT_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 REDUCTION_INT_DTYPES = [torch.int64, torch.int32]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::mean")
+@pytest.mark.covers("aten::mean.dim")
+@pytest.mark.covers("aten::std")
+@pytest.mark.covers("aten::sum")
+@pytest.mark.covers("aten::sum.dim_IntList")
+@pytest.mark.covers("aten::var.dim")
 @pytest.mark.parametrize("dtype", REDUCTION_FLOAT_DTYPES)
 def test_reductions_basic(dtype, device, manifest, compare, input_gen):
     shape = (16, 16)
@@ -47,6 +53,8 @@ def test_reductions_basic(dtype, device, manifest, compare, input_gen):
         compare(torch.var(x_dev, dim=1), torch.var(x_cpu, dim=1), category="reduction", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::amax")
+@pytest.mark.covers("aten::amin")
 @pytest.mark.parametrize("dtype", REDUCTION_FLOAT_DTYPES + REDUCTION_INT_DTYPES)
 def test_amax_amin(dtype, device, manifest, compare, input_gen):
     shape = (16, 16)
@@ -57,6 +65,8 @@ def test_amax_amin(dtype, device, manifest, compare, input_gen):
     compare(torch.amin(x_dev, dim=1, keepdim=True), torch.amin(x_cpu, dim=1, keepdim=True), category="exact" if dtype in REDUCTION_INT_DTYPES else "elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::argmax")
+@pytest.mark.covers("aten::argmin")
 @pytest.mark.parametrize("dtype", REDUCTION_FLOAT_DTYPES + REDUCTION_INT_DTYPES)
 def test_argmax_argmin(dtype, device, manifest, compare, input_gen):
     shape = (16, 16)
@@ -67,6 +77,9 @@ def test_argmax_argmin(dtype, device, manifest, compare, input_gen):
     compare(torch.argmin(x_dev, dim=1), torch.argmin(x_cpu, dim=1), category="exact", dtype=torch.int64)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::all.dim")
+@pytest.mark.covers("aten::any")
+@pytest.mark.covers("aten::any.dim")
 @pytest.mark.parametrize("dim", [0, 1])
 def test_any_all(dim, device, manifest, compare, input_gen):
     shape = (16, 16)
@@ -78,6 +91,8 @@ def test_any_all(dim, device, manifest, compare, input_gen):
     compare(torch.all(x_dev, dim=dim, keepdim=True), torch.all(x_cpu, dim=dim, keepdim=True), category="exact", dtype=torch.bool)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::norm.Scalar")
+@pytest.mark.covers("aten::norm.ScalarOpt_dim")
 @pytest.mark.parametrize("dtype", REDUCTION_FLOAT_DTYPES)
 def test_norm(dtype, device, manifest, compare, input_gen):
     shape = (16, 16)

@@ -22,6 +22,8 @@ import pytest
 import torch
 import random
 
+pytestmark = pytest.mark.covers_category("stress")
+
 @pytest.mark.stress
 @pytest.mark.parametrize("num_iterations", [100, 500])
 def test_rapid_alloc_free(num_iterations, device):

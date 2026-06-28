@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("workload")
+
 # Skip if transformers is not installed
 pytest.importorskip("transformers")
 

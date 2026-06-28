@@ -25,6 +25,8 @@ from torchcts.core.device import synchronize
 LOSS_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::_log_softmax")
+@pytest.mark.covers("aten::nll_loss_forward")
 @pytest.mark.parametrize("dtype", LOSS_DTYPES)
 def test_cross_entropy(dtype, device, compare, input_gen):
     shape = (4, 10)
@@ -38,6 +40,7 @@ def test_cross_entropy(dtype, device, compare, input_gen):
     compare(actual, expected, category="loss", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::mse_loss")
 @pytest.mark.parametrize("dtype", LOSS_DTYPES)
 def test_mse_loss(dtype, device, compare, input_gen):
     shape = (16, 16)
@@ -51,6 +54,8 @@ def test_mse_loss(dtype, device, compare, input_gen):
     compare(actual, expected, category="loss", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::_log_softmax")
+@pytest.mark.covers("aten::nll_loss_forward")
 @pytest.mark.parametrize("dtype", LOSS_DTYPES)
 def test_nll_loss(dtype, device, compare, input_gen):
     shape = (4, 10)
@@ -64,6 +69,7 @@ def test_nll_loss(dtype, device, compare, input_gen):
     compare(actual, expected, category="loss", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::binary_cross_entropy_with_logits")
 @pytest.mark.parametrize("dtype", LOSS_DTYPES)
 def test_bce_with_logits(dtype, device, compare, input_gen):
     shape = (8, 8)
@@ -76,7 +82,37 @@ def test_bce_with_logits(dtype, device, compare, input_gen):
     
     compare(actual, expected, category="loss", dtype=dtype)
 
+
 @pytest.mark.smoke
+@pytest.mark.covers("aten::poisson_nll_loss")
+@pytest.mark.parametrize("dtype", LOSS_DTYPES)
+def test_poisson_nll_loss(dtype, device, compare, input_gen):
+    shape = (16, 16)
+    log_rate_dev = input_gen(shape, dtype, device)
+    target_dev = torch.full(shape, 2.0, dtype=dtype, device=device)
+
+    expected = torch.nn.functional.poisson_nll_loss(
+        log_rate_dev.cpu(),
+        target_dev.cpu(),
+        log_input=True,
+        full=True,
+        reduction="mean",
+    )
+    actual = torch.nn.functional.poisson_nll_loss(
+        log_rate_dev,
+        target_dev,
+        log_input=True,
+        full=True,
+        reduction="mean",
+    )
+    synchronize(device)
+
+    compare(actual, expected, category="loss", dtype=dtype)
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::huber_loss")
+@pytest.mark.covers("aten::smooth_l1_loss")
 @pytest.mark.parametrize("dtype", LOSS_DTYPES)
 @pytest.mark.parametrize("op_name", ["smooth_l1", "huber"])
 def test_smooth_l1_huber_loss(dtype, op_name, device, compare, input_gen):

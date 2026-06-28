@@ -39,6 +39,12 @@ for op in ["eq", "ne", "lt", "le", "gt", "ge"]:
 _NAN_INF_OPS = [op for op in ["isnan", "isinf", "isfinite"] if hasattr(torch, op)]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::eq.Tensor")
+@pytest.mark.covers("aten::ge.Tensor")
+@pytest.mark.covers("aten::gt.Tensor")
+@pytest.mark.covers("aten::le.Tensor")
+@pytest.mark.covers("aten::lt.Tensor")
+@pytest.mark.covers("aten::ne.Tensor")
 @pytest.mark.parametrize("op_name, dtype", COMP_TESTS)
 def test_comparison_op(op_name, dtype, device, manifest, compare, input_gen):
     op_fn = getattr(torch, op_name)
@@ -59,6 +65,9 @@ def test_comparison_op(op_name, dtype, device, manifest, compare, input_gen):
     compare(actual, expected, category="exact", dtype=torch.bool)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::isfinite")
+@pytest.mark.covers("aten::isinf")
+@pytest.mark.covers("aten::isnan")
 @pytest.mark.parametrize("op_name", _NAN_INF_OPS)
 def test_nan_inf_finite(op_name, device, manifest, compare):
     dtype = torch.float32
@@ -80,6 +89,7 @@ def test_nan_inf_finite(op_name, device, manifest, compare):
     compare(actual, expected, category="exact", dtype=torch.bool)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::where.self")
 @pytest.mark.parametrize("dtype", COMP_DTYPES)
 def test_where(dtype, device, manifest, compare, input_gen):
     shape = (32, 32)
@@ -96,6 +106,7 @@ def test_where(dtype, device, manifest, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::clamp")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
 def test_clamp(dtype, device, manifest, compare, input_gen):
     shape = (32, 32)

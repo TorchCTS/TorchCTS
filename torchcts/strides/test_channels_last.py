@@ -24,6 +24,9 @@ from torchcts.core.device import synchronize
 
 @pytest.mark.medium
 @pytest.mark.requires("channels_last")
+@pytest.mark.covers("aten::_to_copy")
+@pytest.mark.covers("aten::convolution")
+@pytest.mark.covers_category("channels_last")
 @pytest.mark.parametrize("dtype", [torch.float32])
 def test_channels_last_conv2d(dtype, device, manifest, compare, input_gen):
     # Create input in channels_last layout

@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("multi_device_behavior")
+
 @pytest.mark.smoke
 @pytest.mark.requires("multi_device")
 @pytest.mark.parametrize("size", [10, 20])

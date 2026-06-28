@@ -25,6 +25,7 @@ from torchcts.core.device import synchronize
 PADDING_DTYPES = [torch.float32, torch.int64]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::constant_pad_nd")
 @pytest.mark.parametrize("dtype", PADDING_DTYPES)
 def test_constant_pad(dtype, device, compare, input_gen):
     x_dev = input_gen((4, 4), dtype, device)
@@ -37,6 +38,10 @@ def test_constant_pad(dtype, device, compare, input_gen):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::copy_")
+@pytest.mark.covers("aten::reflection_pad2d")
+@pytest.mark.covers("aten::replication_pad2d")
+@pytest.mark.covers("aten::slice.Tensor")
 @pytest.mark.parametrize("dtype", [torch.float32])
 @pytest.mark.parametrize("mode", ["reflect", "replicate", "circular"])
 def test_other_padding_modes(dtype, mode, device, compare, input_gen):

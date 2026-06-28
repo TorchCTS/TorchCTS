@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("sdpa")
+
 @pytest.mark.workload
 @pytest.mark.parametrize("dtype", [torch.float32])
 @pytest.mark.parametrize("is_causal", [True, False])
@@ -517,4 +519,3 @@ def test_sdpa_gqa_enable_gqa_backward(device, manifest, compare, input_gen):
     dev_dq = Q.grad.float().cpu()
     cpu_dq = Q_cpu.grad.float()
     assert (dev_dq - cpu_dq).abs().max().item() < 1e-4, "Q.grad mismatch in GQA backward"
-

@@ -56,6 +56,24 @@ def make_unary_input(op_name, shape, dtype, device, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::ceil")
+@pytest.mark.covers("aten::cos")
+@pytest.mark.covers("aten::erf")
+@pytest.mark.covers("aten::exp")
+@pytest.mark.covers("aten::floor")
+@pytest.mark.covers("aten::log")
+@pytest.mark.covers("aten::log10")
+@pytest.mark.covers("aten::log2")
+@pytest.mark.covers("aten::neg")
+@pytest.mark.covers("aten::reciprocal")
+@pytest.mark.covers("aten::round")
+@pytest.mark.covers("aten::rsqrt")
+@pytest.mark.covers("aten::sigmoid")
+@pytest.mark.covers("aten::sign")
+@pytest.mark.covers("aten::sin")
+@pytest.mark.covers("aten::sqrt")
+@pytest.mark.covers("aten::tanh")
 @pytest.mark.parametrize("op_name", _UNARY_FLOAT_OPS)
 @pytest.mark.parametrize("dtype", UNARY_FLOAT_DTYPES)
 def test_unary_float_op(op_name, dtype, device, manifest, compare, input_gen):
@@ -76,6 +94,12 @@ def test_unary_float_op(op_name, dtype, device, manifest, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::ceil")
+@pytest.mark.covers("aten::floor")
+@pytest.mark.covers("aten::neg")
+@pytest.mark.covers("aten::round")
+@pytest.mark.covers("aten::sign")
 @pytest.mark.parametrize("op_name", _UNARY_INT_OPS)
 @pytest.mark.parametrize("dtype", UNARY_INT_DTYPES)
 def test_unary_int_op(op_name, dtype, device, manifest, compare, input_gen):

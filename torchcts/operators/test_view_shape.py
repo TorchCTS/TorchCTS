@@ -26,6 +26,9 @@ from torchcts.core.layout_tracker import LayoutDispatchTracker
 SHAPE_DTYPES = [torch.float32, torch.int64, torch.bool]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::permute")
+@pytest.mark.covers("aten::transpose.int")
+@pytest.mark.covers("aten::view")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_view_reshape_permute_transpose(dtype, device, manifest, compare, input_gen):
     shape = (2, 3, 4)
@@ -42,6 +45,10 @@ def test_view_reshape_permute_transpose(dtype, device, manifest, compare, input_
     compare(x_dev.transpose(0, 2), x_cpu.transpose(0, 2), category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::expand")
+@pytest.mark.covers("aten::select.int")
+@pytest.mark.covers("aten::slice.Tensor")
+@pytest.mark.covers("aten::split.Tensor")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_expand_narrow_select_chunk_split(dtype, device, manifest, compare, input_gen):
     # expand: (1, 4) -> (3, 4)
@@ -69,6 +76,7 @@ def test_expand_narrow_select_chunk_split(dtype, device, manifest, compare, inpu
         compare(sd, sc, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers_category("layout_copy_detection")
 @pytest.mark.parametrize("shape", [(4, 4)])
 def test_layout_tracker_warning(shape, device, manifest):
     x_dev = torch.randn(*shape, device=device)
@@ -81,6 +89,7 @@ def test_layout_tracker_warning(shape, device, manifest):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::cat")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_cat_basic(dtype, device, compare, input_gen):
     """torch.cat along dim 0 and dim 1."""
@@ -101,6 +110,7 @@ def test_cat_basic(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::cat")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_cat_empty_tensor(dtype, device, compare, input_gen):
     """torch.cat with an empty tensor in the list."""
@@ -114,6 +124,7 @@ def test_cat_empty_tensor(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::cat")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_cat_negative_dim(dtype, device, compare, input_gen):
     """torch.cat with negative dim index."""
@@ -127,6 +138,7 @@ def test_cat_negative_dim(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::stack")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_stack_basic(dtype, device, compare, input_gen):
     """torch.stack along dim 0 and dim 1."""
@@ -146,6 +158,7 @@ def test_stack_basic(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::stack")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_stack_negative_dim(dtype, device, compare, input_gen):
     """torch.stack with negative dim."""
@@ -158,6 +171,7 @@ def test_stack_negative_dim(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::unbind.int")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_unbind(dtype, device, compare, input_gen):
     """torch.unbind along dim 0 and dim 1."""
@@ -177,6 +191,7 @@ def test_unbind(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::split.Tensor")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_split_uneven(dtype, device, compare, input_gen):
     """torch.split with a size that doesn't evenly divide the dim."""
@@ -191,6 +206,7 @@ def test_split_uneven(dtype, device, compare, input_gen):
 
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::split.Tensor")
 @pytest.mark.parametrize("dtype", SHAPE_DTYPES)
 def test_chunk_negative_dim(dtype, device, compare, input_gen):
     """torch.chunk with negative dim."""
@@ -201,3 +217,114 @@ def test_chunk_negative_dim(dtype, device, compare, input_gen):
     for cd, cc in zip(chunks_dev, chunks_cpu):
         compare(cd, cc, category="exact", dtype=dtype)
 
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::_has_same_storage_numel")
+@pytest.mark.covers("aten::resize")
+@pytest.mark.covers("aten::resize.out", surface="out_variant")
+@pytest.mark.covers("aten::resize_")
+@pytest.mark.covers("aten::resize_as")
+@pytest.mark.covers("aten::resize_as.out", surface="out_variant")
+@pytest.mark.covers("aten::resize_as_")
+@pytest.mark.covers("aten::_efficientzerotensor.out", surface="out_variant")
+@pytest.mark.covers("aten::_to_cpu")
+def test_storage_resize_and_cpu_transfer_dispatcher_surfaces(device, compare):
+    base_cpu = torch.arange(6, dtype=torch.float32)
+    base_dev = base_cpu.to(device)
+    assert torch.ops.aten._has_same_storage_numel.default(
+        base_dev, base_dev.view(2, 3),
+    ) == torch.ops.aten._has_same_storage_numel.default(base_cpu, base_cpu.view(2, 3))
+    assert torch.ops.aten._has_same_storage_numel.default(
+        base_dev, torch.arange(7, dtype=torch.float32, device=device),
+    ) == torch.ops.aten._has_same_storage_numel.default(
+        base_cpu, torch.arange(7, dtype=torch.float32),
+    )
+
+    resized_cpu = torch.ops.aten.resize.default(torch.ones(2, 2), [2, 3])
+    resized_dev = torch.ops.aten.resize.default(torch.ones(2, 2, device=device), [2, 3])
+    synchronize(device)
+    assert resized_dev.shape == resized_cpu.shape
+    assert resized_dev.device.type == device
+
+    resize_out_cpu = torch.empty(0)
+    resize_out_dev = torch.empty(0, device=device)
+    returned_cpu = torch.ops.aten.resize.out(
+        torch.ones(2, 2), [2, 3], out=resize_out_cpu,
+    )
+    returned_dev = torch.ops.aten.resize.out(
+        torch.ones(2, 2, device=device), [2, 3], out=resize_out_dev,
+    )
+    synchronize(device)
+    assert returned_cpu is resize_out_cpu
+    assert returned_dev is resize_out_dev
+    assert resize_out_dev.shape == resize_out_cpu.shape
+
+    inplace_cpu = torch.ones(2, 2)
+    inplace_dev = torch.ones(2, 2, device=device)
+    returned_cpu = torch.ops.aten.resize_.default(inplace_cpu, [2, 3])
+    returned_dev = torch.ops.aten.resize_.default(inplace_dev, [2, 3])
+    synchronize(device)
+    assert returned_cpu is inplace_cpu
+    assert returned_dev is inplace_dev
+    assert inplace_dev.shape == inplace_cpu.shape
+
+    template_cpu = torch.empty(3, 4)
+    template_dev = torch.empty(3, 4, device=device)
+    resized_as_cpu = torch.ops.aten.resize_as.default(torch.ones(2, 2), template_cpu)
+    resized_as_dev = torch.ops.aten.resize_as.default(
+        torch.ones(2, 2, device=device), template_dev,
+    )
+    synchronize(device)
+    assert resized_as_dev.shape == resized_as_cpu.shape
+
+    resize_as_out_cpu = torch.empty(0)
+    resize_as_out_dev = torch.empty(0, device=device)
+    returned_cpu = torch.ops.aten.resize_as.out(
+        torch.ones(2, 2), template_cpu, out=resize_as_out_cpu,
+    )
+    returned_dev = torch.ops.aten.resize_as.out(
+        torch.ones(2, 2, device=device), template_dev, out=resize_as_out_dev,
+    )
+    synchronize(device)
+    assert returned_cpu is resize_as_out_cpu
+    assert returned_dev is resize_as_out_dev
+    assert resize_as_out_dev.shape == resize_as_out_cpu.shape
+
+    inplace_as_cpu = torch.ones(2, 2)
+    inplace_as_dev = torch.ones(2, 2, device=device)
+    returned_cpu = torch.ops.aten.resize_as_.default(inplace_as_cpu, template_cpu)
+    returned_dev = torch.ops.aten.resize_as_.default(inplace_as_dev, template_dev)
+    synchronize(device)
+    assert returned_cpu is inplace_as_cpu
+    assert returned_dev is inplace_as_dev
+    assert inplace_as_dev.shape == inplace_as_cpu.shape
+
+    zero_out_cpu = torch.empty(0)
+    zero_out_dev = torch.empty(0, device=device)
+    returned_cpu = torch.ops.aten._efficientzerotensor.out([2, 3], out=zero_out_cpu)
+    returned_dev = torch.ops.aten._efficientzerotensor.out([2, 3], out=zero_out_dev)
+    synchronize(device)
+    assert returned_cpu is zero_out_cpu
+    assert returned_dev is zero_out_dev
+    compare(zero_out_dev, zero_out_cpu, category="exact", dtype=torch.float32)
+
+    cpu_results = torch.ops.aten._to_cpu.default(
+        [torch.arange(3, dtype=torch.float32, device=device), torch.ones(2, device=device)],
+    )
+    assert all(result.device.type == "cpu" for result in cpu_results)
+    torch.testing.assert_close(cpu_results[0], torch.arange(3, dtype=torch.float32))
+    torch.testing.assert_close(cpu_results[1], torch.ones(2))
+
+
+@pytest.mark.smoke
+@pytest.mark.requires("sparse")
+@pytest.mark.covers("aten::_nnz")
+def test_sparse_nnz_dispatcher_surface(device):
+    indices_cpu = torch.tensor([[0, 1], [1, 0]], dtype=torch.int64)
+    values_cpu = torch.tensor([2.0, 3.0], dtype=torch.float32)
+    sparse_cpu = torch.sparse_coo_tensor(indices_cpu, values_cpu, (2, 2))
+    sparse_dev = torch.sparse_coo_tensor(
+        indices_cpu.to(device), values_cpu.to(device), (2, 2), device=device,
+    )
+    synchronize(device)
+    assert torch.ops.aten._nnz.default(sparse_dev) == torch.ops.aten._nnz.default(sparse_cpu)

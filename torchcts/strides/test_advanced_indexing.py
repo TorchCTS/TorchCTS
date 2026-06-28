@@ -25,6 +25,10 @@ from torchcts.core.device import synchronize
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::gt.Scalar")
+@pytest.mark.covers("aten::index.Tensor")
+@pytest.mark.covers("aten::select.int")
+@pytest.mark.covers("aten::slice.Tensor")
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("case", ["mixed", "boolean"])
 def test_advanced_indexing_mixed(case, dtype, device, manifest, compare, input_gen):

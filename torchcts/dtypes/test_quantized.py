@@ -20,6 +20,7 @@
 
 import pytest
 import torch
+from torchcts.core.quantized_decoders import load_custom_container_decoder
 from torchcts.core.device import synchronize
 
 
@@ -374,7 +375,9 @@ class E8m0fnuCodec(ContainerCodec):
 # Test
 # ═══════════════════════════════════════════════════════════════════
 @pytest.mark.medium
-@pytest.mark.requires("quantized")
+@pytest.mark.requires("quantized_container_plumbing")
+@pytest.mark.covers("aten::_to_copy")
+@pytest.mark.covers_category("quantized_container_plumbing")
 @pytest.mark.parametrize("packing", list(_CODEC_REGISTRY.keys()))
 def test_quantized_plumbing(packing, device, manifest):
     """Verify pack/unpack round-trips and scale tensor device transfers."""
@@ -423,3 +426,50 @@ def test_quantized_plumbing(packing, device, manifest):
     assert torch.equal(unpacked, original), (
         f"Reference pack/unpack round-trip failed for '{packing}'"
     )
+
+
+def _run_custom_decoder_case(packing, decoder, device, compare):
+    codec = _CODEC_REGISTRY[packing]
+    n_elements = 128
+
+    original = codec.generate(n_elements)
+    packed_cpu = codec.pack(original)
+    scale, zero_point = codec.generate_scale(n_elements)
+
+    packed_dev = packed_cpu.to(device)
+    scale_dev = scale.to(device) if scale is not None else None
+    zero_point_dev = zero_point.to(device) if zero_point is not None else None
+    decoded = decoder(
+        packed_dev,
+        scale_dev,
+        zero_point_dev,
+        (n_elements,),
+        torch.float32,
+        device,
+    )
+    synchronize(device)
+
+    if not isinstance(decoded, torch.Tensor):
+        raise AssertionError(f"Custom decoder for '{packing}' returned {type(decoded).__name__}, not torch.Tensor")
+    expected = codec.unpack(packed_cpu, n_elements).to(torch.float32)
+    compare(decoded, expected, category="quant_decode", dtype=torch.float32)
+
+
+@pytest.mark.medium
+@pytest.mark.requires("custom_quantized_decode")
+@pytest.mark.covers("aten::_to_copy")
+@pytest.mark.covers_category("custom_quantized_decode")
+@pytest.mark.parametrize("packing", list(_CODEC_REGISTRY.keys()))
+def test_custom_quantized_decoder(packing, device, manifest, compare):
+    """Verify user-provided semantic decoders against TorchCTS reference codecs."""
+    supported = manifest.get("supported_container_formats", {})
+    if not supported.get(packing, False):
+        pytest.skip(f"Container format '{packing}' not in supported_container_formats")
+
+    decoder_specs = manifest.get("custom_container_decoders", {})
+    decoder_spec = decoder_specs.get(packing)
+    if not decoder_spec:
+        pytest.skip(f"No custom decoder declared for container format '{packing}'")
+
+    decoder = load_custom_container_decoder(decoder_spec)
+    _run_custom_decoder_case(packing, decoder, device, compare)

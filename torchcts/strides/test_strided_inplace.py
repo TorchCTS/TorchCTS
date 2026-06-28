@@ -25,6 +25,10 @@ from torchcts.core.device import synchronize
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::clamp_")
+@pytest.mark.covers("aten::fill_.Scalar")
+@pytest.mark.covers("aten::permute")
+@pytest.mark.covers("aten::slice.Tensor")
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("case", ["transpose", "slice"])
 def test_strided_inplace_updates(case, dtype, device, manifest, compare, input_gen):

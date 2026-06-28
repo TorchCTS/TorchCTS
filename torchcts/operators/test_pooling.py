@@ -25,6 +25,7 @@ from torchcts.core.device import synchronize
 POOL_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::max_pool2d_with_indices")
 @pytest.mark.parametrize("dtype", POOL_DTYPES)
 def test_max_pool2d(dtype, device, compare, input_gen):
     shape = (2, 3, 16, 16)
@@ -38,6 +39,7 @@ def test_max_pool2d(dtype, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::avg_pool2d")
 @pytest.mark.parametrize("dtype", POOL_DTYPES)
 def test_avg_pool2d(dtype, device, compare, input_gen):
     shape = (2, 3, 16, 16)
@@ -51,6 +53,7 @@ def test_avg_pool2d(dtype, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::_adaptive_avg_pool2d")
 @pytest.mark.parametrize("dtype", POOL_DTYPES)
 def test_adaptive_avg_pool2d(dtype, device, compare, input_gen):
     shape = (2, 3, 16, 16)
@@ -64,6 +67,7 @@ def test_adaptive_avg_pool2d(dtype, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::adaptive_max_pool2d")
 @pytest.mark.parametrize("dtype", POOL_DTYPES)
 def test_adaptive_max_pool2d(dtype, device, compare, input_gen):
     shape = (2, 3, 16, 16)
@@ -76,3 +80,46 @@ def test_adaptive_max_pool2d(dtype, device, compare, input_gen):
     
     compare(actual_out, expected_out, category="elementwise", dtype=dtype)
     compare(actual_ind, expected_ind, category="exact", dtype=torch.int64)
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::max_unpool2d.out", surface="out_variant")
+@pytest.mark.covers("aten::max_unpool3d.out", surface="out_variant")
+def test_direct_max_unpool_out_variants(device, compare):
+    input2_cpu = torch.arange(16, dtype=torch.float32).reshape(1, 1, 4, 4)
+    pooled2_cpu, indices2_cpu = torch.nn.functional.max_pool2d(
+        input2_cpu, 2, 2, return_indices=True,
+    )
+    expected = torch.nn.functional.max_unpool2d(
+        pooled2_cpu, indices2_cpu, 2, 2, output_size=(1, 1, 4, 4),
+    )
+    out = torch.empty_like(expected, device=device)
+    actual = torch.ops.aten.max_unpool2d.out(
+        pooled2_cpu.to(device),
+        indices2_cpu.to(device),
+        [4, 4],
+        out=out,
+    )
+    assert actual.data_ptr() == out.data_ptr()
+    synchronize(device)
+    compare(out, expected, category="exact", dtype=torch.float32)
+
+    input3_cpu = torch.arange(64, dtype=torch.float32).reshape(1, 1, 4, 4, 4)
+    pooled3_cpu, indices3_cpu = torch.nn.functional.max_pool3d(
+        input3_cpu, 2, 2, return_indices=True,
+    )
+    expected = torch.nn.functional.max_unpool3d(
+        pooled3_cpu, indices3_cpu, 2, 2, output_size=(1, 1, 4, 4, 4),
+    )
+    out = torch.empty_like(expected, device=device)
+    actual = torch.ops.aten.max_unpool3d.out(
+        pooled3_cpu.to(device),
+        indices3_cpu.to(device),
+        [4, 4, 4],
+        [2, 2, 2],
+        [0, 0, 0],
+        out=out,
+    )
+    assert actual.data_ptr() == out.data_ptr()
+    synchronize(device)
+    compare(out, expected, category="exact", dtype=torch.float32)

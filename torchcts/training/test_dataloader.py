@@ -22,6 +22,8 @@ import pytest
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
+pytestmark = pytest.mark.covers_category("dataloader")
+
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.medium

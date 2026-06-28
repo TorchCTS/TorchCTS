@@ -25,6 +25,10 @@ from torchcts.core.device import synchronize
 FFT_DTYPES = [torch.float32]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::fft_fft")
+@pytest.mark.covers("aten::fft_ifft")
+@pytest.mark.covers("aten::fft_irfft")
+@pytest.mark.covers("aten::fft_rfft")
 @pytest.mark.parametrize("dtype", FFT_DTYPES)
 @pytest.mark.parametrize("op_name", ["fft", "ifft", "rfft", "irfft"])
 def test_fft_ops_1d(dtype, op_name, device, compare, input_gen):
@@ -65,6 +69,7 @@ def test_fft_ops_1d(dtype, op_name, device, compare, input_gen):
         compare(actual, expected, category="fft", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::fft_rfft")
 @pytest.mark.parametrize("dtype", FFT_DTYPES)
 def test_fft_ops_prime_length(dtype, device, compare, input_gen):
     # Prime length (Rader/Bluestein algorithm trigger)

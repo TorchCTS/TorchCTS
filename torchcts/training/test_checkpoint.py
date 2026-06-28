@@ -23,6 +23,8 @@ import torch
 import os
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("gradient_checkpointing")
+
 class SimpleModel(torch.nn.Module):
     def __init__(self):
         super().__init__()

@@ -25,6 +25,11 @@ from torchcts.core.device import synchronize
 COMPLEX_DTYPES = [torch.complex64, torch.complex128]
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::_conj")
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::angle")
+@pytest.mark.covers("aten::clone")
+@pytest.mark.covers("aten::view_as_real")
 @pytest.mark.parametrize("dtype", COMPLEX_DTYPES)
 @pytest.mark.parametrize("op_name", ["view_as_real", "resolve_conj", "abs", "angle"])
 def test_complex_operations(dtype, op_name, device, compare):
@@ -66,6 +71,10 @@ def test_complex_operations(dtype, op_name, device, compare):
 
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::gather")
+@pytest.mark.covers("aten::index_select")
+@pytest.mark.covers("aten::scatter.src")
+@pytest.mark.covers("aten::take_along_dim")
 @pytest.mark.parametrize("dtype", [torch.complex64])
 def test_complex_gather_scatter(dtype, device, compare):
     """Gather, take_along_dim, index_select, and scatter must preserve imaginary parts."""
@@ -104,4 +113,3 @@ def test_complex_gather_scatter(dtype, device, compare):
     expected_scatter = x.cpu().clone().scatter(1, idx.cpu(), src.cpu())
     synchronize(device)
     compare(result_scatter, expected_scatter, category="elementwise", dtype=dtype)
-

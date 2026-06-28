@@ -21,6 +21,8 @@
 import pytest
 import torch
 
+pytestmark = pytest.mark.covers_category("stress")
+
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.stress

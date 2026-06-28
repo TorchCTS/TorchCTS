@@ -21,6 +21,8 @@
 import pytest
 import torch
 
+pytestmark = pytest.mark.covers_category("autograd_inplace_safety")
+
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.medium

@@ -23,6 +23,9 @@ import torch
 from torchcts.core.device import synchronize
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::_to_copy")
+@pytest.mark.covers("aten::relu")
+@pytest.mark.covers_category("memory_format")
 @pytest.mark.parametrize("dtype", [torch.float32])
 def test_memory_format_propagation(dtype, device, manifest):
     x = torch.randn(2, 3, 16, 16, dtype=dtype, device=device).to(memory_format=torch.channels_last)

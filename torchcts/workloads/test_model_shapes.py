@@ -6,6 +6,8 @@ import torch.nn.functional as F
 
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("workload_shape")
+
 
 @pytest.mark.workload
 @pytest.mark.parametrize(

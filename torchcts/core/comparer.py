@@ -54,6 +54,8 @@ def compute_cosim(a, b):
     # Flatten both
     a_flat = a.detach().cpu().to(torch.float32).flatten()
     b_flat = b.detach().cpu().to(torch.float32).flatten()
+    if a_flat.numel() != b_flat.numel():
+        return 0.0
     
     # Exclude NaNs and Infs for cosim to avoid nan cosim
     mask = torch.isfinite(a_flat) & torch.isfinite(b_flat)
@@ -96,13 +98,23 @@ def prepare_compare_tensor(t):
         
     return t_cpu
 
+def _describe_compare_value(value):
+    if isinstance(value, torch.Tensor):
+        return f"Tensor(shape={tuple(value.shape)}, dtype={value.dtype}, device={value.device})"
+    return type(value).__name__
+
 def compare_tensors(actual, expected, category, dtype, manifest_overrides=None, equal_nan=True, scale_factor=1.0):
     __tracebackhide__ = True
     global _ACTIVE_TEST_METRICS
-    
-    # Bypass comparison on CPU targets (validation mode)
-    if actual.device.type == "cpu" and expected.device.type == "cpu":
-        return
+
+    if not isinstance(actual, torch.Tensor) or not isinstance(expected, torch.Tensor):
+        _ACTIVE_TEST_METRICS["passed"] = False
+        msg = (
+            "Tensor comparison requires tensor values: "
+            f"actual {_describe_compare_value(actual)} vs expected {_describe_compare_value(expected)}"
+        )
+        _ACTIVE_TEST_METRICS["error_msg"] = msg
+        raise AssertionError(msg)
     
     # 1. Resolve effective dtype for tolerance lookup.
     # If the output tensor is floating-point or complex, use the lower-precision of the actual/expected dtypes.
@@ -129,6 +141,11 @@ def compare_tensors(actual, expected, category, dtype, manifest_overrides=None, 
     # 3. Cast to CPU and prepare
     act_cpu = prepare_compare_tensor(actual)
     exp_cpu = prepare_compare_tensor(expected)
+    if act_cpu.shape != exp_cpu.shape:
+        _ACTIVE_TEST_METRICS["passed"] = False
+        msg = f"Shape mismatch after comparison normalization: actual {act_cpu.shape} vs expected {exp_cpu.shape}"
+        _ACTIVE_TEST_METRICS["error_msg"] = msg
+        raise AssertionError(msg)
     
     # Ensure they are the same type for comparison (e.g. bool, int, float)
     if act_cpu.dtype != exp_cpu.dtype:
@@ -235,8 +252,17 @@ def compare_nan_propagation(actual, expected):
     if act_cpu.shape != exp_cpu.shape:
         raise AssertionError(f"Shape mismatch: {act_cpu.shape} vs {exp_cpu.shape}")
     
-    act_nan = torch.isnan(act_cpu)
-    exp_nan = torch.isnan(exp_cpu)
+    if act_cpu.is_complex() or exp_cpu.is_complex():
+        if act_cpu.dtype != exp_cpu.dtype:
+            raise AssertionError(f"Dtype mismatch: got {act_cpu.dtype}, expected {exp_cpu.dtype}")
+        act_values = torch.view_as_real(act_cpu)
+        exp_values = torch.view_as_real(exp_cpu)
+    else:
+        act_values = act_cpu
+        exp_values = exp_cpu
+
+    act_nan = torch.isnan(act_values)
+    exp_nan = torch.isnan(exp_values)
     
     if not torch.equal(act_nan, exp_nan):
         mismatch = (act_nan != exp_nan)
@@ -257,8 +283,17 @@ def compare_inf_propagation(actual, expected):
     if act_cpu.shape != exp_cpu.shape:
         raise AssertionError(f"Shape mismatch: {act_cpu.shape} vs {exp_cpu.shape}")
     
-    act_inf = torch.isinf(act_cpu)
-    exp_inf = torch.isinf(exp_cpu)
+    if act_cpu.is_complex() or exp_cpu.is_complex():
+        if act_cpu.dtype != exp_cpu.dtype:
+            raise AssertionError(f"Dtype mismatch: got {act_cpu.dtype}, expected {exp_cpu.dtype}")
+        act_values = torch.view_as_real(act_cpu)
+        exp_values = torch.view_as_real(exp_cpu)
+    else:
+        act_values = act_cpu
+        exp_values = exp_cpu
+
+    act_inf = torch.isinf(act_values)
+    exp_inf = torch.isinf(exp_values)
     
     if not torch.equal(act_inf, exp_inf):
         mismatch = (act_inf != exp_inf)
@@ -269,7 +304,7 @@ def compare_inf_propagation(actual, expected):
     # Where both are inf, check sign matches
     both_inf = act_inf & exp_inf
     if both_inf.any():
-        act_sign = torch.sign(act_cpu[both_inf])
-        exp_sign = torch.sign(exp_cpu[both_inf])
+        act_sign = torch.signbit(act_values[both_inf])
+        exp_sign = torch.signbit(exp_values[both_inf])
         if not torch.equal(act_sign, exp_sign):
             raise AssertionError("Inf sign mismatch at some positions.")

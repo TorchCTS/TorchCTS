@@ -28,6 +28,8 @@ from torchcts.core.device import (
     get_device_module
 )
 
+pytestmark = pytest.mark.covers_category("allocator")
+
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.stress

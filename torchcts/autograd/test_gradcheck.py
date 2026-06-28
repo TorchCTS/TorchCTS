@@ -22,6 +22,8 @@ import pytest
 import torch
 from torch.autograd import gradcheck
 
+pytestmark = pytest.mark.covers_category("gradcheck")
+
 @pytest.mark.medium
 @pytest.mark.requires("training")
 @pytest.mark.requires("gradcheck")

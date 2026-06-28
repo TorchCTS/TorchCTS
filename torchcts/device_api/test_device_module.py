@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import get_device_module
 
+pytestmark = pytest.mark.covers_category("device_api")
+
 @pytest.mark.gate
 @pytest.mark.smoke
 @pytest.mark.requires("device_api")

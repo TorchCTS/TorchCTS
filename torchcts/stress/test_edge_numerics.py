@@ -22,6 +22,8 @@ import pytest
 import torch
 import math
 
+pytestmark = pytest.mark.covers_category("stress")
+
 @pytest.mark.stress
 @pytest.mark.parametrize("offset", [1.0, 2.0])
 def test_nan_inf_propagation(offset, device):

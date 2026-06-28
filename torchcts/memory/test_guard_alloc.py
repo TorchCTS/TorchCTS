@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import get_device_module
 
+pytestmark = pytest.mark.covers_category("guard_alloc")
+
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.stress

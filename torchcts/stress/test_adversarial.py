@@ -23,6 +23,8 @@ import torch
 import math
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("stress")
+
 def compare_tensor_outputs(cpu_t, dev_t):
     __tracebackhide__ = True
     if not isinstance(cpu_t, torch.Tensor):

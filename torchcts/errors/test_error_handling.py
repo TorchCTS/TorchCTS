@@ -21,6 +21,8 @@
 import pytest
 import torch
 
+pytestmark = pytest.mark.covers_category("error_behavior")
+
 @pytest.mark.smoke
 @pytest.mark.parametrize("shapes", [
     ((4, 3), (5, 2)),

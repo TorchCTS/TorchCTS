@@ -26,6 +26,8 @@ MATMUL_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::dot")
+@pytest.mark.covers("aten::mv")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
 @pytest.mark.parametrize("op_name", ["dot", "mv"])
 def test_dot_mv(dtype, op_name, device, compare, input_gen):
@@ -40,6 +42,7 @@ def test_dot_mv(dtype, op_name, device, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::mm")
 @pytest.mark.parametrize("layout_a", ["contiguous", "transpose"])
 @pytest.mark.parametrize("layout_b", ["contiguous", "transpose"])
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
@@ -60,8 +63,33 @@ def test_mm_layouts(dtype, layout_a, layout_b, device, compare, input_gen):
     category = "noncontiguous_mm" if (layout_a == "transpose" or layout_b == "transpose") else "matmul"
     compare(actual, expected, category=category, dtype=dtype)
 
+
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::_int_mm")
+@pytest.mark.covers("aten::_int_mm.out")
+def test_int_mm_dispatcher_variants(device):
+    a_cpu = torch.arange(12, dtype=torch.int8).reshape(3, 4)
+    b_cpu = torch.arange(20, dtype=torch.int8).reshape(4, 5)
+    a_dev = a_cpu.to(device)
+    b_dev = b_cpu.to(device)
+
+    expected = torch.ops.aten._int_mm(a_cpu, b_cpu)
+    actual = torch.ops.aten._int_mm(a_dev, b_dev)
+    synchronize(device)
+    assert actual.dtype == torch.int32
+    assert torch.equal(actual.cpu(), expected)
+
+    out = torch.empty((3, 5), dtype=torch.int32, device=device)
+    returned = torch.ops.aten._int_mm.out(a_dev, b_dev, out=out)
+    synchronize(device)
+    assert returned is out
+    assert torch.equal(out.cpu(), expected)
+
+
+@pytest.mark.smoke
+@pytest.mark.benchmarkable
+@pytest.mark.covers("aten::bmm")
 @pytest.mark.parametrize("layout_a", ["contiguous", "transpose"])
 @pytest.mark.parametrize("layout_b", ["contiguous", "transpose"])
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
@@ -83,6 +111,7 @@ def test_bmm_layouts(dtype, layout_a, layout_b, device, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::addmm")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
 def test_addmm(dtype, device, compare, input_gen):
     M, K, N = 32, 64, 48
@@ -99,6 +128,7 @@ def test_addmm(dtype, device, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::matmul")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
 def test_matmul_general(dtype, device, compare, input_gen):
     # Broadcasting matmul: (2, 3, 4) x (4, 5) -> (2, 3, 5)

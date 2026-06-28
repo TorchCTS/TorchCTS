@@ -26,6 +26,11 @@ ACTIVATION_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::gelu")
+@pytest.mark.covers("aten::hardswish")
+@pytest.mark.covers("aten::mish")
+@pytest.mark.covers("aten::relu")
+@pytest.mark.covers("aten::silu")
 @pytest.mark.parametrize("op_name", ["relu", "gelu", "silu", "mish", "hardswish"])
 @pytest.mark.parametrize("dtype", ACTIVATION_DTYPES)
 def test_activations_basic(op_name, dtype, device, compare, input_gen):
@@ -48,6 +53,8 @@ def test_activations_basic(op_name, dtype, device, compare, input_gen):
 
 @pytest.mark.smoke
 @pytest.mark.benchmarkable
+@pytest.mark.covers("aten::_log_softmax")
+@pytest.mark.covers("aten::_softmax")
 @pytest.mark.parametrize("op_name", ["softmax", "log_softmax"])
 @pytest.mark.parametrize("dtype", ACTIVATION_DTYPES)
 def test_softmax_log_softmax(op_name, dtype, device, compare, input_gen):

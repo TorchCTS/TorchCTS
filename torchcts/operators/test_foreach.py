@@ -26,6 +26,9 @@ FOREACH_DTYPES = [torch.float32]
 
 @pytest.mark.smoke
 @pytest.mark.requires("foreach")
+@pytest.mark.covers("aten::_foreach_add.Scalar")
+@pytest.mark.covers("aten::_foreach_lerp.Scalar")
+@pytest.mark.covers("aten::_foreach_mul.Scalar")
 @pytest.mark.parametrize("dtype", FOREACH_DTYPES)
 @pytest.mark.parametrize("op_name", ["add", "mul", "lerp"])
 def test_foreach_op(dtype, op_name, device, compare, input_gen):

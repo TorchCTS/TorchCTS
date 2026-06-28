@@ -20,21 +20,23 @@
 
 import pytest
 import torch
-from torchcts.core.device import synchronize
+from torchcts.core.device import create_event, create_stream, stream_context, synchronize
+
+pytestmark = pytest.mark.covers_category("device_stream_event_api")
 
 
 @pytest.mark.smoke
 @pytest.mark.requires("streams")
 def test_stream_construction(device):
-    s = torch.Stream(device=device)
+    s = create_stream(device)
     assert s is not None
 
 
 @pytest.mark.smoke
 @pytest.mark.requires("streams")
 def test_stream_synchronize(device):
-    s = torch.Stream(device=device)
-    with torch.stream(s):
+    s = create_stream(device)
+    with stream_context(s):
         x = torch.randn(64, 64, device=device)
         y = torch.mm(x, x)
     s.synchronize()
@@ -45,13 +47,13 @@ def test_stream_synchronize(device):
 @pytest.mark.smoke
 @pytest.mark.requires("streams")
 def test_stream_wait_stream(device):
-    s1 = torch.Stream(device=device)
-    s2 = torch.Stream(device=device)
-    with torch.stream(s1):
+    s1 = create_stream(device)
+    s2 = create_stream(device)
+    with stream_context(s1):
         x = torch.randn(32, 32, device=device)
         y = x + 1.0
     s2.wait_stream(s1)
-    with torch.stream(s2):
+    with stream_context(s2):
         z = y * 2.0
     s2.synchronize()
     assert torch.isfinite(z).all()
@@ -60,16 +62,16 @@ def test_stream_wait_stream(device):
 @pytest.mark.smoke
 @pytest.mark.requires("events")
 def test_event_construction(device):
-    e = torch.Event(device=device)
+    e = create_event(device)
     assert e is not None
 
 
 @pytest.mark.smoke
 @pytest.mark.requires("events")
 def test_event_record_and_query(device):
-    s = torch.Stream(device=device)
-    e = torch.Event(device=device)
-    with torch.stream(s):
+    s = create_stream(device)
+    e = create_event(device)
+    with stream_context(s):
         x = torch.randn(64, 64, device=device)
         _ = torch.mm(x, x)
     e.record(s)
@@ -80,11 +82,11 @@ def test_event_record_and_query(device):
 @pytest.mark.smoke
 @pytest.mark.requires("events")
 def test_event_elapsed_time(device):
-    s = torch.Stream(device=device)
-    e_start = torch.Event(device=device, enable_timing=True)
-    e_end = torch.Event(device=device, enable_timing=True)
+    s = create_stream(device)
+    e_start = create_event(device, enable_timing=True)
+    e_end = create_event(device, enable_timing=True)
     e_start.record(s)
-    with torch.stream(s):
+    with stream_context(s):
         x = torch.randn(256, 256, device=device)
         for _ in range(10):
             x = torch.mm(x, x)

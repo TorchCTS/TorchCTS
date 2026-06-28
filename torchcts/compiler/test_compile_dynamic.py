@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("compile_behavior")
+
 COMPILE_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 _SHAPE_SEQUENCES = {

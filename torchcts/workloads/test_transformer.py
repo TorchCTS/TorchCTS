@@ -22,6 +22,8 @@ import pytest
 import torch
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("workload")
+
 # Skip if transformers is not installed
 pytest.importorskip("transformers")
 
@@ -168,4 +170,3 @@ def test_mixed_precision_backward(device, compare):
     compare(h_dev, h_cpu, category="workload_e2e", dtype=torch.float32)
     compare(x_dev.grad, x_cpu.grad, category="workload_e2e", dtype=torch.float32)
     compare(w_dev.grad, w_cpu.grad, category="workload_e2e", dtype=torch.bfloat16)
-

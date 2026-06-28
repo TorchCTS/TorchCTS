@@ -7,10 +7,31 @@ import torch.nn.functional as F
 from torchcts.core.device import synchronize
 
 
+@pytest.mark.smoke
+@pytest.mark.covers("aten::stride.int")
+@pytest.mark.covers("aten::storage_offset")
+@pytest.mark.covers("aten::sym_stride.int")
+@pytest.mark.covers("aten::sym_storage_offset")
+def test_stride_and_storage_offset_metadata(device):
+    base_dev = torch.arange(32, dtype=torch.float32, device=device).reshape(4, 8)
+    view_dev = base_dev[1:, 2::2].transpose(0, 1)
+    view_cpu = view_dev.cpu()
+
+    assert view_dev.stride(0) == view_cpu.stride(0)
+    assert view_dev.stride(1) == view_cpu.stride(1)
+    assert view_dev.storage_offset() == view_cpu.storage_offset()
+    assert int(torch.ops.aten.sym_stride.int(view_dev, 0)) == int(torch.ops.aten.sym_stride.int(view_cpu, 0))
+    assert int(torch.ops.aten.sym_storage_offset(view_dev)) == int(torch.ops.aten.sym_storage_offset(view_cpu))
+
+
 # ---------------------------------------------------------------------------
 # 1. Binary ops on non-contiguous layouts
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::mul.Tensor")
+@pytest.mark.covers("aten::sub.Tensor")
+@pytest.mark.covers("aten::permute")
 @pytest.mark.parametrize("op_name", ["add", "mul", "sub"])
 @pytest.mark.parametrize("layout", ["transpose", "sliced", "permuted"])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
@@ -40,6 +61,7 @@ def test_binary_op_noncontiguous(op_name, layout, dtype, device, compare, input_
 # 2. Binary op with mixed layouts (contiguous + transposed)
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::add.Tensor")
 def test_binary_op_mixed_layouts(device, compare, input_gen):
     torch.manual_seed(42)
     a = input_gen((32, 32), torch.float32, device, layout="contiguous")
@@ -55,6 +77,13 @@ def test_binary_op_mixed_layouts(device, compare, input_gen):
 # 3. Unary ops on non-contiguous layouts
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::exp")
+@pytest.mark.covers("aten::mul.Tensor")
+@pytest.mark.covers("aten::neg")
+@pytest.mark.covers("aten::permute")
+@pytest.mark.covers("aten::relu")
+@pytest.mark.covers("aten::sin")
 @pytest.mark.parametrize("op_name", ["abs", "neg", "relu", "exp", "sin"])
 @pytest.mark.parametrize("layout", ["transpose", "sliced", "permuted"])
 def test_unary_op_noncontiguous(op_name, layout, device, compare):
@@ -88,6 +117,8 @@ def test_unary_op_noncontiguous(op_name, layout, device, compare):
 # 4. Unary ops on strided slices with large strides
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::neg")
 @pytest.mark.parametrize("op_name", ["abs", "neg"])
 def test_unary_op_strided_slice(op_name, device, compare):
     torch.manual_seed(42)
@@ -106,6 +137,10 @@ def test_unary_op_strided_slice(op_name, device, compare):
 # 5. Reductions on non-contiguous layouts
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::amax")
+@pytest.mark.covers("aten::mean.dim")
+@pytest.mark.covers("aten::permute")
+@pytest.mark.covers("aten::sum.dim_IntList")
 @pytest.mark.parametrize("op_name", ["sum", "mean", "amax"])
 @pytest.mark.parametrize("dim", [0, 1, -1])
 @pytest.mark.parametrize("layout", ["transpose", "permuted"])
@@ -128,6 +163,7 @@ def test_reduction_noncontiguous(op_name, dim, layout, device, compare):
 # 6. Reduction with arbitrary (non-uniform) strides
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::sum.dim_IntList")
 def test_reduction_arbitrary_stride(device, compare):
     torch.manual_seed(42)
     base = torch.randn(64, 64, device=device)
@@ -149,6 +185,7 @@ def test_reduction_arbitrary_stride(device, compare):
 # 7. Copy from strided source to contiguous destination
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::copy_")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 def test_copy_strided_src_to_contiguous_dst(dtype, device, compare):
     torch.manual_seed(42)
@@ -168,6 +205,7 @@ def test_copy_strided_src_to_contiguous_dst(dtype, device, compare):
 # 8. Copy from contiguous source to strided destination
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::copy_")
 def test_copy_contiguous_src_to_strided_dst(device, compare):
     torch.manual_seed(42)
     base = torch.randn(32, 32, device=device)
@@ -190,6 +228,7 @@ def test_copy_contiguous_src_to_strided_dst(device, compare):
 # 9. Cross-dtype copy from strided source
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::copy_")
 def test_copy_cross_dtype_strided(device, compare):
     torch.manual_seed(42)
     src_base = torch.randn(32, 32, dtype=torch.float32, device=device)
@@ -208,6 +247,9 @@ def test_copy_cross_dtype_strided(device, compare):
 # 10. Ops on permuted 4D tensors
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::permute")
 @pytest.mark.parametrize("op_name", ["add", "abs"])
 @pytest.mark.parametrize(
     "perm", [(0, 2, 1, 3), (3, 2, 1, 0), (1, 0, 3, 2)]
@@ -233,6 +275,9 @@ def test_ops_on_permuted_4d(op_name, perm, device, compare):
 # 11. Elementwise ops on as_strided views
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::as_strided")
+@pytest.mark.covers("aten::abs")
+@pytest.mark.covers("aten::neg")
 def test_as_strided_elementwise(device, compare):
     torch.manual_seed(42)
     base = torch.randn(1024, device=device)
@@ -256,6 +301,9 @@ def test_as_strided_elementwise(device, compare):
 # 12. Expanded tensors with zero stride
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::add.Tensor")
+@pytest.mark.covers("aten::expand")
+@pytest.mark.covers("aten::mul.Tensor")
 @pytest.mark.parametrize("op_name", ["add", "mul"])
 def test_expanded_zero_stride(op_name, device, compare):
     torch.manual_seed(42)
@@ -273,6 +321,7 @@ def test_expanded_zero_stride(op_name, device, compare):
 # 13. Matrix multiply with sliced (non-contiguous) inputs
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::mm")
 @pytest.mark.parametrize(
     "M, K, N",
     [
@@ -298,6 +347,7 @@ def test_mm_with_sliced_inputs(M, K, N, device, compare):
 # 14. addmm with transposed operands
 # ---------------------------------------------------------------------------
 @pytest.mark.medium
+@pytest.mark.covers("aten::addmm")
 def test_addmm_transposed_operands(device, compare):
     torch.manual_seed(42)
     M, K, N = 32, 64, 48

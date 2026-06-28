@@ -25,6 +25,9 @@ from torchcts.core.device import synchronize
 UPSAMPLE_DTYPES = [torch.float32]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::upsample_bicubic2d")
+@pytest.mark.covers("aten::upsample_bilinear2d")
+@pytest.mark.covers("aten::upsample_nearest2d")
 @pytest.mark.parametrize("dtype", UPSAMPLE_DTYPES)
 @pytest.mark.parametrize("mode", ["nearest", "bilinear", "bicubic"])
 def test_upsample_2d(dtype, mode, device, compare, input_gen):
@@ -37,6 +40,7 @@ def test_upsample_2d(dtype, mode, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::upsample_trilinear3d")
 @pytest.mark.parametrize("dtype", UPSAMPLE_DTYPES)
 @pytest.mark.parametrize("mode", ["trilinear"])
 def test_upsample_3d(dtype, mode, device, compare, input_gen):

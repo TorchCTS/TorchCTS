@@ -23,6 +23,8 @@ import torch
 import os
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("serialization")
+
 @pytest.mark.smoke
 @pytest.mark.requires("serialization")
 @pytest.mark.parametrize("dtype", [torch.float32])
@@ -114,4 +116,3 @@ def test_optimizer_state_dict_roundtrip(device, manifest, tmp_path):
     model(torch.randn(4, 16, device=device)).sum().backward()
     opt2.step()  # Must not crash — proves state was restored correctly
     synchronize(device)
-

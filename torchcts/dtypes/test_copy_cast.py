@@ -28,6 +28,7 @@ CAST_DTYPES = [
 ]
 
 @pytest.mark.medium
+@pytest.mark.covers("aten::_to_copy")
 @pytest.mark.parametrize("src_dtype", CAST_DTYPES)
 @pytest.mark.parametrize("dst_dtype", CAST_DTYPES)
 def test_copy_cast_grid(src_dtype, dst_dtype, device, manifest, compare, input_gen):

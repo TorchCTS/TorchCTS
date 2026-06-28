@@ -25,6 +25,9 @@ CREATION_DTYPES = [torch.float32, torch.int64, torch.bool]
 NUMERIC_DTYPES = [torch.float32, torch.int64]
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::full")
+@pytest.mark.covers("aten::ones")
+@pytest.mark.covers("aten::zeros")
 @pytest.mark.parametrize("dtype", CREATION_DTYPES)
 def test_zeros_ones_full(dtype, device, compare):
     shape = (4, 4)
@@ -45,6 +48,7 @@ def test_zeros_ones_full(dtype, device, compare):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::eye")
 @pytest.mark.parametrize("dtype", NUMERIC_DTYPES)
 def test_eye(dtype, device, compare):
     expected = torch.eye(5, dtype=dtype)
@@ -52,6 +56,9 @@ def test_eye(dtype, device, compare):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::arange.start_step")
+@pytest.mark.covers("aten::linspace")
+@pytest.mark.covers("aten::logspace")
 @pytest.mark.parametrize("dtype", NUMERIC_DTYPES)
 def test_arange_linspace_logspace(dtype, device, compare):
     # arange
@@ -71,6 +78,7 @@ def test_arange_linspace_logspace(dtype, device, compare):
         compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::lift_fresh")
 @pytest.mark.parametrize("dtype", CREATION_DTYPES)
 def test_tensor_construction_methods(dtype, device, compare):
     # Scalar tensor
@@ -91,6 +99,7 @@ def test_tensor_construction_methods(dtype, device, compare):
     compare(actual, cpu_t, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::empty.memory_format")
 @pytest.mark.parametrize("dtype", CREATION_DTYPES)
 def test_empty_factory(dtype, device):
     shape = (10, 10)
@@ -101,6 +110,10 @@ def test_empty_factory(dtype, device):
     assert t.device.type == device
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::lift_fresh")
+@pytest.mark.covers("aten::new_full")
+@pytest.mark.covers("aten::new_ones")
+@pytest.mark.covers("aten::new_zeros")
 @pytest.mark.parametrize("dtype", CREATION_DTYPES)
 def test_new_methods(dtype, device, compare):
     base = torch.ones((2, 2), dtype=dtype, device=device)
@@ -128,6 +141,8 @@ def test_new_methods(dtype, device, compare):
     compare(actual, expected, category="exact", dtype=dtype)
 
 @pytest.mark.smoke
+@pytest.mark.covers("aten::_to_copy")
+@pytest.mark.covers("aten::clone")
 @pytest.mark.parametrize("dtype", CREATION_DTYPES)
 def test_clone_to_methods(dtype, device, compare):
     val = torch.randn(5, 5).to(dtype) if dtype.is_floating_point else torch.randint(0, 2, (5, 5)).to(dtype)
