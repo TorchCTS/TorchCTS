@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "known_segfaults": [
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-default-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_default]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_grid_segment_dense_split_repro.py",
+        "case": "grid2_cpu_fallback_default"
+      },
+      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler path.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_out]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_grid_segment_dense_split_repro.py",
+        "case": "grid2_cpu_fallback_out"
+      },
+      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler out variant.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-backward-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_backward]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback_backward.default",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_grid_segment_dense_split_repro.py",
+        "case": "grid2_cpu_fallback_backward"
+      },
+      "reason": "Standalone repro reports a wrong-value mismatch for the internal CPU fallback grid sampler backward path and the child process exits with SIGSEGV after the mismatch is reported.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-range-out-underscore-copy-cleanup-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[range.out_[L2]]",
+      "dispatcher": "aten::range.out_",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "mps_factory_out_repro.py",
+        "case": "range_out_"
+      },
+      "reason": "Standalone repro shows aten::range.out_ returns an MPS out tensor for a legal CPU-validated sample, then segfaults during CPU copy or normal MPS resource cleanup. The sibling aten::range.out overload succeeds with the same dtype and values.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    }
+  ]
+}

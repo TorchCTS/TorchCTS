@@ -483,6 +483,38 @@ def get_device_module(device_name):
     except ImportError:
         return None
 
+def create_stream(device_name):
+    try:
+        return torch.Stream(device=device_name)
+    except Exception as exc:
+        raise RuntimeError(f"stream API unavailable for device {device_name}: {type(exc).__name__}: {exc}") from exc
+
+def create_event(device_name, *, enable_timing=False):
+    try:
+        return torch.Event(device=device_name, enable_timing=enable_timing)
+    except TypeError:
+        if enable_timing:
+            raise RuntimeError(f"event timing API unavailable for device {device_name}")
+        try:
+            return torch.Event(device=device_name)
+        except Exception as exc:
+            raise RuntimeError(f"event API unavailable for device {device_name}: {type(exc).__name__}: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"event API unavailable for device {device_name}: {type(exc).__name__}: {exc}") from exc
+
+def stream_context(stream):
+    if hasattr(stream, "__enter__") and hasattr(stream, "__exit__"):
+        return stream
+    if hasattr(torch, "stream"):
+        return torch.stream(stream)
+    stream_device = getattr(stream, "device", None)
+    device_type = getattr(stream_device, "type", None)
+    if device_type:
+        mod = get_device_module(device_type)
+        if mod is not None and hasattr(mod, "stream"):
+            return mod.stream(stream)
+    raise RuntimeError(f"stream context API unavailable for stream {stream!r}")
+
 def synchronize(device_name):
     if device_name == "cpu":
         return
@@ -593,6 +625,41 @@ def probe_capability(device_name, capability, timeout=10):
             "    v = torch.tensor([3, 4, 5], dtype=torch.float32)\n"
             f"    s = torch.sparse_coo_tensor(i, v, (2, 3), device='{device_name}')\n"
             "    dense = s.to_dense()\n"
+            "    print('SUCCESS')\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+    elif capability == "nested":
+        script = (
+            "import torch\n"
+            "try:\n"
+            f"    a = torch.randn(2, 3, device='{device_name}')\n"
+            f"    b = torch.randn(1, 3, device='{device_name}')\n"
+            f"    nt = torch.nested.nested_tensor([a, b], device='{device_name}')\n"
+            "    padded = nt.to_padded_tensor(padding=0.0)\n"
+            f"    assert nt.is_nested and padded.device.type == '{device_name}'\n"
+            "    print('SUCCESS')\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+    elif capability == "named_tensor":
+        script = (
+            "import torch\n"
+            "try:\n"
+            f"    x = torch.empty((2, 3), device='{device_name}', names=('rows', 'cols'))\n"
+            "    y = x.align_to('cols', 'rows')\n"
+            f"    assert y.names == ('cols', 'rows') and y.device.type == '{device_name}'\n"
+            "    print('SUCCESS')\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+    elif capability == "fp8":
+        script = (
+            "import torch\n"
+            "try:\n"
+            f"    x = torch.zeros(4, dtype=torch.float8_e4m3fn, device='{device_name}')\n"
+            f"    y = torch.ones(4, dtype=torch.float32, device='{device_name}').to(torch.float8_e5m2)\n"
+            f"    assert x.device.type == '{device_name}' and y.device.type == '{device_name}'\n"
             "    print('SUCCESS')\n"
             "except Exception:\n"
             "    pass\n"

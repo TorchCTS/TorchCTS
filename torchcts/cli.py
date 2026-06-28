@@ -24,6 +24,79 @@ import os
 import shutil
 import importlib
 import json
+import subprocess
+
+DEFAULT_TEST_SUITES = (
+    "opinfo",
+    "operators",
+    "training",
+    "compiler",
+    "device_api",
+    "autograd",
+    "memory",
+    "dtypes",
+    "strides",
+    "workloads",
+    "rng",
+    "serialization",
+    "errors",
+    "stress",
+    "multi_device",
+    "generated",
+)
+
+
+def _default_test_paths(pkg_dir=None):
+    pkg_dir = pkg_dir or os.path.dirname(__file__)
+    return [
+        os.path.join(pkg_dir, suite)
+        for suite in DEFAULT_TEST_SUITES
+        if os.path.isdir(os.path.join(pkg_dir, suite))
+    ]
+
+
+def _project_venv_python(cwd):
+    if os.name == "nt":
+        return os.path.join(cwd, ".venv", "Scripts", "python.exe")
+    return os.path.join(cwd, ".venv", "bin", "python")
+
+def _maybe_reexec_project_venv():
+    if os.environ.get("TORCHCTS_USE_PROJECT_VENV") != "1":
+        return
+
+    target_exe = os.path.abspath(_project_venv_python(os.getcwd()))
+    if os.environ.get("_TORCHCTS_VENV_ACTIVE") == target_exe:
+        return
+
+    if not os.path.exists(target_exe):
+        print(
+            "Error: TORCHCTS_USE_PROJECT_VENV=1 was set, but no project .venv "
+            f"python was found at {target_exe}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    probe = subprocess.run(
+        [target_exe, "-c", "import torch; import torchcts"],
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode != 0:
+        detail = (probe.stderr or probe.stdout).strip()
+        print(
+            "Error: project .venv exists but cannot import both torch and torchcts. "
+            "Install TorchCTS into that environment or run the CLI with the intended "
+            f"Python interpreter. Probe output: {detail}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"Re-executing under {target_exe} because TORCHCTS_USE_PROJECT_VENV=1", flush=True)
+    os.environ["_TORCHCTS_VENV_ACTIVE"] = target_exe
+    os.environ["VIRTUAL_ENV"] = os.path.abspath(os.path.join(os.getcwd(), ".venv"))
+    bindir = os.path.dirname(target_exe)
+    os.environ["PATH"] = bindir + os.pathsep + os.environ.get("PATH", "")
+    os.execv(target_exe, [target_exe, "-m", "torchcts"] + sys.argv[1:])
 
 def get_template_path(name):
     # Search in package templates
@@ -142,44 +215,66 @@ def check_manifest(manifest_path=None):
         print("Error: 'manifest' must be a dictionary in manifest.py.", file=sys.stderr)
         return 1
 
-    # Validate keys
-    required_keys = ["manifest_version", "device_name", "capabilities"]
-    for k in required_keys:
-        if k not in manifest:
-            print(f"Error: Missing required key '{k}'", file=sys.stderr)
-            return 1
+    from torchcts.core.manifest_schema import validate_manifest
+    result = validate_manifest(manifest, base_dir=os.path.dirname(os.path.abspath(manifest_path)))
 
-    if manifest.get("manifest_version") != 1:
-        print(f"Warning: Unexpected manifest_version {manifest.get('manifest_version')}. Expected 1.", file=sys.stderr)
-
-    # Validate capabilities
-    caps = manifest.get("capabilities", {})
-    if not isinstance(caps, dict):
-        print("Error: 'capabilities' must be a dictionary.", file=sys.stderr)
+    for warning in result.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+    if result.errors:
+        for error in result.errors:
+            print(f"Error: {error}", file=sys.stderr)
         return 1
-
-    # Validate hardware section
-    hw = manifest.get("hardware", {})
-    if not isinstance(hw, dict):
-        print("Error: 'hardware' must be a dictionary.", file=sys.stderr)
-        return 1
-    
-    if "system_memory_gb" in hw:
-        sys_mem = hw["system_memory_gb"]
-        if sys_mem != "auto":
-            if not isinstance(sys_mem, (int, float)) or sys_mem <= 0:
-                print("Error: 'system_memory_gb' must be 'auto' or a positive number.", file=sys.stderr)
-                return 1
-                
-    if "device_memory_gb" in hw:
-        dev_mem = hw["device_memory_gb"]
-        if dev_mem != "auto":
-            if not isinstance(dev_mem, list) or not all(isinstance(x, (int, float)) and x > 0 for x in dev_mem):
-                print("Error: 'device_memory_gb' must be 'auto' or a list of positive numbers.", file=sys.stderr)
-                return 1
 
     print("Manifest is valid!")
     return 0
+
+def run_coverage_command(command, strict_unknowns=False):
+    from torchcts.core.coverage import (
+        run_audit_command,
+        run_check_command,
+        run_inventory_command,
+        run_materialize_command,
+        run_report_command,
+    )
+
+    if command == "inventory":
+        return run_inventory_command()
+    if command == "audit":
+        return run_audit_command()
+    if command == "report":
+        return run_report_command()
+    if command == "materialize":
+        return run_materialize_command()
+    if command == "check":
+        return run_check_command(strict_unknowns=strict_unknowns)
+    print("Error: coverage subcommand is required.", file=sys.stderr)
+    return 1
+
+
+def run_triage_command(args):
+    if args.triage_command != "mps":
+        print("Error: triage subcommand is required.", file=sys.stderr)
+        return 1
+    from torchcts.core.triage import run_mps_triage
+
+    payload = run_mps_triage(
+        from_file=args.from_file,
+        include_crashers=args.include_crashers,
+        nodes_file=args.nodes_file,
+        triage_dir=args.output_dir,
+        timeout=args.timeout,
+        level=args.level,
+        run_nodes=not args.no_run,
+        repros_only=args.repros_only,
+    )
+    summary_path = os.path.join(args.output_dir, "summary.md")
+    classifications = payload.get("classifications", {})
+    print(f"Wrote MPS triage artifacts to {args.output_dir}")
+    print(f"Summary: {summary_path}")
+    print(f"Queued nodes: {len(payload.get('queue', []))}")
+    print(f"Classified failures: {len(classifications)}")
+    return 0
+
 
 def _print_banner():
     from torchcts import __version__
@@ -194,15 +289,7 @@ def main():
     except Exception:
         pass
 
-    # Dynamic re-exec to run under the local venv python if present in the current working directory
-    local_venv_python = os.path.join(os.getcwd(), ".venv", "bin", "python")
-    if os.path.exists(local_venv_python) and os.environ.get("_TORCHCTS_VENV_ACTIVE") != "1":
-        target_exe = os.path.abspath(local_venv_python)
-        os.environ["_TORCHCTS_VENV_ACTIVE"] = "1"
-        os.environ["PYTHONPATH"] = os.path.abspath(os.getcwd())
-        os.environ["VIRTUAL_ENV"] = os.path.abspath(os.path.join(os.getcwd(), ".venv"))
-        os.environ["PATH"] = os.path.abspath(os.path.join(os.getcwd(), ".venv", "bin")) + os.pathsep + os.environ.get("PATH", "")
-        os.execv(target_exe, [target_exe, "-m", "torchcts"] + sys.argv[1:])
+    _maybe_reexec_project_venv()
 
     _print_banner()
 
@@ -352,7 +439,7 @@ def main():
                     break
         if not has_path:
             pkg_dir = os.path.dirname(__file__)
-            pytest_args.append(pkg_dir)
+            pytest_args.extend(_default_test_paths(pkg_dir))
 
         import pytest
         sys.exit(pytest.main(pytest_args))
@@ -367,7 +454,8 @@ def main():
     # Init subcommand
     init_parser = subparsers.add_parser("init", help="Initialize manifest.py from template")
     init_parser.add_parser_argument = init_parser.add_argument  # compatibility/convenience
-    init_parser.add_argument("--template", choices=["minimal", "inference", "training", "complete"], help="Template type")
+    template_choices = [name for name, _ in _discover_templates()]
+    init_parser.add_argument("--template", choices=template_choices, help="Template type")
     init_parser.add_argument("--non-interactive", action="store_true", help="Run in non-interactive mode")
     
     # Run subcommand placeholder for help/documentation
@@ -377,6 +465,9 @@ def main():
     show_parser = subparsers.add_parser("show-skips", help="Show which tests will be skipped and why")
     show_parser.add_argument("--device", help="Target device name (e.g., mps, cuda)")
     show_parser.add_argument("--dtype", action="append", help="Target dtypes to show skips for")
+    show_parser.add_argument("--level", type=int, help="Semantic level to show skips for (1-8)")
+    show_parser.add_argument("--level-exact", type=int, help="Show only semantic test cases with semantic_level == LEVEL (1-8)")
+    show_parser.add_argument("--level-range", help="Show only semantic test cases in inclusive MIN:MAX level range")
     
     # Report subcommand
     report_parser = subparsers.add_parser("report", help="Regenerate reports from JSON results")
@@ -390,6 +481,35 @@ def main():
     # Check-manifest subcommand
     check_parser = subparsers.add_parser("check-manifest", help="Validate manifest.py syntax and schema")
     check_parser.add_argument("--manifest", help="Path to manifest.py", default=None)
+
+    # Coverage subcommands
+    coverage_parser = subparsers.add_parser("coverage", help="Inventory and audit backend coverage")
+    coverage_subparsers = coverage_parser.add_subparsers(dest="coverage_command", help="Coverage command")
+    coverage_subparsers.add_parser("inventory", help="Build dispatcher inventory using default paths")
+    coverage_subparsers.add_parser("audit", help="Build coverage audit using default paths")
+    coverage_subparsers.add_parser("report", help="Render coverage report from default audit")
+    coverage_subparsers.add_parser("materialize", help="Write deterministic generated coverage cases using default paths")
+    coverage_check = coverage_subparsers.add_parser("check", help="Validate coverage audit consistency")
+    coverage_check.add_argument("--strict-unknowns", action="store_true", help="Return nonzero if unknown surfaces remain")
+    coverage_check.add_argument(
+        "--fail-on-unknown",
+        action="store_true",
+        dest="strict_unknowns",
+        help="Alias for --strict-unknowns; return nonzero if unknown surfaces remain",
+    )
+
+    # Triage subcommands
+    triage_parser = subparsers.add_parser("triage", help="Crash-safe backend failure adjudication")
+    triage_subparsers = triage_parser.add_subparsers(dest="triage_command", help="Triage command")
+    mps_triage = triage_subparsers.add_parser("mps", help="Adjudicate MPS segfaults and failures")
+    mps_triage.add_argument("--from-file", dest="from_file", help="Seed result JSON; defaults to latest MPS result")
+    mps_triage.add_argument("--nodes-file", dest="nodes_file", help="Optional newline-delimited pytest node list")
+    mps_triage.add_argument("--include-crashers", action="store_true", help="Include known/runlog crash candidates and run repro scripts")
+    mps_triage.add_argument("--output-dir", default="results/mps_triage", help="Directory for triage artifacts")
+    mps_triage.add_argument("--timeout", type=float, default=120.0, help="Seconds allowed for each subprocess run")
+    mps_triage.add_argument("--level", type=int, default=8, help="Semantic level for subprocess pytest runs")
+    mps_triage.add_argument("--no-run", action="store_true", help="Classify existing artifacts without executing queued pytest nodes")
+    mps_triage.add_argument("--repros-only", action="store_true", help="Run standalone MPS repro scripts without executing queued pytest nodes")
 
     args, unknown = parser.parse_known_args()
 
@@ -417,6 +537,12 @@ def main():
 
     elif args.command == "check-manifest":
         sys.exit(check_manifest(args.manifest))
+
+    elif args.command == "coverage":
+        sys.exit(run_coverage_command(args.coverage_command, getattr(args, "strict_unknowns", False)))
+
+    elif args.command == "triage":
+        sys.exit(run_triage_command(args))
 
     elif args.command == "sync-opinfo":
         try:
@@ -458,10 +584,16 @@ def main():
         if args.dtype:
             for dt in args.dtype:
                 pytest_args.extend(["--dtype", dt])
+        if args.level is not None:
+            pytest_args.extend(["--level", str(args.level)])
+        if args.level_exact is not None:
+            pytest_args.extend(["--level-exact", str(args.level_exact)])
+        if args.level_range is not None:
+            pytest_args.extend(["--level-range", args.level_range])
         
         import pytest
         pkg_dir = os.path.dirname(__file__)
-        pytest_args.append(pkg_dir)
+        pytest_args.extend(_default_test_paths(pkg_dir))
         exit_code = pytest.main(pytest_args)
         # pytest returns 5 when the plugin intentionally clears all items after
         # emitting the skip audit. Treat that as success for this dry-run mode.

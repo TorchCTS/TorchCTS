@@ -28,6 +28,7 @@ import subprocess
 import warnings
 import traceback
 import faulthandler
+from contextlib import contextmanager
 import pytest
 import torch
 
@@ -41,6 +42,41 @@ except Exception:
 # Enable faulthandler so segfaults print a traceback instead of silent death
 faulthandler.enable()
 
+
+@contextmanager
+def _without_stale_conda_env_for_venv():
+    """Hide inherited Conda markers when running inside a non-Conda venv.
+
+    PyTorch Inductor checks CONDA_PREFIX during compile setup and may shell out
+    to `conda list` even when the active interpreter is a regular virtualenv.
+    If the shell has stale Conda markers, that subprocess can run the wrong
+    root Conda Python and pollute TorchCTS output.
+    """
+    active_prefix = os.path.abspath(sys.prefix)
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if sys.prefix == sys.base_prefix or not conda_prefix:
+        yield
+        return
+    if os.path.abspath(conda_prefix) == active_prefix:
+        yield
+        return
+
+    keys = [
+        key for key in os.environ
+        if key.startswith("CONDA")
+    ]
+    saved = {key: os.environ.get(key) for key in keys}
+    try:
+        for key in keys:
+            os.environ.pop(key, None)
+        yield
+    finally:
+        for key in keys:
+            if saved[key] is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = saved[key]
+
 from torchcts.core.device import (
     get_device_backend,
     synchronize,
@@ -51,6 +87,16 @@ from torchcts.core.report import get_hardware_key
 from torchcts.core.opinfo_adapter import str_to_dtype, dtype_to_str
 from torchcts.core.comparer import clear_metrics, get_metrics
 from torchcts.core.input_gen import refresh_shared_data
+from torchcts.core.semantic_levels import (
+    DEFAULT_REQUESTED_SEMANTIC_LEVEL,
+    SemanticLevelError,
+    SemanticLevelSelection,
+    generated_level_for_entry,
+    marker_value_to_level,
+    normalize_level_selection,
+    suite_default_level,
+    validate_semantic_level,
+)
 
 # Global session variables
 _MANIFEST = {}
@@ -64,9 +110,20 @@ _BASELINE_RESULTS = {}
 _SHOW_SKIPS = False
 _REPORT_SKIPS = False
 _SUBPROCESS_MODE = False
+_KNOWN_SEGFAULT_POLICY = "isolate"
+_KNOWN_SEGFAULTS_ACTIVE = []
+_KNOWN_SEGFAULT_WARNINGS = []
+_ADAPTIVE_ISOLATION_MODE = "auto"
+_ADAPTIVE_ISOLATION_LOAD = None
+_ADAPTIVE_ISOLATION_ACTIVE = {}
+_ADAPTIVE_ISOLATION_REJECTED = []
+_ADAPTIVE_ISOLATION_WARNINGS = []
 _MEMORY_MODE = "balanced"
 _CLEANUP_THRESHOLD = 80
 _RUN_LOG_FH = None
+_REQUESTED_SEMANTIC_LEVEL = DEFAULT_REQUESTED_SEMANTIC_LEVEL
+_SEMANTIC_LEVEL_SELECTION = SemanticLevelSelection("cumulative", 1, DEFAULT_REQUESTED_SEMANTIC_LEVEL)
+_SESSION_COMPLETED = False
 
 # pytest-xdist parallel execution support
 _XDIST_WORKER_ID = os.environ.get("PYTEST_XDIST_WORKER")  # e.g. "gw0", "gw1" or None
@@ -127,6 +184,220 @@ def _is_child_process():
     )
 
 
+def _text_tail(text, limit=12000):
+    if not text:
+        return ""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
+    elif not isinstance(text, str):
+        text = str(text)
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def _atomic_json_dump(path, payload):
+    """Write JSON without exposing a partially-written target file."""
+
+    target = os.fspath(path)
+    directory = os.path.dirname(target) or "."
+    os.makedirs(directory, exist_ok=True)
+    temp_path = os.path.join(
+        directory,
+        f".{os.path.basename(target)}.{os.getpid()}.{time.time_ns()}.tmp",
+    )
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, target)
+        try:
+            dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+    except Exception:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _signal_name(returncode):
+    if returncode is None:
+        return None
+    signum = None
+    if returncode < 0:
+        signum = -returncode
+    elif returncode >= 128:
+        signum = returncode - 128
+    if signum is None:
+        return None
+    try:
+        import signal
+
+        return signal.Signals(signum).name
+    except Exception:
+        return f"SIG{signum}"
+
+
+def _is_process_crash(returncode, stderr="", stdout=""):
+    sig = _signal_name(returncode)
+    if sig in {"SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL"}:
+        return True
+    haystack = f"{stderr or ''}\n{stdout or ''}"
+    return "Fatal Python error" in haystack or "Segmentation fault" in haystack
+
+
+def _known_segfault_match_for_item(item):
+    if _KNOWN_SEGFAULT_POLICY != "isolate" or not _KNOWN_SEGFAULTS_ACTIVE:
+        return None
+    try:
+        from torchcts.core.known_segfaults import match_known_segfault
+
+        return match_known_segfault(item, _KNOWN_SEGFAULTS_ACTIVE)
+    except Exception:
+        return None
+
+
+def _known_segfault_result_fields(match, *, resolved=False, actual_signal=None):
+    if not match:
+        return {}
+    fields = {
+        "isolation_source": "known_segfault",
+        "known_segfault_id": match["id"],
+        "known_segfault_dispatcher": match["dispatcher"],
+        "known_segfault_reason": match["reason"],
+        "known_segfault_expected_signal": match["expected_signal"],
+        "known_segfault_repro": dict(match["repro"]),
+    }
+    if resolved:
+        fields["known_segfault_resolved"] = True
+    if actual_signal is not None and actual_signal != match["expected_signal"]:
+        fields["known_segfault_unexpected_signal"] = actual_signal
+    return fields
+
+
+def _known_segfault_process_classification(match, stdout="", stderr=""):
+    if not match:
+        return None
+    text = f"{stdout or ''}\n{stderr or ''}".lower()
+    if (
+        "_grid_sampler_2d_cpu_fallback_backward" in str(match.get("dispatcher", ""))
+        and "tensor-likes are not close" in text
+        and "mismatched elements" in text
+    ):
+        return "confirmed_mps_wrong_value"
+    return "confirmed_mps_crash"
+
+
+def _should_validate_known_segfault_nodeid(config, entry, collected_files):
+    from torchcts.core.known_segfaults import canonicalize_nodeid
+
+    entry_nodeid = canonicalize_nodeid(entry["nodeid"])
+    selected_node_args = [str(arg) for arg in getattr(config, "args", []) if "::" in str(arg)]
+    if selected_node_args:
+        return any(entry_nodeid.startswith(canonicalize_nodeid(arg)) for arg in selected_node_args)
+    entry_file = entry_nodeid.split("::", 1)[0]
+    return entry_file in collected_files
+
+
+def _adaptive_isolation_match_for_item(item):
+    if not _ADAPTIVE_ISOLATION_ACTIVE:
+        return None
+    try:
+        from torchcts.core.known_segfaults import canonicalize_nodeid
+
+        return _ADAPTIVE_ISOLATION_ACTIVE.get(canonicalize_nodeid(item.nodeid))
+    except Exception:
+        return None
+
+
+def _adaptive_isolation_result_fields(match, *, known_segfault_match=None, resolved=False):
+    if not match:
+        return {}
+    fields = {
+        "isolation_source": "known_segfault" if known_segfault_match else match["isolation_source"],
+        "adaptive_isolation_source": match["isolation_source"],
+        "adaptive_isolation_reason": match["reason"],
+        "adaptive_isolation_evidence_path": match["evidence_path"],
+        "adaptive_isolation_prior_status": match.get("prior_status"),
+        "adaptive_isolation_prior_signal": match.get("prior_signal"),
+    }
+    if match.get("prior_error_type") is not None:
+        fields["adaptive_isolation_prior_error_type"] = match.get("prior_error_type")
+    if match.get("prior_timestamp") is not None:
+        fields["adaptive_isolation_prior_timestamp"] = match.get("prior_timestamp")
+    if resolved:
+        fields["adaptive_isolation_resolved"] = True
+    return fields
+
+
+def _finalize_adaptive_isolation_for_collection(config, items):
+    global _ADAPTIVE_ISOLATION_ACTIVE, _ADAPTIVE_ISOLATION_REJECTED
+    if (
+        _ADAPTIVE_ISOLATION_MODE != "auto"
+        or _ADAPTIVE_ISOLATION_LOAD is None
+        or _is_child_process()
+        or _COLLECT_ONLY
+        or _SHOW_SKIPS
+    ):
+        _ADAPTIVE_ISOLATION_ACTIVE = {}
+        return
+
+    from torchcts.core.adaptive_isolation import (
+        build_adaptive_isolation_artifact,
+        filter_candidates_for_collection,
+    )
+
+    accepted, rejected = filter_candidates_for_collection(
+        _ADAPTIVE_ISOLATION_LOAD,
+        [item.nodeid for item in items],
+    )
+    _ADAPTIVE_ISOLATION_ACTIVE = accepted
+    _ADAPTIVE_ISOLATION_REJECTED = rejected
+
+    if not _IS_XDIST_WORKER:
+        if accepted:
+            print(f"Adaptive isolation: {len(accepted)} node(s) from previous crash/hang evidence")
+            if getattr(config.option, "verbose", 0):
+                for candidate in accepted.values():
+                    print(f"  - {candidate['nodeid']} ({candidate['isolation_source']})")
+        if _ARTIFACT_WRITES_ENABLED:
+            artifact = build_adaptive_isolation_artifact(
+                hardware_key=_HARDWARE_KEY,
+                device_name=_DEVICE_NAME,
+                torch_version=torch.__version__,
+                mode=_ADAPTIVE_ISOLATION_MODE,
+                accepted=accepted,
+                rejected=rejected,
+                warnings=_ADAPTIVE_ISOLATION_WARNINGS,
+                artifacts_considered=_ADAPTIVE_ISOLATION_LOAD.artifacts_considered,
+            )
+            path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_adaptive_isolation.json")
+            _atomic_json_dump(path, artifact)
+
+
+def _failure_stage_for_exception(error_type, error_message):
+    message = (error_message or "").lower()
+    if error_type == "AssertionError":
+        return "comparison"
+    if "cpu oracle" in message or "expected" in message and "cpu" in message:
+        return "cpu_oracle"
+    if "copy" in message and "cpu" in message:
+        return "sync_or_copy"
+    if "failed on mps" in message or "mps" in message:
+        return "mps_execution"
+    return "pytest_call"
+
+
 def _canonical_suite_for_item(item):
     filepath = str(item.fspath).replace("\\", "/")
     for suite_name in (
@@ -143,13 +414,33 @@ def _canonical_suite_for_item(item):
         "rng",
         "serialization",
         "errors",
+        "selftest",
         "stress",
         "multi_device",
+        "generated",
     ):
         token = f"/{suite_name}/"
         if token in filepath:
             return suite_name
     return "custom"
+
+
+def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
+    """Classify a pytest.skip raised during execution."""
+
+    if previous_skip:
+        return previous_skip["skip_reason"]
+    if "coverage_unknown" in err_msg:
+        return "coverage_unknown"
+    if "coverage_excluded" in err_msg:
+        return "coverage_excluded"
+    if "backend_not_available" in err_msg:
+        return "backend_not_available"
+    if "coverage_strategy_pending" in err_msg:
+        return "coverage_strategy_pending"
+    if hasattr(item, "_hardware_unsupported_reason"):
+        return "hardware_unsupported"
+    return "runtime_skip"
 
 
 def _extract_result_metadata(item):
@@ -165,10 +456,19 @@ def _extract_result_metadata(item):
         "golden_pass": True,
         "usable_pass": True,
         "quality_warning": False,
+        "requested_level": _REQUESTED_SEMANTIC_LEVEL,
+        "semantic_level_selection": _SEMANTIC_LEVEL_SELECTION.to_metadata(),
+        "dispatcher_name": None,
+        "schema": None,
+        "strategy": None,
+        "strategy_family": None,
+        "sample_descriptor": None,
     }
 
     filepath = str(item.fspath)
-    if "test_quantized.py" in filepath or "test_guard_alloc.py" in filepath:
+    if "test_quantized.py" in filepath and item.name.startswith("test_custom_quantized_decoder"):
+        metadata["is_conformance"] = True
+    elif "test_quantized.py" in filepath or "test_guard_alloc.py" in filepath:
         metadata["is_plumbing"] = True
     else:
         metadata["is_conformance"] = True
@@ -184,6 +484,19 @@ def _extract_result_metadata(item):
             metadata["op"] = getattr(op_param, "name", str(op_param))
         elif "op_name" in params:
             metadata["op"] = params["op_name"]
+
+        if isinstance(params.get("entry"), dict):
+            coverage_entry = params["entry"]
+            strategy = (coverage_entry.get("generated") or {}).get("strategy") or {}
+            metadata["op"] = coverage_entry.get("name") or metadata["op"]
+            metadata["dispatcher_name"] = coverage_entry.get("name")
+            metadata["schema"] = coverage_entry.get("schema")
+            metadata["strategy"] = strategy.get("strategy")
+            metadata["strategy_family"] = strategy.get("family")
+            metadata["coverage_status"] = coverage_entry.get("status")
+            metadata["coverage_id"] = coverage_entry.get("name")
+            metadata["surface_kind"] = coverage_entry.get("surface_kind")
+            metadata["variant_kind"] = coverage_entry.get("variant_kind")
 
         if "dtype" in params:
             metadata["dtype"] = dtype_to_str(params["dtype"])
@@ -203,6 +516,47 @@ def _extract_result_metadata(item):
     # Input condition tier (opinfo tests)
     if hasattr(item, "callspec") and "input_condition" in item.callspec.params:
         metadata["input_condition"] = item.callspec.params["input_condition"]
+
+    covers = []
+    coverage_surfaces = []
+    for marker in item.iter_markers(name="covers"):
+        for arg in marker.args:
+            if isinstance(arg, str):
+                covers.append(arg)
+        surface = marker.kwargs.get("surface")
+        if isinstance(surface, str):
+            coverage_surfaces.append(surface)
+
+    categories = []
+    for marker in item.iter_markers(name="covers_category"):
+        for arg in marker.args:
+            if isinstance(arg, str):
+                categories.append(arg)
+    try:
+        from torchcts.core.coverage import coverage_categories_for_path
+        categories.extend(coverage_categories_for_path(str(item.fspath)))
+    except Exception:
+        pass
+
+    metadata["covers"] = sorted(set(covers))
+    metadata["covers_categories"] = sorted(set(categories))
+    if metadata["test_kind"] == "opinfo":
+        metadata["coverage_kind"] = "opinfo"
+    elif metadata["suite"] == "generated":
+        metadata["coverage_kind"] = "generated"
+    elif categories and not covers:
+        metadata["coverage_kind"] = "category"
+    else:
+        metadata["coverage_kind"] = "handwritten"
+    if not metadata.get("surface_kind"):
+        metadata["surface_kind"] = sorted(set(coverage_surfaces))[0] if coverage_surfaces else None
+    metadata.setdefault("variant_kind", None)
+    if not metadata.get("coverage_id"):
+        metadata["coverage_id"] = ",".join(metadata["covers"]) if metadata["covers"] else None
+    metadata.setdefault("coverage_status", None)
+    metadata.update(_semantic_level_for_item(item))
+    metadata["requested_level"] = _REQUESTED_SEMANTIC_LEVEL
+    metadata["semantic_level_selection"] = _SEMANTIC_LEVEL_SELECTION.to_metadata()
 
     return metadata
 
@@ -231,18 +585,33 @@ def pytest_addoption(parser):
     group = parser.getgroup("torchcts", "TorchCTS Options")
     group.addoption("--device", default="auto", help="Target device name (e.g. mps, cuda, auto)")
     group.addoption("--dtype", action="append", help="Override supported dtypes (can be specified multiple times)")
-    group.addoption("--suite", choices=["opinfo", "operators", "training", "compiler", "device_api", "autograd", "memory", "custom", "dtypes", "strides", "workloads", "rng", "serialization", "errors", "stress", "multi_device", "adversarial"], help="Limit test collection to a specific suite")
+    group.addoption("--suite", choices=["opinfo", "operators", "training", "compiler", "device_api", "autograd", "memory", "custom", "dtypes", "strides", "workloads", "rng", "serialization", "errors", "stress", "multi_device", "adversarial", "generated"], help="Limit test collection to a specific suite")
     group.addoption("--memory-mode", default="balanced", choices=["conservative", "balanced", "performance"], help="Memory cleanup cadence")
     group.addoption("--max-device-memory", type=int, help="Cap maximum device memory allowed (MB)")
     group.addoption("--max-tensor-size", type=int, help="Cap maximum single tensor size allowed (MB)")
+    group.addoption("--level", type=int, help="Run semantic test cases with semantic_level <= LEVEL (1-8)")
+    group.addoption("--level-exact", type=int, help="Run only semantic test cases with semantic_level == LEVEL (1-8)")
+    group.addoption("--level-range", help="Run only semantic test cases in inclusive MIN:MAX level range")
     group.addoption("--show-skips", action="store_true", help="Dry-run: print skips and exit")
     group.addoption("--report-skips", action="store_true", help="Include skip audit in report")
     group.addoption("--results-dir", default="./results", help="Directory to save JSON/Markdown results")
     group.addoption("--non-interactive", action="store_true", help="Error instead of prompting in auto device selection")
     group.addoption("--subprocess-per-test", action="store_true", help="Run each test in a separate subprocess for crash isolation")
+    group.addoption("--subprocess-timeout", type=float, default=120.0, help="Seconds allowed for each subprocess-isolated test")
+    group.addoption(
+        "--known-segfault-policy",
+        choices=["isolate", "off"],
+        default=None,
+        help="Isolate known backend segfault tests without skipping them; defaults to isolate",
+    )
+    group.addoption(
+        "--adaptive-isolation",
+        choices=["auto", "off"],
+        default="auto",
+        help="Isolate tests with matching prior crash/hang evidence without skipping them",
+    )
     group.addoption("--benchmark", action="store_true", help="Run tests in benchmarking mode")
-    group.addoption("--ref-device", help="Optional reference device to compare against (e.g., cpu, mps)")
-    group.addoption("--validation", action="store_true", help="CPU reference validation mode: run entire suite on CPU")
+    group.addoption("--validation", action="store_true", help="Validate harness and CPU-compatible tests without probing an accelerator")
 
 def load_manifest():
     manifest_py = os.path.join(os.getcwd(), "manifest.py")
@@ -285,10 +654,69 @@ def get_required_capabilities(item):
             reqs.add(arg)
     return reqs
 
+
+def _semantic_level_for_item(item):
+    if hasattr(item, "callspec") and isinstance(item.callspec.params.get("entry"), dict):
+        entry = item.callspec.params["entry"]
+        level = entry.get("semantic_level")
+        if level is not None:
+            level = validate_semantic_level(level)
+            return {
+                "semantic_level": level,
+                "level_reason": entry.get("level_reason", "Generated coverage case semantic level."),
+                "level_source": entry.get("level_source", "generated_case"),
+            }
+        if entry.get("generated") or entry.get("surface_kind"):
+            default = generated_level_for_entry(entry)
+            return {
+                "semantic_level": default.level,
+                "level_reason": default.reason,
+                "level_source": default.source,
+            }
+    if hasattr(item, "callspec") and "semantic_level" in item.callspec.params:
+        level = validate_semantic_level(item.callspec.params["semantic_level"])
+        reason = item.callspec.params.get("level_reason")
+        source = item.callspec.params.get("level_source")
+        return {
+            "semantic_level": level,
+            "level_reason": str(reason) if reason else "Declared by parametrized semantic_level case.",
+            "level_source": str(source) if source else "param_case",
+        }
+
+    markers = list(item.iter_markers(name="semantic_level"))
+    if markers:
+        marker = markers[0]
+        level = marker_value_to_level(marker.args, marker.kwargs)
+        reason = marker.kwargs.get("reason")
+        return {
+            "semantic_level": level,
+            "level_reason": str(reason) if reason else "Declared by pytest semantic_level marker.",
+            "level_source": "test_marker",
+        }
+
+    suite = _canonical_suite_for_item(item)
+    default = suite_default_level(suite)
+    return {
+        "semantic_level": default.level,
+        "level_reason": default.reason,
+        "level_source": default.source,
+    }
+
+def _apply_resource_limit_overrides(manifest, cli_max_mem=None, cli_max_tensor=None):
+    limits = manifest.setdefault("resource_limits", {})
+    if cli_max_mem is not None:
+        limits["max_device_memory_mb"] = cli_max_mem
+    if cli_max_tensor is not None:
+        limits["max_tensor_size_mb"] = cli_max_tensor
+    return limits
+
 def pytest_configure(config):
     global _MANIFEST, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR, _START_TIME, _SHOW_SKIPS, _REPORT_SKIPS
     global _SUBPROCESS_MODE, _MEMORY_MODE, _CLEANUP_THRESHOLD, _MAX_DEVICE_MEM, _MAX_TENSOR_SIZE, _BASELINE_RESULTS
-    global _COLLECT_ONLY, _ARTIFACT_WRITES_ENABLED, _ACTUAL_DEVICE_COUNT
+    global _COLLECT_ONLY, _ARTIFACT_WRITES_ENABLED, _ACTUAL_DEVICE_COUNT, _REQUESTED_SEMANTIC_LEVEL, _SEMANTIC_LEVEL_SELECTION
+    global _KNOWN_SEGFAULT_POLICY, _KNOWN_SEGFAULTS_ACTIVE, _KNOWN_SEGFAULT_WARNINGS
+    global _ADAPTIVE_ISOLATION_MODE, _ADAPTIVE_ISOLATION_LOAD, _ADAPTIVE_ISOLATION_ACTIVE
+    global _ADAPTIVE_ISOLATION_REJECTED, _ADAPTIVE_ISOLATION_WARNINGS, _SESSION_COMPLETED
 
     # Register custom markers
     config.addinivalue_line("markers", "gate: backend registration gate tests — run first, abort on failure")
@@ -300,9 +728,25 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "requires(capability): required capabilities")
     config.addinivalue_line("markers", "adversarial: adversarial test suite")
     config.addinivalue_line("markers", "benchmarkable: safe to repeat many times in benchmark mode")
+    config.addinivalue_line("markers", "covers(dispatcher_name, surface=None): dispatcher overload covered by this test")
+    config.addinivalue_line("markers", "covers_category(category): coverage category covered by this test")
+    config.addinivalue_line("markers", "generated: generated coverage tests")
+    config.addinivalue_line("markers", "semantic_level(level, reason=None): semantic priority level from 1 to 8")
 
     # 1. Load manifest
     _MANIFEST = load_manifest()
+    try:
+        _SEMANTIC_LEVEL_SELECTION = normalize_level_selection(
+            _MANIFEST,
+            cli_level=config.getoption("--level"),
+            cli_level_exact=config.getoption("--level-exact"),
+            cli_level_range=config.getoption("--level-range"),
+        )
+        _REQUESTED_SEMANTIC_LEVEL = _SEMANTIC_LEVEL_SELECTION.max_level
+    except SemanticLevelError as exc:
+        pytest.exit(str(exc), returncode=1)
+    _MANIFEST["semantic_level"] = _REQUESTED_SEMANTIC_LEVEL
+    _MANIFEST["semantic_level_selection"] = _SEMANTIC_LEVEL_SELECTION.to_metadata()
     
     # 2. Command line overrides
     cli_device = config.getoption("--device")
@@ -320,7 +764,9 @@ def pytest_configure(config):
             "inference": True,
             "training": True,
             "serialization": True,
-            "generator": True,
+            "rng": True,
+            "device_generator": True,
+            "rng_distributions": True,
             "double_backward": True,
             "gradcheck": True,
             "gradient_checkpointing": True,
@@ -331,9 +777,11 @@ def pytest_configure(config):
             "channels_last": True,
             "sparse": True,
             "nested": False,  # nested SDPA requires accelerator (CPU fallback has different semantics)
+            "named_tensor": True,
             "foreach": True,
             "fp8": True,
-            "quantized": True,
+            "quantized_container_plumbing": True,
+            "custom_quantized_decode": False,
             "compile": True,
             "pinned_memory": True,
             "deterministic": True,
@@ -360,6 +808,11 @@ def pytest_configure(config):
             torch.complex128: True,
         }
         _MANIFEST["skip_ops"] = []
+        from torchcts.core.quantized_decoders import KNOWN_CONTAINER_FORMATS
+        _MANIFEST["supported_container_formats"] = {
+            name: True for name in sorted(KNOWN_CONTAINER_FORMATS)
+        }
+        _MANIFEST["custom_container_decoders"] = {}
         _MANIFEST["device_count"] = 1
         _MANIFEST.setdefault("ieee754_seed", 67)
         _MANIFEST.setdefault("max_samples", 10)
@@ -441,12 +894,12 @@ def pytest_configure(config):
         supported_dtypes.clear()
         supported_dtypes.update(probed_supported)
 
-        # Dynamic Capability Probing (pinned_memory, sparse) — subprocess-based.
+        # Dynamic Capability Probing — subprocess-based.
         # Skip in xdist workers: concurrent subprocess probes cause hangs.
         if not _IS_XDIST_WORKER:
             from torchcts.core.device import probe_capability
             caps = _MANIFEST.setdefault("capabilities", {})
-            for cap in ["pinned_memory", "sparse"]:
+            for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
                 if caps.get(cap, False):
                     if not probe_capability(_DEVICE_NAME, cap):
                         caps[cap] = False
@@ -473,6 +926,37 @@ def pytest_configure(config):
     _SHOW_SKIPS = config.getoption("--show-skips")
     _REPORT_SKIPS = config.getoption("--report-skips")
     _SUBPROCESS_MODE = config.getoption("--subprocess-per-test")
+    _ADAPTIVE_ISOLATION_MODE = config.getoption("--adaptive-isolation")
+    _ADAPTIVE_ISOLATION_LOAD = None
+    _ADAPTIVE_ISOLATION_ACTIVE = {}
+    _ADAPTIVE_ISOLATION_REJECTED = []
+    _ADAPTIVE_ISOLATION_WARNINGS = []
+    _SESSION_COMPLETED = False
+    policy_option = config.getoption("--known-segfault-policy")
+    _KNOWN_SEGFAULT_POLICY = policy_option or "isolate"
+    _KNOWN_SEGFAULTS_ACTIVE = []
+    _KNOWN_SEGFAULT_WARNINGS = []
+    if _KNOWN_SEGFAULT_POLICY == "isolate":
+        try:
+            from torchcts.core.known_segfaults import (
+                active_known_segfaults,
+                expired_known_segfault_warnings,
+                load_known_segfaults,
+            )
+
+            known_entries = load_known_segfaults(os.getcwd())
+            _KNOWN_SEGFAULTS_ACTIVE = active_known_segfaults(
+                known_entries,
+                backend=_DEVICE_NAME,
+                torch_version=torch.__version__,
+                hardware_key=_HARDWARE_KEY,
+            )
+            _KNOWN_SEGFAULT_WARNINGS = expired_known_segfault_warnings(_KNOWN_SEGFAULTS_ACTIVE)
+            if _KNOWN_SEGFAULT_WARNINGS and not _is_child_process():
+                for warning in _KNOWN_SEGFAULT_WARNINGS:
+                    print(f"Warning: {warning}", file=sys.stderr)
+        except Exception as exc:
+            pytest.exit(f"Invalid known segfault ledger: {exc}", returncode=1)
     _ARTIFACT_WRITES_ENABLED = not (_COLLECT_ONLY or _SHOW_SKIPS)
     if _ARTIFACT_WRITES_ENABLED:
         os.makedirs(_RESULTS_DIR, exist_ok=True)
@@ -481,11 +965,13 @@ def pytest_configure(config):
     _MEMORY_MODE = config.getoption("--memory-mode")
     _CLEANUP_THRESHOLD = int(_MANIFEST.get("resource_limits", {}).get("cleanup_threshold_pct", 80))
     
-    cli_max_mem = config.getoption("--max-device-memory")
-    _MAX_DEVICE_MEM = cli_max_mem if cli_max_mem is not None else _MANIFEST.get("resource_limits", {}).get("max_device_memory_mb")
-    
-    cli_max_tensor = config.getoption("--max-tensor-size")
-    _MAX_TENSOR_SIZE = cli_max_tensor if cli_max_tensor is not None else _MANIFEST.get("resource_limits", {}).get("max_tensor_size_mb")
+    limits = _apply_resource_limit_overrides(
+        _MANIFEST,
+        cli_max_mem=config.getoption("--max-device-memory"),
+        cli_max_tensor=config.getoption("--max-tensor-size"),
+    )
+    _MAX_DEVICE_MEM = limits.get("max_device_memory_mb")
+    _MAX_TENSOR_SIZE = limits.get("max_tensor_size_mb")
 
     # Load baseline results for regression detection
     _BASELINE_RESULTS = {}
@@ -506,6 +992,26 @@ def pytest_configure(config):
                     _BASELINE_RESULTS = json.load(f).get("results", {})
             except Exception:
                 pass
+
+        if _ADAPTIVE_ISOLATION_MODE == "auto" and not _is_child_process():
+            try:
+                from torchcts.core.adaptive_isolation import load_adaptive_isolation
+
+                _ADAPTIVE_ISOLATION_LOAD = load_adaptive_isolation(
+                    _RESULTS_DIR,
+                    hardware_key=_HARDWARE_KEY,
+                    device_name=_DEVICE_NAME,
+                    torch_version=torch.__version__,
+                )
+                _ADAPTIVE_ISOLATION_WARNINGS = list(_ADAPTIVE_ISOLATION_LOAD.warnings)
+                if _ADAPTIVE_ISOLATION_WARNINGS and not _IS_XDIST_WORKER:
+                    for warning in _ADAPTIVE_ISOLATION_WARNINGS:
+                        print(f"Warning: {warning}", file=sys.stderr)
+            except Exception as exc:
+                _ADAPTIVE_ISOLATION_LOAD = None
+                _ADAPTIVE_ISOLATION_WARNINGS = [f"adaptive isolation disabled: {exc}"]
+                if not _IS_XDIST_WORKER:
+                    print(f"Warning: {_ADAPTIVE_ISOLATION_WARNINGS[0]}", file=sys.stderr)
 
     # Start timing
     _START_TIME = time.time()
@@ -593,8 +1099,10 @@ def pytest_collection_modifyitems(session, config, items):
                 is_match = "multi_device/" in filepath
             elif suite == "adversarial":
                 is_match = "test_adversarial.py" in filepath
+            elif suite == "generated":
+                is_match = "generated/" in filepath
             elif suite == "custom":
-                standard_dirs = ["opinfo/", "operators/", "training/", "compiler/", "device_api/", "autograd/", "memory/", "dtypes/", "strides/", "workloads/", "rng/", "serialization/", "errors/", "stress/", "multi_device/"]
+                standard_dirs = ["opinfo/", "operators/", "training/", "compiler/", "device_api/", "autograd/", "memory/", "dtypes/", "strides/", "workloads/", "rng/", "serialization/", "errors/", "stress/", "multi_device/", "generated/"]
                 is_match = not any(d in filepath for d in standard_dirs)
             
             if is_match:
@@ -614,10 +1122,11 @@ def pytest_collection_modifyitems(session, config, items):
     # Dynamic compiler functional check
     if caps.get("compile", False) and not (_COLLECT_ONLY or _SHOW_SKIPS):
         try:
-            @torch.compile(fullgraph=True)
-            def _dummy_fn(x):
-                return x + 1.0
-            _dummy_fn(torch.ones(1, device=_DEVICE_NAME))
+            with _without_stale_conda_env_for_venv():
+                @torch.compile(fullgraph=True)
+                def _dummy_fn(x):
+                    return x + 1.0
+                _dummy_fn(torch.ones(1, device=_DEVICE_NAME))
         except Exception:
             caps["compile"] = False
             
@@ -645,11 +1154,6 @@ def pytest_collection_modifyitems(session, config, items):
                 op_name = getattr(op_param, "name", str(op_param))
             elif "op_name" in item.callspec.params:
                 op_name = item.callspec.params["op_name"]
-
-        # Gate tests always run — skip all filtering
-        if item.get_closest_marker("gate"):
-            keep_items.append(item)
-            continue
 
         # 1. Capability check
         req_caps = get_required_capabilities(item)
@@ -760,6 +1264,29 @@ def pytest_collection_modifyitems(session, config, items):
                 skip_reason = "framework_bug"
                 detail = "index_reduce hangs infinitely on MPS when input/destination contains NaN (CAS loop GPU thread deadlock)"
 
+        # 11. Semantic test level
+        if not skip_reason:
+            try:
+                semantic = _semantic_level_for_item(item)
+            except SemanticLevelError as exc:
+                pytest.exit(f"Invalid semantic level metadata on {item.nodeid}: {exc}", returncode=1)
+            if not _SEMANTIC_LEVEL_SELECTION.contains(semantic["semantic_level"]):
+                if (
+                    _SEMANTIC_LEVEL_SELECTION.mode == "cumulative"
+                    and semantic["semantic_level"] > _SEMANTIC_LEVEL_SELECTION.max_level
+                ):
+                    skip_reason = "semantic_level_gt_requested"
+                    detail = (
+                        f"semantic_level={semantic['semantic_level']} exceeds requested "
+                        f"level {_REQUESTED_SEMANTIC_LEVEL}"
+                    )
+                else:
+                    skip_reason = "semantic_level_out_of_range"
+                    detail = (
+                        f"semantic_level={semantic['semantic_level']} is outside "
+                        f"{_SEMANTIC_LEVEL_SELECTION.label}"
+                    )
+
         if skip_reason:
             metadata = _extract_result_metadata(item)
             _SESSION_SKIPS[item.nodeid] = {
@@ -769,14 +1296,48 @@ def pytest_collection_modifyitems(session, config, items):
                 "is_conformance": metadata["is_conformance"],
                 "op": metadata["op"] or item.name,
                 "dtype": metadata["dtype"],
+                "covers": metadata["covers"],
+                "coverage_kind": metadata["coverage_kind"],
+                "surface_kind": metadata["surface_kind"],
+                "variant_kind": metadata["variant_kind"],
+                "coverage_id": metadata["coverage_id"],
+                "coverage_status": metadata["coverage_status"],
+                "semantic_level": metadata["semantic_level"],
+                "requested_level": metadata["requested_level"],
+                "semantic_level_selection": metadata["semantic_level_selection"],
+                "level_reason": metadata["level_reason"],
+                "level_source": metadata["level_source"],
+                "semantic_skip_reason": skip_reason if skip_reason.startswith("semantic_") else None,
                 "skip_reason": skip_reason,
                 "detail": detail
             }
-            if _SHOW_SKIPS:
-                item.add_marker(pytest.mark.skip(reason=detail))
-                keep_items.append(item)
+            item.add_marker(pytest.mark.skip(reason=detail))
+            keep_items.append(item)
         else:
             keep_items.append(item)
+
+    if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:
+        from torchcts.core.known_segfaults import canonicalize_nodeid
+
+        collected_nodeids = {canonicalize_nodeid(item.nodeid) for item in keep_items}
+        collected_files = {canonicalize_nodeid(item.nodeid).split("::", 1)[0] for item in keep_items}
+        stale_entries = [
+            entry
+            for entry in _KNOWN_SEGFAULTS_ACTIVE
+            if canonicalize_nodeid(entry["nodeid"]) not in collected_nodeids
+            and _should_validate_known_segfault_nodeid(config, entry, collected_files)
+        ]
+        if stale_entries:
+            detail = "\n".join(
+                f"  - {entry['id']}: {entry['nodeid']}" for entry in stale_entries
+            )
+            pytest.exit(
+                "Known segfault ledger contains stale in-scope node id(s):\n"
+                f"{detail}",
+                returncode=1,
+            )
+
+    _finalize_adaptive_isolation_for_collection(config, keep_items)
 
     if not _SHOW_SKIPS:
         # Reorder: gate tests run first
@@ -808,7 +1369,7 @@ def pytest_collection_modifyitems(session, config, items):
 
 def flush_results_to_disk():
     global _SESSION_RESULTS, _SESSION_SKIPS, _START_TIME, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR
-    global _ARTIFACT_WRITES_ENABLED
+    global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
@@ -822,9 +1383,13 @@ def flush_results_to_disk():
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "elapsed_sec": elapsed,
             "collect_only": _COLLECT_ONLY,
+            "semantic_level": _REQUESTED_SEMANTIC_LEVEL,
+            "semantic_level_selection": _SEMANTIC_LEVEL_SELECTION.to_metadata(),
+            "skip_count": len(_SESSION_SKIPS),
+            "session_completed": _SESSION_COMPLETED,
         },
         "results": _SESSION_RESULTS,
-        "skips": _SESSION_SKIPS if _REPORT_SKIPS else {}
+        "skips": _SESSION_SKIPS,
     }
     
     
@@ -833,8 +1398,7 @@ def flush_results_to_disk():
         latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.{_XDIST_WORKER_ID}.json")
     else:
         latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
-    with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    _atomic_json_dump(latest_path, data)
 
 def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     """Merge per-worker result files into a single latest.json.
@@ -888,8 +1452,7 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
         "results": merged_results,
         "skips": merged_skips,
     }
-    with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(merged_data, f, indent=2)
+    _atomic_json_dump(latest_path, merged_data)
     
     # Clean up worker files
     for wf in worker_files:
@@ -953,15 +1516,25 @@ def manifest():
     return _MANIFEST
 
 @pytest.fixture
-def ref_device():
-    global _MANIFEST
-    ref = _MANIFEST.get("reference_device")
-    return ref if ref else "cpu"
-
-@pytest.fixture
 def compare():
     from torchcts.core.comparer import compare_tensors
-    return compare_tensors
+    global _MANIFEST
+
+    def _compare(actual, expected, category, dtype, **kwargs):
+        manifest_overrides = kwargs.pop(
+            "manifest_overrides",
+            _MANIFEST.get("tolerance_overrides", {}),
+        )
+        return compare_tensors(
+            actual,
+            expected,
+            category,
+            dtype,
+            manifest_overrides=manifest_overrides,
+            **kwargs,
+        )
+
+    return _compare
 
 @pytest.fixture
 def input_gen():
@@ -994,10 +1567,8 @@ def pytest_runtest_makereport(item, call):
                 err_type = "Skipped"
                 
                 # Record in skip session audit
-                if hasattr(item, "_hardware_unsupported_reason"):
-                    skip_reason = "hardware_unsupported"
-                else:
-                    skip_reason = "runtime_skip"
+                previous_skip = _SESSION_SKIPS.get(item.nodeid)
+                skip_reason = _runtime_skip_reason(err_msg, previous_skip, item)
                 
                 metadata = _extract_result_metadata(item)
                 _SESSION_SKIPS[item.nodeid] = {
@@ -1006,9 +1577,26 @@ def pytest_runtest_makereport(item, call):
                     "is_plumbing": metadata["is_plumbing"],
                     "is_conformance": metadata["is_conformance"],
                     "op": metadata["op"] or item.name,
+                    "dispatcher_name": metadata["dispatcher_name"],
+                    "schema": metadata["schema"],
+                    "strategy": metadata["strategy"],
+                    "strategy_family": metadata["strategy_family"],
+                    "sample_descriptor": metadata["sample_descriptor"],
                     "dtype": metadata["dtype"],
+                    "covers": metadata["covers"],
+                    "coverage_kind": metadata["coverage_kind"],
+                    "surface_kind": metadata["surface_kind"],
+                    "variant_kind": metadata["variant_kind"],
+                    "coverage_id": metadata["coverage_id"],
+                    "coverage_status": metadata["coverage_status"],
+                    "semantic_level": metadata["semantic_level"],
+                    "requested_level": metadata["requested_level"],
+                    "semantic_level_selection": metadata["semantic_level_selection"],
+                    "level_reason": metadata["level_reason"],
+                    "level_source": metadata["level_source"],
+                    "semantic_skip_reason": skip_reason if skip_reason.startswith("semantic_") else None,
                     "skip_reason": skip_reason,
-                    "detail": err_msg
+                    "detail": previous_skip["detail"] if previous_skip else err_msg
                 }
             else:
                 status = "FAIL" if call.excinfo.typename == "AssertionError" else "ERROR"
@@ -1022,17 +1610,41 @@ def pytest_runtest_makereport(item, call):
                     err_msg = err_msg[:9997] + "..."
 
         metadata = _extract_result_metadata(item)
+        failure_stage = _failure_stage_for_exception(err_type, err_msg) if err_type else None
             
         # Register test record
         record = {
             "status": status,
+            "phase": call.when,
+            "failure_stage": failure_stage,
             "suite": metadata["suite"],
             "test_kind": metadata["test_kind"],
             "capability": metadata["capability"],
             "is_plumbing": metadata["is_plumbing"],
             "is_conformance": metadata["is_conformance"],
             "op": metadata["op"],
+            "dispatcher_name": metadata["dispatcher_name"],
+            "schema": metadata["schema"],
+            "strategy": metadata["strategy"],
+            "strategy_family": metadata["strategy_family"],
+            "sample_descriptor": metadata["sample_descriptor"],
             "dtype": metadata["dtype"],
+            "covers": metadata["covers"],
+            "coverage_kind": metadata["coverage_kind"],
+            "surface_kind": metadata["surface_kind"],
+            "variant_kind": metadata["variant_kind"],
+            "coverage_id": metadata["coverage_id"],
+            "coverage_status": metadata["coverage_status"],
+            "semantic_level": metadata["semantic_level"],
+            "requested_level": metadata["requested_level"],
+            "semantic_level_selection": metadata["semantic_level_selection"],
+            "level_reason": metadata["level_reason"],
+            "level_source": metadata["level_source"],
+            "semantic_skip_reason": (
+                "semantic_level_out_of_range"
+                if status == "SKIP" and not _SEMANTIC_LEVEL_SELECTION.contains(metadata["semantic_level"])
+                else None
+            ),
             "maxerr": metrics["max_abs_err"] if status == "PASS" or metrics["max_abs_err"] > 0 else None,
             "cosim": metrics["cosim"] if status == "PASS" else None,
             "golden_pass": metrics.get("golden_pass", True) if status == "PASS" else None,
@@ -1077,113 +1689,344 @@ def pytest_runtest_logstart(nodeid, location):
         _RUN_LOG_FH.flush()
 
 
+def _subprocess_child_command(item):
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        item.nodeid,
+        "--device",
+        _DEVICE_NAME,
+        "--results-dir",
+        _RESULTS_DIR,
+        "--known-segfault-policy",
+        "off",
+        "--adaptive-isolation",
+        "off",
+    ]
+    level_exact = item.config.getoption("--level-exact")
+    level_range = item.config.getoption("--level-range")
+    if level_exact is not None:
+        cmd.extend(["--level-exact", str(level_exact)])
+    elif level_range is not None:
+        cmd.extend(["--level-range", str(level_range)])
+    else:
+        cmd.extend(["--level", str(_REQUESTED_SEMANTIC_LEVEL)])
+    dtype_filters = item.config.getoption("--dtype") or []
+    for dtype_name in dtype_filters:
+        cmd.extend(["--dtype", dtype_name])
+    memory_mode = item.config.getoption("--memory-mode")
+    if memory_mode:
+        cmd.extend(["--memory-mode", memory_mode])
+    max_device_memory = item.config.getoption("--max-device-memory")
+    if max_device_memory is not None:
+        cmd.extend(["--max-device-memory", str(max_device_memory)])
+    max_tensor_size = item.config.getoption("--max-tensor-size")
+    if max_tensor_size is not None:
+        cmd.extend(["--max-tensor-size", str(max_tensor_size)])
+    if item.config.getoption("--validation"):
+        cmd.append("--validation")
+    return cmd
+
+
+def _load_latest_result_for_item(item):
+    latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
+    if not os.path.exists(latest_path):
+        return None
+    try:
+        with open(latest_path, "r", encoding="utf-8") as f:
+            latest_data = json.load(f)
+    except Exception:
+        return None
+    return latest_data.get("results", {}).get(item.nodeid)
+
+
+def _subprocess_error_record(item, status, error_type, error_message, duration_ms, command, returncode=None, stdout="", stderr="", timed_out=False):
+    metadata = _extract_result_metadata(item)
+    failure_stage = "subprocess_timeout" if timed_out else "process"
+    record = {
+        "nodeid": item.nodeid,
+        "status": status,
+        "phase": "subprocess",
+        "failure_stage": failure_stage,
+        "suite": metadata["suite"],
+        "test_kind": metadata["test_kind"],
+        "capability": metadata["capability"],
+        "is_plumbing": metadata["is_plumbing"],
+        "is_conformance": metadata["is_conformance"],
+        "op": metadata["op"] or item.name,
+        "dispatcher_name": metadata["dispatcher_name"],
+        "schema": metadata["schema"],
+        "strategy": metadata["strategy"],
+        "strategy_family": metadata["strategy_family"],
+        "sample_descriptor": metadata["sample_descriptor"],
+        "dtype": metadata["dtype"],
+        "covers": metadata["covers"],
+        "coverage_kind": metadata["coverage_kind"],
+        "surface_kind": metadata["surface_kind"],
+        "variant_kind": metadata["variant_kind"],
+        "coverage_id": metadata["coverage_id"],
+        "coverage_status": metadata["coverage_status"],
+        "semantic_level": metadata["semantic_level"],
+        "requested_level": metadata["requested_level"],
+        "semantic_level_selection": metadata["semantic_level_selection"],
+        "level_reason": metadata["level_reason"],
+        "level_source": metadata["level_source"],
+        "semantic_skip_reason": None,
+        "maxerr": None,
+        "cosim": None,
+        "error_message": error_message,
+        "error_type": error_type,
+        "subprocess": {
+            "command": cmd_to_string(command),
+            "command_args": list(command),
+            "returncode": returncode,
+            "signal": _signal_name(returncode),
+            "timed_out": timed_out,
+            "duration_seconds": duration_ms / 1000.0,
+            "stdout_tail": _text_tail(stdout),
+            "stderr_tail": _text_tail(stderr),
+        },
+        "shapes": metadata["shapes"],
+        "duration_ms": duration_ms,
+        "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    from torchcts.core.diagnose import diagnose
+
+    diag = diagnose(error_type, error_message, returncode or 0)
+    if diag:
+        record["diagnosis"] = {
+            "likely_cause": diag.likely_cause,
+            "remediation": diag.remediation,
+            "confidence": diag.confidence,
+        }
+    return record
+
+
+def _subprocess_pass_record(item, duration_ms, command, returncode=0, stdout="", stderr=""):
+    metadata = _extract_result_metadata(item)
+    return {
+        "nodeid": item.nodeid,
+        "status": "PASS",
+        "phase": "subprocess_child",
+        "failure_stage": None,
+        "suite": metadata["suite"],
+        "test_kind": metadata["test_kind"],
+        "capability": metadata["capability"],
+        "is_plumbing": metadata["is_plumbing"],
+        "is_conformance": metadata["is_conformance"],
+        "op": metadata["op"] or item.name,
+        "dispatcher_name": metadata["dispatcher_name"],
+        "schema": metadata["schema"],
+        "strategy": metadata["strategy"],
+        "strategy_family": metadata["strategy_family"],
+        "sample_descriptor": metadata["sample_descriptor"],
+        "dtype": metadata["dtype"],
+        "covers": metadata["covers"],
+        "coverage_kind": metadata["coverage_kind"],
+        "surface_kind": metadata["surface_kind"],
+        "variant_kind": metadata["variant_kind"],
+        "coverage_id": metadata["coverage_id"],
+        "coverage_status": metadata["coverage_status"],
+        "semantic_level": metadata["semantic_level"],
+        "requested_level": metadata["requested_level"],
+        "semantic_level_selection": metadata["semantic_level_selection"],
+        "level_reason": metadata["level_reason"],
+        "level_source": metadata["level_source"],
+        "semantic_skip_reason": None,
+        "maxerr": None,
+        "cosim": None,
+        "golden_pass": None,
+        "usable_pass": None,
+        "quality_warning": None,
+        "input_condition": metadata.get("input_condition"),
+        "error_message": None,
+        "error_type": None,
+        "subprocess": {
+            "command": cmd_to_string(command),
+            "command_args": list(command),
+            "returncode": returncode,
+            "signal": _signal_name(returncode),
+            "timed_out": False,
+            "duration_seconds": duration_ms / 1000.0,
+            "stdout_tail": _text_tail(stdout),
+            "stderr_tail": _text_tail(stderr),
+        },
+        "shapes": metadata["shapes"],
+        "duration_ms": duration_ms,
+        "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def cmd_to_string(command):
+    return " ".join(str(part) for part in command)
+
+
 def pytest_runtest_protocol(item, nextitem):
     global _SUBPROCESS_MODE, _SESSION_RESULTS
     
     # Subprocess execution wrapper
     # Checks if subprocess mode is enabled and we are in the parent process
     is_child = _is_child_process()
-    if _SUBPROCESS_MODE and not is_child:
+    known_segfault_match = _known_segfault_match_for_item(item)
+    adaptive_isolation_match = _adaptive_isolation_match_for_item(item)
+    needs_isolation = _SUBPROCESS_MODE or known_segfault_match is not None or adaptive_isolation_match is not None
+    if needs_isolation and not is_child:
         # Run test node in child process
-        cmd = [sys.executable, "-m", "pytest", item.nodeid]
-        
-        # Forward CLI arguments except wrapper/subprocess options
-        for arg in sys.argv[1:]:
-            if arg not in ("-m", "torchcts", "run", "--subprocess-per-test", item.nodeid):
-                cmd.append(arg)
-                
+        cmd = _subprocess_child_command(item)
         env = os.environ.copy()
         env["_TORCHCTS_SUBPROCESS"] = "1"
+        env["TORCHCTS_NON_INTERACTIVE"] = "1"
         
         # Start timing
         start_t = time.time()
+        timeout = float(item.config.getoption("--subprocess-timeout") or 120.0)
         try:
-            # Run test in child process with a standard timeout (e.g. 30s)
-            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30.0)
+            # Run test in child process with a standard timeout.
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=timeout)
             duration = (time.time() - start_t) * 1000
-            
-            # Check exit code
-            if res.returncode == 0:
-                # The child ran successfully and updated results JSON
-                # Parent doesn't need to overwrite it, but let's reload it
-                # to sync with session results
-                latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
-                if os.path.exists(latest_path):
-                    with open(latest_path, "r", encoding="utf-8") as f:
-                        latest_data = json.load(f)
-                        if item.nodeid in latest_data.get("results", {}):
-                            _SESSION_RESULTS[item.nodeid] = latest_data["results"][item.nodeid]
-            else:
-                # Hard crash / segfault
-                err_msg = res.stderr or res.stdout
-                err_type = "ProcessCrash"
-                status = "ERROR"
-                
-                # Check for standard segfault signals
-                if res.returncode == -11 or res.returncode == 139:
-                    err_msg = "SEGFAULT (exit code -11)"
-                elif res.returncode == -9 or res.returncode == 137:
-                    err_msg = "OOM KILLED (exit code -9)"
-                    
-                metadata = _extract_result_metadata(item)
-                record = {
-                    "status": status,
-                    "suite": metadata["suite"],
-                    "test_kind": metadata["test_kind"],
-                    "capability": metadata["capability"],
-                    "is_plumbing": metadata["is_plumbing"],
-                    "is_conformance": metadata["is_conformance"],
-                    "op": metadata["op"] or item.name,
-                    "dtype": metadata["dtype"],
-                    "maxerr": None,
-                    "cosim": None,
-                    "error_message": err_msg[:500],
-                    "error_type": err_type,
-                    "shapes": metadata["shapes"],
-                    "duration_ms": duration,
-                    "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+            child_record = _load_latest_result_for_item(item)
+            if child_record is not None and not _is_process_crash(res.returncode, res.stderr, res.stdout):
+                child_record["nodeid"] = item.nodeid
+                child_phase = child_record.get("phase")
+                if child_phase and child_phase != "subprocess_child":
+                    child_record["child_phase"] = child_phase
+                child_record["phase"] = "subprocess_child"
+                if known_segfault_match:
+                    child_record.update(
+                        _known_segfault_result_fields(
+                            known_segfault_match,
+                            resolved=child_record.get("status") == "PASS",
+                            actual_signal=_signal_name(res.returncode),
+                        )
+                    )
+                    if child_record.get("status") == "PASS":
+                        print(
+                            f"Warning: known segfault {known_segfault_match['id']} passed; "
+                            "ledger may be stale.",
+                            file=sys.stderr,
+                        )
+                if adaptive_isolation_match:
+                    child_record.update(
+                        _adaptive_isolation_result_fields(
+                            adaptive_isolation_match,
+                            known_segfault_match=known_segfault_match,
+                            resolved=child_record.get("status") == "PASS",
+                        )
+                    )
+                child_record["subprocess"] = {
+                    "command": cmd_to_string(cmd),
+                    "command_args": list(cmd),
+                    "returncode": res.returncode,
+                    "signal": _signal_name(res.returncode),
+                    "timed_out": False,
+                    "duration_seconds": duration / 1000.0,
+                    "stdout_tail": _text_tail(res.stdout),
+                    "stderr_tail": _text_tail(res.stderr),
                 }
-                # Attach diagnosis for crash
-                from torchcts.core.diagnose import diagnose
-                diag = diagnose(err_type, err_msg, res.returncode)
-                if diag:
-                    record["diagnosis"] = {
-                        "likely_cause": diag.likely_cause,
-                        "remediation": diag.remediation,
-                        "confidence": diag.confidence,
-                    }
+                _SESSION_RESULTS[item.nodeid] = child_record
+            elif res.returncode == 0 and not _is_process_crash(res.returncode, res.stderr, res.stdout):
+                record = _subprocess_pass_record(
+                    item,
+                    duration,
+                    cmd,
+                    returncode=res.returncode,
+                    stdout=res.stdout,
+                    stderr=res.stderr,
+                )
+                if known_segfault_match:
+                    record.update(
+                        _known_segfault_result_fields(
+                            known_segfault_match,
+                            resolved=True,
+                            actual_signal=_signal_name(res.returncode),
+                        )
+                    )
+                    print(
+                        f"Warning: known segfault {known_segfault_match['id']} passed; "
+                        "ledger may be stale.",
+                        file=sys.stderr,
+                    )
+                if adaptive_isolation_match:
+                    record.update(
+                        _adaptive_isolation_result_fields(
+                            adaptive_isolation_match,
+                            known_segfault_match=known_segfault_match,
+                            resolved=True,
+                        )
+                    )
+                _SESSION_RESULTS[item.nodeid] = record
+            else:
+                stdout_tail = _text_tail(res.stdout)
+                stderr_tail = _text_tail(res.stderr)
+                signal_name = _signal_name(res.returncode)
+                process_crash = _is_process_crash(res.returncode, res.stderr, res.stdout)
+                err_msg = (
+                    f"Subprocess failed before writing a result record. "
+                    f"returncode={res.returncode} signal={signal_name}\n"
+                    f"stderr_tail:\n{stderr_tail}\nstdout_tail:\n{stdout_tail}"
+                )
+                err_type = "ProcessCrash" if process_crash else "SubprocessFailure"
+                status = "ERROR"
+                record = _subprocess_error_record(
+                    item,
+                    status,
+                    err_type,
+                    _text_tail(err_msg, 10000),
+                    duration,
+                    cmd,
+                    returncode=res.returncode,
+                    stdout=res.stdout,
+                    stderr=res.stderr,
+                )
+                if known_segfault_match:
+                    record.update(
+                        _known_segfault_result_fields(
+                            known_segfault_match,
+                            actual_signal=_signal_name(res.returncode),
+                        )
+                    )
+                    if process_crash:
+                        record["classification"] = _known_segfault_process_classification(
+                            known_segfault_match,
+                            stdout=res.stdout,
+                            stderr=res.stderr,
+                        )
+                if adaptive_isolation_match:
+                    record.update(
+                        _adaptive_isolation_result_fields(
+                            adaptive_isolation_match,
+                            known_segfault_match=known_segfault_match,
+                        )
+                    )
                 _SESSION_RESULTS[item.nodeid] = record
                 flush_results_to_disk()
                 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             duration = (time.time() - start_t) * 1000
-            metadata = _extract_result_metadata(item)
-            record = {
-                "status": "ERROR",
-                "suite": metadata["suite"],
-                "test_kind": metadata["test_kind"],
-                "capability": metadata["capability"],
-                "is_plumbing": metadata["is_plumbing"],
-                "is_conformance": metadata["is_conformance"],
-                "op": metadata["op"] or item.name,
-                "dtype": metadata["dtype"],
-                "maxerr": None,
-                "cosim": None,
-                "error_message": "TIMEOUT (exceeded 30 seconds)",
-                "error_type": "TimeoutError",
-                "shapes": metadata["shapes"],
-                "duration_ms": duration,
-                "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-            }
-            # Attach diagnosis for timeout
-            from torchcts.core.diagnose import diagnose
-            diag = diagnose("TimeoutError", "TIMEOUT (exceeded 30 seconds)")
-            if diag:
-                record["diagnosis"] = {
-                    "likely_cause": diag.likely_cause,
-                    "remediation": diag.remediation,
-                    "confidence": diag.confidence,
-                }
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            record = _subprocess_error_record(
+                item,
+                "ERROR",
+                "TimeoutError",
+                f"TIMEOUT (exceeded {timeout:g} seconds)",
+                duration,
+                cmd,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=True,
+            )
+            if known_segfault_match:
+                record.update(_known_segfault_result_fields(known_segfault_match))
+            if adaptive_isolation_match:
+                record.update(
+                    _adaptive_isolation_result_fields(
+                        adaptive_isolation_match,
+                        known_segfault_match=known_segfault_match,
+                    )
+                )
             _SESSION_RESULTS[item.nodeid] = record
             flush_results_to_disk()
             
@@ -1193,7 +2036,11 @@ def pytest_runtest_protocol(item, nextitem):
 
 def pytest_sessionfinish(session, exitstatus):
     global _SESSION_RESULTS, _RESULTS_DIR, _HARDWARE_KEY, _BASELINE_RESULTS
-    global _ARTIFACT_WRITES_ENABLED, _RUN_LOG_FH
+    global _ARTIFACT_WRITES_ENABLED, _RUN_LOG_FH, _SESSION_COMPLETED
+
+    if not _is_child_process():
+        if any(record.get("status") in ("FAIL", "ERROR") for record in _SESSION_RESULTS.values()):
+            session.exitstatus = 1
 
     # Close run log
     if _RUN_LOG_FH is not None:
@@ -1207,6 +2054,7 @@ def pytest_sessionfinish(session, exitstatus):
         return
     
     # Save the latest JSON file
+    _SESSION_COMPLETED = True
     flush_results_to_disk()
 
     # Under xdist: workers just flush and return; controller merges
@@ -1228,8 +2076,7 @@ def pytest_sessionfinish(session, exitstatus):
         
         timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
         history_path = os.path.join(history_dir, f"{timestamp_str}.json")
-        with open(history_path, "w", encoding="utf-8") as f:
-            json.dump(current_data, f, indent=2)
+        _atomic_json_dump(history_path, current_data)
             
         # Build report
         from torchcts.core.report import build_report

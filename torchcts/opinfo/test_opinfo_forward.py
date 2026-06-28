@@ -34,6 +34,8 @@ from torchcts.core.opinfo_adapter import (
 from torchcts.core.comparer import compare_nan_propagation, compare_inf_propagation
 from torchcts.core.device import synchronize
 
+pytestmark = pytest.mark.covers_category("opinfo_forward")
+
 
 # ---------------------------------------------------------------------------
 # Op categorization — maps op names to tolerance categories
@@ -168,6 +170,18 @@ _DROPOUT_OVERRIDE_OPS = frozenset({
     "nn.functional.scaled_dot_product_attention",
     "nn.functional.multi_head_attention_forward",
 })
+
+
+def _move_sample_obj(obj, target_device):
+    if isinstance(obj, torch.Tensor):
+        return obj.to(target_device)
+    if isinstance(obj, list):
+        return [_move_sample_obj(item, target_device) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple(_move_sample_obj(item, target_device) for item in obj)
+    if isinstance(obj, dict):
+        return {key: _move_sample_obj(value, target_device) for key, value in obj.items()}
+    return obj
 
 
 
@@ -341,6 +355,7 @@ def _compare_special_tier(actual, expected, condition):
             if act.is_floating_point() or act.is_complex():
                 if condition == InputCondition.HAS_NAN:
                     compare_nan_propagation(act, exp)
+                    compare_inf_propagation(act, exp)
                 if condition == InputCondition.HAS_INF:
                     compare_inf_propagation(act, exp)
         elif isinstance(act, (list, tuple)) and isinstance(exp, (list, tuple)):
@@ -401,23 +416,24 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
 
         # Transform this sample for the target condition (lazy — one at a time)
         sample = prepare_sample(raw_sample, input_condition,
-                                ieee754_seed=ieee754_seed, sample_index=i)
+                                ieee754_seed=ieee754_seed, sample_index=i,
+                                op_name=op_name)
 
         # Apply dropout override for attention ops
         if op_name in _DROPOUT_OVERRIDE_OPS:
             sample = _override_dropout(sample, op_name)
 
         # Both CPU and device get copies of the SAME transformed sample
-        cpu_input = sample.input.cpu() if isinstance(sample.input, torch.Tensor) else sample.input
-        cpu_args = [a.cpu() if isinstance(a, torch.Tensor) else a for a in sample.args]
-        cpu_kwargs = {k: (v.cpu() if isinstance(v, torch.Tensor) else v) for k, v in sample.kwargs.items()}
+        cpu_input = _move_sample_obj(sample.input, "cpu")
+        cpu_args = _move_sample_obj(sample.args, "cpu")
+        cpu_kwargs = _move_sample_obj(sample.kwargs, "cpu")
 
         if device == "cpu":
             # CPU validation mode: execute target op once, skip comparison
             try:
-                dev_input = sample.input.to(device) if isinstance(sample.input, torch.Tensor) else sample.input
-                dev_args = [a.to(device) if isinstance(a, torch.Tensor) else a for a in sample.args]
-                dev_kwargs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in sample.kwargs.items()}
+                dev_input = _move_sample_obj(sample.input, device)
+                dev_args = _move_sample_obj(sample.args, device)
+                dev_kwargs = _move_sample_obj(sample.kwargs, device)
 
                 actual = op_fn(dev_input, *dev_args, **dev_kwargs)
                 synchronize(device)
@@ -445,9 +461,9 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
         dev_error = None
         actual = None
         try:
-            dev_input = sample.input.to(device) if isinstance(sample.input, torch.Tensor) else sample.input
-            dev_args = [a.to(device) if isinstance(a, torch.Tensor) else a for a in sample.args]
-            dev_kwargs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in sample.kwargs.items()}
+            dev_input = _move_sample_obj(sample.input, device)
+            dev_args = _move_sample_obj(sample.args, device)
+            dev_kwargs = _move_sample_obj(sample.kwargs, device)
 
             actual = op_fn(dev_input, *dev_args, **dev_kwargs)
             synchronize(device)
@@ -476,16 +492,17 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
                 )
 
         # --- Comparison logic ---
-        if input_condition != InputCondition.CLEAN:
+        if op_name in _NONDETERMINISTIC_OPS:
+            _compare_nondeterministic(actual, expected, op_name)
+        elif op_name in _ARGMAX_OPS:
+            # Argmax/argmin return indices. NaN/Inf inputs can change tie
+            # behavior without changing the structural contract.
+            _compare_nondeterministic(actual, expected, op_name)
+        elif input_condition != InputCondition.CLEAN:
             # Non-clean tiers: structural + NaN/Inf propagation check only
             _compare_special_tier(actual, expected, input_condition)
-        elif op_name in _NONDETERMINISTIC_OPS:
-            _compare_nondeterministic(actual, expected, op_name)
         elif op_name in _SORT_OPS:
             _compare_sort_output(actual, expected, op_name, sample, category, dtype, compare)
-        elif op_name in _ARGMAX_OPS:
-            # Argmax/argmin: just verify shape/dtype match (tie-breaking is unspecified)
-            _compare_nondeterministic(actual, expected, op_name)
         else:
             _compare_recursive(actual, expected, category, dtype, compare)
         tested_any = True

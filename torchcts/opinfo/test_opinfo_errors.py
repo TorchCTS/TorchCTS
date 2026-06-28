@@ -27,6 +27,8 @@ from torchcts.core.opinfo_adapter import (
     get_op_error_inputs,
 )
 
+pytestmark = pytest.mark.covers_category("opinfo_error_behavior")
+
 # Build error test list by checking op.error_inputs at collection time (fast)
 try:
     op_names_with_errors = get_error_op_tests(conftest._MANIFEST)
@@ -35,6 +37,19 @@ except Exception:
 
 if not op_names_with_errors:
     op_names_with_errors = ["dummy"]
+
+def _assert_expected_error(op_fn, dev_input, dev_args, dev_kwargs, err_in, op_name):
+    try:
+        op_fn(dev_input, *dev_args, **dev_kwargs)
+    except Exception:
+        return
+
+    expected = getattr(err_in, "error_type", None)
+    if expected is None:
+        expected = "an exception"
+    elif isinstance(expected, type):
+        expected = expected.__name__
+    raise AssertionError(f"Expected exception {expected} not raised for op {op_name}")
 
 @pytest.mark.opinfo
 @pytest.mark.parametrize("op_name", op_names_with_errors)
@@ -70,15 +85,8 @@ def test_op_errors(op_name, device):
             # If placing on device fails, that is also a valid error/exception raise
             continue
 
-        # Expect an exception to be raised
-        # We catch Exception to prevent segfaults and verify the backend fails cleanly
-        try:
-            op_fn(dev_input, *dev_args, **dev_kwargs)
-            # If we reach here, it failed to raise an exception
-            raise AssertionError(f"Expected exception {err_in.error_type} not raised for op {op_name}")
-        except Exception as e:
-            # Success: raised an exception rather than segfaulting or hanging!
-            tested_any = True
+        _assert_expected_error(op_fn, dev_input, dev_args, dev_kwargs, err_in, op_name)
+        tested_any = True
 
     if not tested_any:
         pytest.skip(f"Could not run error validation checks for {op_name}")

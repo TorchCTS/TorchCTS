@@ -24,6 +24,7 @@ import torchcts.conftest as conftest
 from torchcts.core.opinfo_adapter import (
     get_backward_op_tests,
     get_live_opinfo,
+    get_op_sample_inputs,
     str_to_dtype,
     record_known_failure,
     is_cpu_reference_failure,
@@ -31,6 +32,35 @@ from torchcts.core.opinfo_adapter import (
     InputCondition,
 )
 from torchcts.core.device import synchronize
+
+pytestmark = pytest.mark.covers_category("opinfo_backward")
+
+_DROPOUT_OVERRIDE_OPS = frozenset({
+    "nn.functional.scaled_dot_product_attention",
+    "nn.functional.multi_head_attention_forward",
+})
+
+
+def _override_dropout(sample, op_name):
+    from torch.testing._internal.opinfo.core import SampleInput
+
+    if op_name == "nn.functional.scaled_dot_product_attention" and "dropout_p" in sample.kwargs:
+        return SampleInput(
+            sample.input.clone() if isinstance(sample.input, torch.Tensor) else sample.input,
+            args=sample.args,
+            kwargs={**sample.kwargs, "dropout_p": 0.0},
+        )
+    if (op_name == "nn.functional.multi_head_attention_forward"
+            and len(sample.args) > 9):
+        args_list = list(sample.args)
+        args_list[9] = 0.0
+        return SampleInput(
+            sample.input.clone() if isinstance(sample.input, torch.Tensor) else sample.input,
+            args=tuple(args_list),
+            kwargs=sample.kwargs,
+        )
+    return sample
+
 
 # Build backward test list from op_db metadata + known failures (no probing)
 try:
@@ -51,11 +81,16 @@ def test_op_backward(op_name, dtype_str, device, compare):
     dtype = str_to_dtype(dtype_str)
     op_info = get_live_opinfo(op_name)
 
-    # Generate sample inputs with requires_grad=True
-    all_samples = list(op_info.sample_inputs(device, dtype, requires_grad=True))
+    # Generate sample inputs on the reference device, then move exact clones to
+    # the backend under test. Backend failures during sample construction are
+    # not the same thing as failures of the op being tested.
+    all_samples = list(get_op_sample_inputs(op_name, device, dtype, requires_grad=True))
     assert all_samples, f"No trainable sample inputs generated for {op_name} with {dtype_str}"
 
     # Filter to clean samples only — backward through NaN/Inf is not well-specified
+    if op_name in _DROPOUT_OVERRIDE_OPS:
+        all_samples = [_override_dropout(s, op_name) for s in all_samples]
+
     samples = [s for s in all_samples if classify_sample(s) == InputCondition.CLEAN]
     if not samples:
         pytest.skip(f"No clean (NaN/Inf-free) samples for backward test of {op_name} with {dtype_str}")

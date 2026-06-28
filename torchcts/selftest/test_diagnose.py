@@ -6,6 +6,8 @@
 import pytest
 from torchcts.core.diagnose import diagnose
 
+pytestmark = pytest.mark.covers_category("selftest")
+
 
 def test_diagnose_op_not_registered():
     d = diagnose('RuntimeError', "Could not run 'aten::_fft_c2c' with arguments from the 'mps' backend")

@@ -24,6 +24,13 @@ import json
 import re
 import torch
 
+from torchcts.core.version_rules import (
+    add_remove_items,
+    cumulative_versioned_set,
+    iter_version_rule_entries,
+    parse_version_rule_key,
+)
+
 try:
     import fcntl
 except ImportError:
@@ -40,6 +47,148 @@ class InputCondition:
     HAS_INF = "has_inf"  # ±Inf present, no NaN — tests Inf arithmetic
 
 
+_ORTHOGONAL_POLYNOMIAL_OPS = frozenset({
+    "special_chebyshev_polynomial_t",
+    "special_chebyshev_polynomial_u",
+    "special_chebyshev_polynomial_v",
+    "special_chebyshev_polynomial_w",
+    "special_hermite_polynomial_h",
+    "special_hermite_polynomial_he",
+    "special_laguerre_polynomial_l",
+    "special_legendre_polynomial_p",
+    "special_shifted_chebyshev_polynomial_t",
+    "special_shifted_chebyshev_polynomial_u",
+    "special_shifted_chebyshev_polynomial_v",
+    "special_shifted_chebyshev_polynomial_w",
+})
+
+
+_NO_IEEE754_PROPAGATION_OPS = frozenset({
+    # Uninitialized memory has no value contract, so NaN/Inf propagation is not
+    # meaningful.
+    "empty",
+    "empty_like",
+    "empty_permuted",
+    "empty_strided",
+    "new_empty",
+    "new_empty_strided",
+    # Random and dropout-family outputs are nondeterministic. Some inputs are
+    # distribution parameters with stricter domains than arbitrary IEEE values.
+    "bernoulli",
+    "geometric",
+    "multinomial",
+    "rand_like",
+    "randint",
+    "randint_like",
+    "randn",
+    "randn_like",
+    "nn.functional.dropout",
+    "nn.functional.dropout2d",
+    "nn.functional.dropout3d",
+    "nn.functional.alpha_dropout",
+    "nn.functional.feature_alpha_dropout",
+    "nn.functional.fractional_max_pool2d",
+    "nn.functional.fractional_max_pool3d",
+    "normal",
+    "uniform",
+    "log_normal",
+    "cauchy",
+    "exponential",
+})
+
+
+_NO_GENERIC_BACKWARD_ORACLE_OPS = _NO_IEEE754_PROPAGATION_OPS
+
+
+def _canonical_op_base(op_name):
+    if not op_name:
+        return None
+    name = str(op_name)
+    if name.startswith("aten::"):
+        name = name[len("aten::"):]
+    if name.startswith("torch."):
+        name = name[len("torch."):]
+    if name.startswith("special."):
+        return "special_" + name[len("special."):]
+    return name.split(".", 1)[0]
+
+
+def _preserve_nonfinite_control_args(op_name):
+    """Return True when IEEE injection must not touch control-parameter tensors."""
+
+    return _canonical_op_base(op_name) in _ORTHOGONAL_POLYNOMIAL_OPS
+
+
+def _resolve_tensor_value_bits(t):
+    if t.is_conj():
+        t = t.resolve_conj()
+    if t.is_neg():
+        t = t.resolve_neg()
+    return t
+
+
+_SPARSE_VALUE_LAYOUTS = frozenset({
+    torch.sparse_coo,
+    torch.sparse_csr,
+    torch.sparse_csc,
+    torch.sparse_bsr,
+    torch.sparse_bsc,
+})
+
+
+def _dense_value_tensor_for_scan(t):
+    t = _resolve_tensor_value_bits(t)
+    if t.layout == torch.sparse_coo:
+        return t.values() if t.is_coalesced() else t._values()
+    if t.layout in _SPARSE_VALUE_LAYOUTS:
+        return t.values()
+    return t
+
+
+def _rebuild_sparse_tensor_with_values(t, values):
+    if t.layout == torch.sparse_coo:
+        rebuilt = torch.sparse_coo_tensor(
+            t._indices(),
+            values,
+            size=t.shape,
+            requires_grad=t.requires_grad,
+        )
+        return rebuilt.coalesce() if t.is_coalesced() else rebuilt
+    if t.layout == torch.sparse_csr:
+        return torch.sparse_csr_tensor(
+            t.crow_indices(),
+            t.col_indices(),
+            values,
+            size=t.shape,
+            requires_grad=t.requires_grad,
+        )
+    if t.layout == torch.sparse_csc:
+        return torch.sparse_csc_tensor(
+            t.ccol_indices(),
+            t.row_indices(),
+            values,
+            size=t.shape,
+            requires_grad=t.requires_grad,
+        )
+    if t.layout == torch.sparse_bsr:
+        return torch.sparse_bsr_tensor(
+            t.crow_indices(),
+            t.col_indices(),
+            values,
+            size=t.shape,
+            requires_grad=t.requires_grad,
+        )
+    if t.layout == torch.sparse_bsc:
+        return torch.sparse_bsc_tensor(
+            t.ccol_indices(),
+            t.row_indices(),
+            values,
+            size=t.shape,
+            requires_grad=t.requires_grad,
+        )
+    return t
+
+
 def classify_sample(sample):
     """Classify a SampleInput by whether its tensors contain NaN/Inf.
 
@@ -52,11 +201,8 @@ def classify_sample(sample):
     def _check(obj):
         nonlocal has_nan, has_inf
         if isinstance(obj, torch.Tensor) and (obj.is_floating_point() or obj.is_complex()):
-            if obj.is_complex():
-                real_view = torch.view_as_real(obj)
-            else:
-                real_view = obj
-            flat = real_view.detach().reshape(-1)
+            obj = _dense_value_tensor_for_scan(obj)
+            flat = obj.detach().reshape(-1)
             if torch.isnan(flat).any():
                 has_nan = True
             if torch.isinf(flat).any():
@@ -89,7 +235,12 @@ def _transform_tensor(t, target_condition, seed):
     if not (t.is_floating_point() or t.is_complex()):
         return t
 
-    t = t.clone()
+    if t.layout in _SPARSE_VALUE_LAYOUTS:
+        values = _dense_value_tensor_for_scan(t)
+        new_values = _transform_tensor(values, target_condition, seed)
+        return _rebuild_sparse_tensor_with_values(t, new_values)
+
+    t = _resolve_tensor_value_bits(t).clone()
 
     # For complex, work on the real view
     is_complex = t.is_complex()
@@ -190,17 +341,21 @@ def _transform_obj(obj, target_condition, seed):
     return obj
 
 
-def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0):
+def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0, op_name=None):
     """Clone sample and transform ALL float tensors to match the target condition.
 
     Transforms all float/complex tensors in sample.input, sample.args,
     and sample.kwargs. Complex tensors handled via view_as_real internally.
+    For op families with tensor-valued control parameters, such as special
+    orthogonal polynomials, non-finite injection is limited to the data input so
+    the sample remains valid for the dispatcher contract.
 
     Args:
         sample: opinfo SampleInput
         target_condition: InputCondition.CLEAN, HAS_NAN, or HAS_INF
         ieee754_seed: base seed from manifest (default 67)
         sample_index: index of this sample in the op's sample list
+        op_name: optional OpInfo/dispatcher name used for op-specific sample rules
 
     Returns new SampleInput. Original untouched.
     """
@@ -214,8 +369,12 @@ def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0):
     seed = ieee754_seed ^ (sample_index * 2654435761)  # Knuth multiplicative hash
 
     new_input = _transform_obj(sample.input, target_condition, seed)
-    new_args = _transform_obj(sample.args, target_condition, seed + 1000000)
-    new_kwargs = _transform_obj(sample.kwargs, target_condition, seed + 2000000)
+    if _preserve_nonfinite_control_args(op_name):
+        new_args = sample.args
+        new_kwargs = sample.kwargs
+    else:
+        new_args = _transform_obj(sample.args, target_condition, seed + 1000000)
+        new_kwargs = _transform_obj(sample.kwargs, target_condition, seed + 2000000)
 
     return SampleInput(new_input, args=new_args, kwargs=new_kwargs)
 
@@ -280,6 +439,38 @@ _KNOWN_FAILURES_PATH = os.path.join(
 
 _known_failures_mem = None  # in-memory cache, loaded once per process
 
+
+def _known_failure_rule_parts(value):
+    if not isinstance(value, dict):
+        return {}, {}
+    if "add" in value or "remove" in value:
+        add = value.get("add") or {}
+        remove = value.get("remove") or {}
+    else:
+        add = value
+        remove = {}
+    return add if isinstance(add, dict) else {}, remove if isinstance(remove, dict) else {}
+
+
+def _merge_known_failure_rules(all_failures, runtime_version):
+    merged = {}
+    for _, value in iter_version_rule_entries(all_failures, runtime_version):
+        add, remove = _known_failure_rule_parts(value)
+        for phase, entries in add.items():
+            if isinstance(entries, dict):
+                merged.setdefault(phase, {}).update(entries)
+        for phase, entries in remove.items():
+            if phase not in merged:
+                continue
+            if isinstance(entries, dict):
+                keys = entries.keys()
+            else:
+                keys = entries or ()
+            for key in keys:
+                merged[phase].pop(key, None)
+    return merged
+
+
 def load_known_failures():
     """Load known CPU reference failures for the current PyTorch version."""
     global _known_failures_mem
@@ -291,7 +482,7 @@ def load_known_failures():
         try:
             with open(_KNOWN_FAILURES_PATH, "r", encoding="utf-8") as f:
                 all_failures = json.load(f)
-            _known_failures_mem = all_failures.get(version, {})
+            _known_failures_mem = _merge_known_failure_rules(all_failures, version)
         except Exception:
             _known_failures_mem = {}
     else:
@@ -327,8 +518,16 @@ def record_known_failure(phase, op_name, dtype_str, error_msg):
                 all_failures = json.load(f)
             except json.JSONDecodeError:
                 all_failures = {}
-            all_failures.setdefault(version, {}).setdefault(phase, {})
-            all_failures[version][phase][key] = truncated
+            version_entry = all_failures.setdefault(version, {})
+            if isinstance(version_entry, dict) and ("add" in version_entry or "remove" in version_entry):
+                version_entry.setdefault("add", {}).setdefault(phase, {})
+                version_entry["add"][phase][key] = truncated
+            else:
+                if not isinstance(version_entry, dict):
+                    version_entry = {}
+                    all_failures[version] = version_entry
+                version_entry.setdefault(phase, {})
+                version_entry[phase][key] = truncated
             f.seek(0)
             f.truncate()
             json.dump(all_failures, f, indent=2)
@@ -388,14 +587,31 @@ _IEEE754_UNDEFINED_OPS_PATH = os.path.join(
     os.path.dirname(__file__), "..", "opinfo_cache", "ieee754_undefined.json"
 )
 
+
+def _parse_ieee754_version_key(version):
+    parsed = parse_version_rule_key(version)
+    if parsed is None:
+        return None
+    return parsed.parts, parsed.specificity, parsed.exact_only, parsed.text
+
+
+def _ieee754_rule_items(value):
+    return add_remove_items(value, default_add_key="ops")
+
+
+def _ieee754_undefined_rule_entries(data, runtime_version):
+    """Return cumulative cache entries that apply to a PyTorch version."""
+
+    return iter_version_rule_entries(data, runtime_version)
+
+
 def _load_ieee754_undefined():
     """Load the set of ops with undefined CPU NaN/Inf behavior."""
-    version = torch.__version__
     if os.path.exists(_IEEE754_UNDEFINED_OPS_PATH):
         try:
             with open(_IEEE754_UNDEFINED_OPS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return frozenset(data.get(version, []))
+            return cumulative_versioned_set(data, torch.__version__, default_add_key="ops")
         except Exception:
             pass
     return frozenset()
@@ -414,7 +630,9 @@ def _ieee754_enabled_for_op(op_name, ieee754_cap):
     """
     if ieee754_cap is False or ieee754_cap is None:
         return False
-    if op_name in _IEEE754_UNDEFINED_OPS:
+    if _has_invalid_ieee754_cpu_oracle(op_name):
+        return False
+    if op_name in _NO_IEEE754_PROPAGATION_OPS:
         return False
     if ieee754_cap is True:
         return True
@@ -496,6 +714,8 @@ def get_backward_op_tests(manifest):
         if op.name in seen or op.name in skip_ops:
             continue
         seen.add(op.name)
+        if op.name in _NO_GENERIC_BACKWARD_ORACLE_OPS:
+            continue
 
         # Rule 2: skip ops that don't support autograd
         if not getattr(op, "supports_autograd", True):
@@ -549,6 +769,13 @@ _CONVERGENCE_OPS = frozenset({
     "linalg.cond",
 })
 
+
+def _has_invalid_ieee754_cpu_oracle(op_name):
+    """Return True when NaN/Inf CPU oracle construction is unsafe for an op."""
+
+    return op_name in _CONVERGENCE_OPS or op_name in _IEEE754_UNDEFINED_OPS
+
+
 def discover_ieee754_undefined_ops():
     """Discover ops where CPU NaN/Inf behavior is non-deterministic.
 
@@ -597,7 +824,13 @@ def discover_ieee754_undefined_ops():
 
                     sample = samples[0]
                     for condition in (InputCondition.HAS_NAN, InputCondition.HAS_INF):
-                        prepared = prepare_sample(sample, condition, ieee754_seed=67, sample_index=0)
+                        prepared = prepare_sample(
+                            sample,
+                            condition,
+                            ieee754_seed=67,
+                            sample_index=0,
+                            op_name=op.name,
+                        )
 
                         try:
                             result1 = op.op(prepared.input, *prepared.args, **prepared.kwargs)
@@ -735,13 +968,14 @@ def get_live_opinfo(op_name):
     return None
 
 
-def get_op_sample_inputs(op_name, device, dtype):
+def get_op_sample_inputs(op_name, device, dtype, requires_grad=False):
     op = get_live_opinfo(op_name)
     if op is None:
         return
-        
+
+    generation_device = "cpu" if device != "cpu" else device
     try:
-        samples = op.sample_inputs(device, dtype, requires_grad=False)
+        samples = op.sample_inputs(generation_device, dtype, requires_grad=requires_grad)
         for sample in samples:
             yield sample
     except Exception as e:
