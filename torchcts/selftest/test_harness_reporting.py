@@ -20,6 +20,7 @@
 
 import json
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ from torchcts.core.comparer import (
     compare_tensors,
     get_metrics,
 )
-from torchcts.core.manifest_schema import validate_manifest
+from torchcts.core.manifest_schema import KNOWN_CAPABILITIES, validate_manifest
 from torchcts.core.opinfo_adapter import (
     InputCondition,
     _NO_GENERIC_BACKWARD_ORACLE_OPS,
@@ -811,6 +812,13 @@ def _minimal_valid_manifest():
 @pytest.mark.parametrize("template_name", ["complete", "inference", "minimal", "smoke", "training"])
 def test_shipped_manifest_templates_validate(template_name):
     assert cli_module.check_manifest(cli_module.get_template_path(template_name)) == 0
+
+
+@pytest.mark.parametrize("template_name", ["complete", "inference", "minimal", "smoke", "training"])
+def test_shipped_manifest_templates_list_every_known_capability(template_name):
+    template = runpy.run_path(cli_module.get_template_path(template_name))["manifest"]
+
+    assert set(template["capabilities"]) == KNOWN_CAPABILITIES
 
 
 def test_manifest_schema_rejects_stale_generator_capability():

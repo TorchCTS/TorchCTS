@@ -79,6 +79,7 @@ manifest = {
         "foreach": False,
         "fp8": False,
         "quantized_container_plumbing": False,
+        "native_quantization": False,
         "custom_quantized_decode": False,
         "compile": False,
         "pinned_memory": False,
@@ -86,6 +87,8 @@ manifest = {
         "events": False,
         "deterministic": False,
         "guard_alloc": False,
+        "device_api": True,
+        "multi_device": False,
         "ieee754": True,
     },
     "skip_ops": [
