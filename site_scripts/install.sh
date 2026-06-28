@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# TorchCTS — Global Installer (macOS / Linux)
+# TorchCTS - Global Installer (macOS / Linux)
 #
 # Usage:
 #   curl -fsSL https://torchcts.ai/scripts/install.sh | sh
@@ -33,6 +33,7 @@ INSTALL_DIR="$HOME/.torchcts"
 VENV_DIR="$INSTALL_DIR/venv"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
+TORCH_SPEC="torch>=2.12.0"
 
 # ── Colors (only if stdout is a terminal) ────────────────────────────────────
 
@@ -52,6 +53,24 @@ ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn()  { printf "${YELLOW}⚠${NC} %s\n" "$*"; }
 err()   { printf "${RED}✗${NC} %s\n" "$*" >&2; }
 
+PLAN_FILE=""
+PLAN_OUTPUT_FILE=""
+cleanup() {
+    if [ -n "$PLAN_FILE" ]; then
+        rm -f "$PLAN_FILE"
+    fi
+    if [ -n "$PLAN_OUTPUT_FILE" ]; then
+        rm -f "$PLAN_OUTPUT_FILE"
+    fi
+}
+trap cleanup EXIT INT TERM
+
+write_install_plan() {
+    cat > "$PLAN_FILE" <<'__TORCHCTS_INSTALL_PLAN_PAYLOAD__'
+__TORCHCTS_INSTALL_PLAN_PY__
+__TORCHCTS_INSTALL_PLAN_PAYLOAD__
+}
+
 # ── Uninstall ────────────────────────────────────────────────────────────────
 
 if [ "${1:-}" = "--uninstall" ]; then
@@ -61,7 +80,7 @@ if [ "${1:-}" = "--uninstall" ]; then
         ok "Removed $INSTALL_DIR"
         ok "TorchCTS uninstalled."
     else
-        warn "Nothing to remove — TorchCTS is not installed."
+        warn "Nothing to remove - TorchCTS is not installed."
     fi
     exit 0
 fi
@@ -143,45 +162,61 @@ if ! "$PYTHON" -m venv --help >/dev/null 2>&1; then
     exit 1
 fi
 
-# ── Detect GPU for PyTorch wheel selection ───────────────────────────────────
-
-TORCH_INDEX_ARGS=""
-GPU_TYPE="cpu"
-
-if [ "$PLATFORM" = "macos" ]; then
-    # macOS: default PyPI wheel includes MPS support, no extra index needed.
-    GPU_TYPE="mps"
-elif [ "$PLATFORM" = "linux" ]; then
-    # Check for NVIDIA GPU
-    if command -v nvidia-smi >/dev/null 2>&1 || [ -f /proc/driver/nvidia/version ]; then
-        GPU_TYPE="cuda"
-        # Default PyPI wheel includes CUDA, no extra index needed.
-    # Check for AMD GPU — try multiple detection methods
-    elif command -v rocm-smi >/dev/null 2>&1 || \
-         command -v amd-smi >/dev/null 2>&1 || \
-         [ -d /opt/rocm ] || \
-         [ -e /dev/kfd ] || \
-         (command -v lspci >/dev/null 2>&1 && lspci 2>/dev/null | grep -qi 'AMD.*\(VGA\|3D\|Display\)\|Radeon'); then
-        GPU_TYPE="rocm"
-        TORCH_INDEX_ARGS="--extra-index-url https://download.pytorch.org/whl/rocm6.3"
-    else
-        # CPU-only: use lightweight wheel to avoid downloading ~2.5GB CUDA build
-        GPU_TYPE="cpu"
-        TORCH_INDEX_ARGS="--extra-index-url https://download.pytorch.org/whl/cpu"
-    fi
-fi
-
-ok "GPU detection: ${GPU_TYPE}"
-
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
 if [ -d "$VENV_DIR" ]; then
-    info "Existing installation found — upgrading."
+    info "Existing installation found - upgrading."
 else
     info "Creating virtual environment in ${VENV_DIR}..."
     mkdir -p "$INSTALL_DIR"
     "$PYTHON" -m venv "$VENV_DIR"
     ok "Virtual environment created."
+fi
+
+# ── Write embedded planner ──────────────────────────────────────────────────
+
+PLAN_FILE=$(mktemp "${TMPDIR:-/tmp}/torchcts_install_plan.XXXXXX")
+PLAN_OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/torchcts_install_plan_output.XXXXXX")
+
+info "Preparing install planner..."
+write_install_plan
+
+# ── Plan PyTorch install ────────────────────────────────────────────────────
+
+info "Selecting PyTorch build..."
+if [ "${TORCHCTS_NON_INTERACTIVE:-}" != "1" ] && [ -r /dev/tty ]; then
+    "$PYTHON" "$PLAN_FILE" --format key-value --prompt < /dev/tty > "$PLAN_OUTPUT_FILE"
+else
+    "$PYTHON" "$PLAN_FILE" --format key-value > "$PLAN_OUTPUT_FILE"
+fi
+
+TORCH_VARIANT=""
+TORCH_CONFIDENCE=""
+TORCH_INDEX_URL=""
+TORCH_DEVICE_HINT=""
+TORCH_REASON=""
+TORCH_WARNING=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        variant) TORCH_VARIANT=$value ;;
+        confidence) TORCH_CONFIDENCE=$value ;;
+        torch_index_url) TORCH_INDEX_URL=$value ;;
+        device_hint) TORCH_DEVICE_HINT=$value ;;
+        reason) TORCH_REASON=$value ;;
+        warning) TORCH_WARNING=$value ;;
+    esac
+done < "$PLAN_OUTPUT_FILE"
+
+if [ -z "$TORCH_VARIANT" ] || [ -z "$TORCH_DEVICE_HINT" ]; then
+    err "Install planner did not return a usable PyTorch plan."
+    exit 1
+fi
+
+ok "PyTorch selection: ${TORCH_VARIANT} (${TORCH_CONFIDENCE})"
+info "$TORCH_REASON"
+if [ -n "$TORCH_WARNING" ]; then
+    warn "$TORCH_WARNING"
 fi
 
 # ── Install / upgrade ───────────────────────────────────────────────────────
@@ -192,14 +227,18 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
 info "Upgrading pip..."
 "$PIP" install --upgrade pip --quiet
 
-if [ -n "$TORCH_INDEX_ARGS" ]; then
-    info "Installing TorchCTS (PyTorch variant: ${GPU_TYPE})..."
-    # shellcheck disable=SC2086
-    "$PIP" install --upgrade torchcts $TORCH_INDEX_ARGS --quiet
+info "Installing PyTorch (${TORCH_VARIANT})..."
+if [ -n "$TORCH_INDEX_URL" ]; then
+    "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
 else
-    info "Installing TorchCTS (PyTorch variant: ${GPU_TYPE})..."
-    "$PIP" install --upgrade torchcts --quiet
+    "$PIP" install --upgrade "$TORCH_SPEC" --quiet
 fi
+
+info "Installing TorchCTS..."
+"$PIP" install --upgrade torchcts --quiet
+
+info "Verifying PyTorch install..."
+"$VENV_PYTHON" "$PLAN_FILE" --verify "$TORCH_VARIANT"
 
 INSTALLED_VERSION=$("$VENV_PYTHON" -c "import torchcts; print(torchcts.__version__)" 2>/dev/null || echo "unknown")
 TORCH_VERSION=$("$VENV_PYTHON" -c "import torch; print(torch.__version__)" 2>/dev/null || echo "unknown")
@@ -212,11 +251,9 @@ echo ""
 printf "${BOLD}${GREEN}TorchCTS ${INSTALLED_VERSION} installed successfully.${NC}\n"
 echo ""
 echo "  Version:    ${INSTALLED_VERSION}"
-echo "  PyTorch:    ${TORCH_VERSION} (${GPU_TYPE})"
+echo "  PyTorch:    ${TORCH_VERSION} (${TORCH_VARIANT})"
 echo "  Venv:       ${VENV_DIR}"
 echo ""
-
-echo "  Run:        ${VENV_DIR}/bin/torchcts run"
-
+echo "  Run:        ${VENV_DIR}/bin/torchcts run --device ${TORCH_DEVICE_HINT}"
 echo "  Uninstall:  curl -fsSL https://torchcts.ai/scripts/install.sh | sh -s -- --uninstall"
 echo ""

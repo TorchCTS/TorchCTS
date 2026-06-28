@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# TorchCTS — Repository Setup Script (Windows)
+# TorchCTS - Repository Setup Script (Windows)
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File setup.ps1
@@ -31,6 +31,24 @@ $ErrorActionPreference = "Stop"
 $VenvDir = ".venv"
 $MinMajor = 3
 $MinMinor = 10
+$PlanFile = Join-Path "site_scripts" "install_plan.py"
+$TorchSpec = "torch>=2.12.0"
+
+function Read-InstallPlan {
+    param([string[]]$Lines)
+
+    $plan = @{}
+    foreach ($line in $Lines) {
+        $idx = $line.IndexOf("=")
+        if ($idx -le 0) {
+            continue
+        }
+        $key = $line.Substring(0, $idx)
+        $value = $line.Substring($idx + 1)
+        $plan[$key] = $value
+    }
+    return $plan
+}
 
 # ── Locate Python ───────────────────────────────────────────────────────────
 
@@ -51,7 +69,7 @@ if (-not $Python) {
     return
 }
 
-# For 'py' launcher, use 'py -3' to ensure Python 3
+# For 'py' launcher, use 'py -3' to ensure Python 3.
 if ($Python -eq "py") {
     $PythonArgs = @("-3")
 } else {
@@ -73,6 +91,17 @@ if ($pyMajor -lt $MinMajor -or ($pyMajor -eq $MinMajor -and $pyMinor -lt $MinMin
 
 Write-Host "[OK] Found Python ${pyVersion}" -ForegroundColor Green
 
+& $Python @PythonArgs -m venv --help *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Python venv module is not available." -ForegroundColor Red
+    return
+}
+
+if (-not (Test-Path $PlanFile)) {
+    Write-Host "ERROR: Install planner not found: ${PlanFile}" -ForegroundColor Red
+    return
+}
+
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
 if (Test-Path $VenvDir) {
@@ -83,6 +112,36 @@ if (Test-Path $VenvDir) {
     Write-Host "[OK] Virtual environment created." -ForegroundColor Green
 }
 
+# ── Plan PyTorch install ────────────────────────────────────────────────────
+
+Write-Host "[..] Selecting PyTorch build..." -ForegroundColor Cyan
+$PromptArgs = @()
+if (-not $env:TORCHCTS_NON_INTERACTIVE -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    $PromptArgs = @("--prompt")
+}
+$planOutput = & $Python @PythonArgs $PlanFile --format key-value @PromptArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Install planner failed."
+}
+$plan = Read-InstallPlan -Lines $planOutput
+
+$GpuType = $plan["variant"]
+$GpuConfidence = $plan["confidence"]
+$TorchIndexUrl = $plan["torch_index_url"]
+$DeviceHint = $plan["device_hint"]
+$TorchReason = $plan["reason"]
+$TorchWarning = $plan["warning"]
+
+if (-not $GpuType -or -not $DeviceHint) {
+    throw "Install planner did not return a usable PyTorch plan."
+}
+
+Write-Host "[OK] PyTorch selection: ${GpuType} (${GpuConfidence})" -ForegroundColor Green
+Write-Host "[..] $TorchReason" -ForegroundColor Cyan
+if ($TorchWarning) {
+    Write-Host "[..] $TorchWarning" -ForegroundColor Yellow
+}
+
 # ── Upgrade pip and install ─────────────────────────────────────────────────
 
 $Pip = Join-Path $VenvDir "Scripts\pip.exe"
@@ -91,8 +150,22 @@ $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 Write-Host "[..] Upgrading pip, setuptools, wheel..." -ForegroundColor Cyan
 & $Pip install --upgrade pip setuptools wheel --quiet
 
+Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
+$torchInstallArgs = @("install", "--upgrade", $TorchSpec)
+if ($TorchIndexUrl) {
+    $torchInstallArgs += @("--index-url", $TorchIndexUrl)
+}
+$torchInstallArgs += "--quiet"
+& $Pip @torchInstallArgs
+
 Write-Host "[..] Installing TorchCTS in editable mode..." -ForegroundColor Cyan
 & $Pip install -e . --quiet
+
+Write-Host "[..] Verifying PyTorch install..." -ForegroundColor Cyan
+& $VenvPython $PlanFile --verify $GpuType
+if ($LASTEXITCODE -ne 0) {
+    throw "PyTorch verification failed."
+}
 
 $installedVersion = & $VenvPython -c "import torchcts; print(torchcts.__version__)" 2>&1
 if ($LASTEXITCODE -ne 0) { $installedVersion = "unknown" }
@@ -104,8 +177,9 @@ Write-Host "TorchCTS development environment ready." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Version:    ${installedVersion}"
 Write-Host "  Python:     ${pyVersion}"
+Write-Host "  PyTorch:    ${GpuType}"
 Write-Host "  Venv:       $(Get-Location)\${VenvDir}"
 Write-Host ""
 Write-Host "  Activate:   .\.venv\Scripts\Activate.ps1"
-Write-Host "  Run:        torchcts run --device cuda"
+Write-Host "  Run:        torchcts run --device ${DeviceHint}"
 Write-Host ""

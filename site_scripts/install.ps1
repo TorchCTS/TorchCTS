@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# TorchCTS — Global Installer (Windows)
+# TorchCTS - Global Installer (Windows)
 #
 # Usage:
 #   irm https://torchcts.ai/scripts/install.ps1 | iex
@@ -38,6 +38,31 @@ $InstallDir = Join-Path $HOME ".torchcts"
 $VenvDir = Join-Path $InstallDir "venv"
 $MinMajor = 3
 $MinMinor = 10
+$TorchSpec = "torch>=2.12.0"
+
+function Read-InstallPlan {
+    param([string[]]$Lines)
+
+    $plan = @{}
+    foreach ($line in $Lines) {
+        $idx = $line.IndexOf("=")
+        if ($idx -le 0) {
+            continue
+        }
+        $key = $line.Substring(0, $idx)
+        $value = $line.Substring($idx + 1)
+        $plan[$key] = $value
+    }
+    return $plan
+}
+
+function Write-EmbeddedInstallPlan {
+    param([string]$Path)
+
+    @'
+__TORCHCTS_INSTALL_PLAN_PY__
+'@ | Set-Content -LiteralPath $Path -Encoding UTF8
+}
 
 # ── Uninstall ────────────────────────────────────────────────────────────────
 
@@ -81,7 +106,7 @@ if (-not $Python) {
     return
 }
 
-# For 'py' launcher, use 'py -3' to ensure Python 3
+# For 'py' launcher, use 'py -3' to ensure Python 3.
 if ($Python -eq "py") {
     $PythonArgs = @("-3")
 }
@@ -102,48 +127,14 @@ if ($pyMajor -lt $MinMajor -or ($pyMajor -eq $MinMajor -and $pyMinor -lt $MinMin
 
 Write-Host "[OK] Found Python ${pyVersion}" -ForegroundColor Green
 
-# ── Detect GPU for PyTorch wheel selection ───────────────────────────────────
+# ── Verify venv module ──────────────────────────────────────────────────────
 
-$TorchIndexArgs = @()
-$GpuType = "cpu"
-
-# Check for NVIDIA GPU
-try {
-    $null = & nvidia-smi 2>&1
-    $GpuType = "cuda"
-} catch {
-    # Check for AMD GPU — try rocm-smi / amd-smi first, then fall back to WMI
-    $amdFound = $false
-    foreach ($tool in @("rocm-smi", "amd-smi")) {
-        try {
-            $null = & $tool 2>&1
-            $amdFound = $true
-            break
-        } catch {}
-    }
-    if (-not $amdFound) {
-        # Check Windows GPU hardware via WMI for AMD/Radeon
-        try {
-            $gpus = Get-CimInstance Win32_VideoController -ErrorAction Stop
-            foreach ($gpu in $gpus) {
-                if ($gpu.Name -match "AMD|Radeon|ATI") {
-                    $amdFound = $true
-                    break
-                }
-            }
-        } catch {}
-    }
-    if ($amdFound) {
-        $GpuType = "rocm"
-        $TorchIndexArgs = @("--extra-index-url", "https://download.pytorch.org/whl/rocm6.3")
-    } else {
-        # CPU-only
-        $GpuType = "cpu"
-        $TorchIndexArgs = @("--extra-index-url", "https://download.pytorch.org/whl/cpu")
-    }
+& $Python @PythonArgs -m venv --help *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Python venv module is not available." -ForegroundColor Red
+    Write-Host "  Reinstall Python or install the venv package for your distribution."
+    return
 }
-
-Write-Host "[OK] GPU detection: ${GpuType}" -ForegroundColor Green
 
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
@@ -156,41 +147,92 @@ if (Test-Path $VenvDir) {
     Write-Host "[OK] Virtual environment created." -ForegroundColor Green
 }
 
-# ── Install / upgrade ───────────────────────────────────────────────────────
+# ── Write embedded planner ──────────────────────────────────────────────────
 
-$Pip = Join-Path $VenvDir "Scripts\pip.exe"
-$VenvPython = Join-Path $VenvDir "Scripts\python.exe"
+$PlanFile = Join-Path ([System.IO.Path]::GetTempPath()) ("torchcts-install-plan-{0}.py" -f ([guid]::NewGuid()))
 
-Write-Host "[..] Upgrading pip..." -ForegroundColor Cyan
-& $Pip install --upgrade pip --quiet
+try {
+    Write-Host "[..] Preparing install planner..." -ForegroundColor Cyan
+    Write-EmbeddedInstallPlan -Path $PlanFile
 
-Write-Host "[..] Installing TorchCTS (PyTorch variant: ${GpuType})..." -ForegroundColor Cyan
-& $Pip install --upgrade torchcts @TorchIndexArgs --quiet
+    # ── Plan PyTorch install ────────────────────────────────────────────────────
 
-$installedVersion = & $VenvPython -c "import torchcts; print(torchcts.__version__)" 2>&1
-if ($LASTEXITCODE -ne 0) { $installedVersion = "unknown" }
+    Write-Host "[..] Selecting PyTorch build..." -ForegroundColor Cyan
+    $PromptArgs = @()
+    if (-not $env:TORCHCTS_NON_INTERACTIVE -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        $PromptArgs = @("--prompt")
+    }
+    $planOutput = & $Python @PythonArgs $PlanFile --format key-value @PromptArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Install planner failed."
+    }
+    $plan = Read-InstallPlan -Lines $planOutput
 
-$torchVersion = & $VenvPython -c "import torch; print(torch.__version__)" 2>&1
-if ($LASTEXITCODE -ne 0) { $torchVersion = "unknown" }
+    $GpuType = $plan["variant"]
+    $GpuConfidence = $plan["confidence"]
+    $TorchIndexUrl = $plan["torch_index_url"]
+    $DeviceHint = $plan["device_hint"]
+    $TorchReason = $plan["reason"]
+    $TorchWarning = $plan["warning"]
 
-Write-Host "[OK] Installed TorchCTS ${installedVersion} (PyTorch ${torchVersion})" -ForegroundColor Green
+    if (-not $GpuType -or -not $DeviceHint) {
+        throw "Install planner did not return a usable PyTorch plan."
+    }
 
-# ── Summary ──────────────────────────────────────────────────────────────────
+    Write-Host "[OK] PyTorch selection: ${GpuType} (${GpuConfidence})" -ForegroundColor Green
+    Write-Host "[..] $TorchReason" -ForegroundColor Cyan
+    if ($TorchWarning) {
+        Write-Host "[..] $TorchWarning" -ForegroundColor Yellow
+    }
 
-$torchctsExe = Join-Path $VenvDir "Scripts\torchcts.exe"
+    # ── Install / upgrade ───────────────────────────────────────────────────────
 
-Write-Host ""
-Write-Host "TorchCTS ${installedVersion} installed successfully." -ForegroundColor Green
-Write-Host ""
-Write-Host "  Version:    ${installedVersion}"
-Write-Host "  PyTorch:    ${torchVersion} (${GpuType})"
-Write-Host "  Venv:       ${VenvDir}"
-Write-Host ""
+    $Pip = Join-Path $VenvDir "Scripts\pip.exe"
+    $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 
-switch ($GpuType) {
-    "cuda" { Write-Host "  Run:        ${torchctsExe} run --device cuda" }
-    "rocm" { Write-Host "  Run:        ${torchctsExe} run --device cuda" }
-    default { Write-Host "  Run:        ${torchctsExe} run --device cpu" }
+    Write-Host "[..] Upgrading pip..." -ForegroundColor Cyan
+    & $Pip install --upgrade pip --quiet
+
+    Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
+    $torchInstallArgs = @("install", "--upgrade", $TorchSpec)
+    if ($TorchIndexUrl) {
+        $torchInstallArgs += @("--index-url", $TorchIndexUrl)
+    }
+    $torchInstallArgs += "--quiet"
+    & $Pip @torchInstallArgs
+
+    Write-Host "[..] Installing TorchCTS..." -ForegroundColor Cyan
+    & $Pip install --upgrade torchcts --quiet
+
+    Write-Host "[..] Verifying PyTorch install..." -ForegroundColor Cyan
+    & $VenvPython $PlanFile --verify $GpuType
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyTorch verification failed."
+    }
+
+    $installedVersion = & $VenvPython -c "import torchcts; print(torchcts.__version__)" 2>&1
+    if ($LASTEXITCODE -ne 0) { $installedVersion = "unknown" }
+
+    $torchVersion = & $VenvPython -c "import torch; print(torch.__version__)" 2>&1
+    if ($LASTEXITCODE -ne 0) { $torchVersion = "unknown" }
+
+    Write-Host "[OK] Installed TorchCTS ${installedVersion} (PyTorch ${torchVersion})" -ForegroundColor Green
+
+    # ── Summary ──────────────────────────────────────────────────────────────────
+
+    $torchctsExe = Join-Path $VenvDir "Scripts\torchcts.exe"
+
+    Write-Host ""
+    Write-Host "TorchCTS ${installedVersion} installed successfully." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Version:    ${installedVersion}"
+    Write-Host "  PyTorch:    ${torchVersion} (${GpuType})"
+    Write-Host "  Venv:       ${VenvDir}"
+    Write-Host ""
+    Write-Host "  Run:        ${torchctsExe} run --device ${DeviceHint}"
+    Write-Host ""
+} finally {
+    if (Test-Path $PlanFile) {
+        Remove-Item -Force $PlanFile
+    }
 }
-
-Write-Host ""

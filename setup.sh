@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# TorchCTS — Repository Setup Script (macOS / Linux)
+# TorchCTS - Repository Setup Script (macOS / Linux)
 #
 # Usage:
 #   ./setup.sh
@@ -32,6 +32,8 @@ set -euo pipefail
 VENV_DIR=".venv"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
+PLAN_FILE="site_scripts/install_plan.py"
+TORCH_SPEC="torch>=2.12.0"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -103,27 +105,84 @@ if ! "$PYTHON" -m venv --help &>/dev/null; then
     exit 1
 fi
 
+if [ ! -f "$PLAN_FILE" ]; then
+    err "Install planner not found: ${PLAN_FILE}"
+    exit 1
+fi
+
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
 if [ -d "$VENV_DIR" ]; then
-    info "Existing ${VENV_DIR} found — reusing it."
+    info "Existing ${VENV_DIR} found - reusing it."
 else
     info "Creating virtual environment in ${VENV_DIR}..."
     "$PYTHON" -m venv "$VENV_DIR"
     ok "Virtual environment created."
 fi
 
+# ── Plan PyTorch install ────────────────────────────────────────────────────
+
+PLAN_OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/torchcts_setup_plan.XXXXXX")
+trap 'rm -f "$PLAN_OUTPUT_FILE"' EXIT INT TERM
+
+info "Selecting PyTorch build..."
+if [ "${TORCHCTS_NON_INTERACTIVE:-}" != "1" ] && [ -r /dev/tty ]; then
+    "$PYTHON" "$PLAN_FILE" --format key-value --prompt < /dev/tty > "$PLAN_OUTPUT_FILE"
+else
+    "$PYTHON" "$PLAN_FILE" --format key-value > "$PLAN_OUTPUT_FILE"
+fi
+
+TORCH_VARIANT=""
+TORCH_CONFIDENCE=""
+TORCH_INDEX_URL=""
+TORCH_DEVICE_HINT=""
+TORCH_REASON=""
+TORCH_WARNING=""
+
+while IFS='=' read -r key value; do
+    case "$key" in
+        variant) TORCH_VARIANT=$value ;;
+        confidence) TORCH_CONFIDENCE=$value ;;
+        torch_index_url) TORCH_INDEX_URL=$value ;;
+        device_hint) TORCH_DEVICE_HINT=$value ;;
+        reason) TORCH_REASON=$value ;;
+        warning) TORCH_WARNING=$value ;;
+    esac
+done < "$PLAN_OUTPUT_FILE"
+
+if [ -z "$TORCH_VARIANT" ] || [ -z "$TORCH_DEVICE_HINT" ]; then
+    err "Install planner did not return a usable PyTorch plan."
+    exit 1
+fi
+
+ok "PyTorch selection: ${TORCH_VARIANT} (${TORCH_CONFIDENCE})"
+info "$TORCH_REASON"
+if [ -n "$TORCH_WARNING" ]; then
+    warn "$TORCH_WARNING"
+fi
+
 # ── Upgrade pip and install ─────────────────────────────────────────────────
 
 PIP="${VENV_DIR}/bin/pip"
+VENV_PYTHON="${VENV_DIR}/bin/python"
 
 info "Upgrading pip and wheel..."
 "$PIP" install --upgrade pip wheel --quiet
 
+info "Installing PyTorch (${TORCH_VARIANT})..."
+if [ -n "$TORCH_INDEX_URL" ]; then
+    "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
+else
+    "$PIP" install --upgrade "$TORCH_SPEC" --quiet
+fi
+
 info "Installing TorchCTS in editable mode..."
 "$PIP" install -e . --quiet
 
-INSTALLED_VERSION=$("${VENV_DIR}/bin/python" -c "import torchcts; print(torchcts.__version__)" 2>/dev/null || echo "unknown")
+info "Verifying PyTorch install..."
+"$VENV_PYTHON" "$PLAN_FILE" --verify "$TORCH_VARIANT"
+
+INSTALLED_VERSION=$("${VENV_PYTHON}" -c "import torchcts; print(torchcts.__version__)" 2>/dev/null || echo "unknown")
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 
@@ -132,8 +191,9 @@ printf "${BOLD}${GREEN}TorchCTS development environment ready.${NC}\n"
 echo ""
 echo "  Version:    ${INSTALLED_VERSION}"
 echo "  Python:     ${PYTHON_VERSION}"
+echo "  PyTorch:    ${TORCH_VARIANT}"
 echo "  Venv:       $(pwd)/${VENV_DIR}"
 echo ""
 echo "  Activate:   source ${VENV_DIR}/bin/activate"
-echo "  Run:        torchcts run --device mps"
+echo "  Run:        torchcts run --device ${TORCH_DEVICE_HINT}"
 echo ""
