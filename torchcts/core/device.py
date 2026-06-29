@@ -638,18 +638,35 @@ def get_device_total_memory(device_name, device_idx=0):
                 return props.total_memory
     return None
 
-def _capability_probe_script(device_name, capability):
+def _capability_probe_prelude(device_name, backend_import=None):
+    return (
+        "import importlib\n"
+        "import torch\n"
+        f"_torchcts_backend_import = {backend_import!r}\n"
+        f"_torchcts_device_name = {device_name!r}\n"
+        "if _torchcts_backend_import:\n"
+        "    importlib.import_module(_torchcts_backend_import)\n"
+        "else:\n"
+        "    for _torchcts_modname in (_torchcts_device_name, f'{_torchcts_device_name}.backend'):\n"
+        "        try:\n"
+        "            importlib.import_module(_torchcts_modname)\n"
+        "            break\n"
+        "        except Exception:\n"
+        "            pass\n"
+    )
+
+
+def _capability_probe_script(device_name, capability, backend_import=None):
+    prelude = _capability_probe_prelude(device_name, backend_import=backend_import)
     if capability == "pinned_memory":
-        return (
-            "import torch\n"
+        return prelude + (
             f"x = torch.randn(2, 2)\n"
             f"p = x.pin_memory(device='{device_name}')\n"
             f"assert p.is_pinned()\n"
             "print('SUCCESS')\n"
         )
     if capability == "sparse":
-        return (
-            "import torch\n"
+        return prelude + (
             "i = torch.tensor([[0, 1, 1], [2, 0, 2]])\n"
             "v = torch.tensor([3, 4, 5], dtype=torch.float32)\n"
             f"s = torch.sparse_coo_tensor(i, v, (2, 3), device='{device_name}')\n"
@@ -657,8 +674,7 @@ def _capability_probe_script(device_name, capability):
             "print('SUCCESS')\n"
         )
     if capability == "nested":
-        return (
-            "import torch\n"
+        return prelude + (
             f"a = torch.randn(2, 3, device='{device_name}')\n"
             f"b = torch.randn(1, 3, device='{device_name}')\n"
             f"nt = torch.nested.nested_tensor([a, b], device='{device_name}')\n"
@@ -667,16 +683,14 @@ def _capability_probe_script(device_name, capability):
             "print('SUCCESS')\n"
         )
     if capability == "named_tensor":
-        return (
-            "import torch\n"
+        return prelude + (
             f"x = torch.empty((2, 3), device='{device_name}', names=('rows', 'cols'))\n"
             "y = x.align_to('cols', 'rows')\n"
             f"assert y.names == ('cols', 'rows') and y.device.type == '{device_name}'\n"
             "print('SUCCESS')\n"
         )
     if capability == "fp8":
-        return (
-            "import torch\n"
+        return prelude + (
             f"x = torch.zeros(4, dtype=torch.float8_e4m3fn, device='{device_name}')\n"
             f"y = torch.ones(4, dtype=torch.float32, device='{device_name}').to(torch.float8_e5m2)\n"
             f"assert x.device.type == '{device_name}' and y.device.type == '{device_name}'\n"
@@ -685,10 +699,10 @@ def _capability_probe_script(device_name, capability):
     return None
 
 
-def probe_capability_result(device_name, capability, timeout=10):
+def probe_capability_result(device_name, capability, timeout=10, backend_import=None):
     """Probe a declared capability and preserve subprocess failure evidence."""
 
-    script = _capability_probe_script(device_name, capability)
+    script = _capability_probe_script(device_name, capability, backend_import=backend_import)
     if script is None:
         return CapabilityProbeResult(
             device_name=device_name,
@@ -744,6 +758,11 @@ def probe_capability_result(device_name, capability, timeout=10):
     )
 
 
-def probe_capability(device_name, capability, timeout=10):
+def probe_capability(device_name, capability, timeout=10, backend_import=None):
     """Return True if the backend supports a capability."""
-    return probe_capability_result(device_name, capability, timeout=timeout).supported
+    return probe_capability_result(
+        device_name,
+        capability,
+        timeout=timeout,
+        backend_import=backend_import,
+    ).supported

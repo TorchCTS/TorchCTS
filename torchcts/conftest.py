@@ -24,6 +24,7 @@ import json
 import glob
 import time
 import datetime
+import inspect
 import subprocess
 import warnings
 import traceback
@@ -692,16 +693,30 @@ def _apply_declared_dtype_probes(supported_dtypes, device_name):
     return [record for record in records if record is not None]
 
 
-def _apply_declared_capability_probes(caps, device_name, probe_func=None):
+def _capability_probe_accepts_backend_import(probe_func):
+    try:
+        params = inspect.signature(probe_func).parameters
+    except (TypeError, ValueError):
+        return False
+    if "backend_import" in params:
+        return True
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
+
+
+def _apply_declared_capability_probes(caps, device_name, probe_func=None, backend_import=None):
     if probe_func is None:
         from torchcts.core.device import probe_capability_result
 
         probe_func = probe_capability_result
+    probe_accepts_backend_import = _capability_probe_accepts_backend_import(probe_func)
     records = []
     for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
         if not caps.get(cap, False):
             continue
-        probe = probe_func(device_name, cap)
+        if backend_import is not None and probe_accepts_backend_import:
+            probe = probe_func(device_name, cap, backend_import=backend_import)
+        else:
+            probe = probe_func(device_name, cap)
         if probe.supported:
             continue
         records.append(
@@ -1282,6 +1297,7 @@ def pytest_configure(config):
             _apply_declared_capability_probes(
                 caps,
                 _DEVICE_NAME,
+                backend_import=backend_import,
             )
 
             # Hard prerequisite: inference must be True

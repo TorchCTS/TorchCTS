@@ -90,6 +90,17 @@ def _select_quantized_engine() -> str:
     raise OracleUnavailable("backend_not_available: no quantized engine is available")
 
 
+def _privateuse1_backend_name() -> str:
+    try:
+        return torch._C._get_privateuse1_backend_name()
+    except Exception:
+        return "privateuseone"
+
+
+def _is_privateuse1_device_type(device_type: str) -> bool:
+    return device_type in {"privateuseone", _privateuse1_backend_name()}
+
+
 def _check_backend_gate(spec: OracleSpec, device: str) -> None:
     device_type = torch.device(device).type
     gate = spec.backend_gate
@@ -106,6 +117,10 @@ def _check_backend_gate(spec: OracleSpec, device: str) -> None:
     if gate == "cuda":
         if device_type != "cuda" or not torch.cuda.is_available():
             raise OracleUnavailable(f"backend_not_available: {spec.surface} requires CUDA")
+        return
+    if gate == "privateuse1":
+        if not _is_privateuse1_device_type(device_type):
+            raise OracleUnavailable(f"backend_not_available: {spec.surface} requires a PrivateUse1 backend")
         return
     if gate == "quantized":
         if not _supports_quantized_engine():
@@ -1083,6 +1098,464 @@ def _run_cpu_flash_attention(spec: OracleSpec, device: str) -> None:
     raise AssertionError(f"No CPU flash-attention implementation for {spec.surface}")
 
 
+def _privateuse1_attention_sample(device: str):
+    import torch.nn.functional as F
+
+    torch.manual_seed(2026)
+    query = torch.randn(1, 2, 8, 64)
+    key = torch.randn(1, 2, 8, 64)
+    value = torch.randn(1, 2, 8, 64)
+    grad_out = torch.randn_like(query)
+    expected = F.scaled_dot_product_attention(query, key, value, dropout_p=0.0, is_causal=False)
+
+    ref_query = query.detach().clone().requires_grad_(True)
+    ref_key = key.detach().clone().requires_grad_(True)
+    ref_value = value.detach().clone().requires_grad_(True)
+    ref_out = F.scaled_dot_product_attention(ref_query, ref_key, ref_value, dropout_p=0.0, is_causal=False)
+    ref_out.backward(grad_out)
+
+    return {
+        "query": query,
+        "key": key,
+        "value": value,
+        "grad_out": grad_out,
+        "expected": expected,
+        "expected_grads": (ref_query.grad, ref_key.grad, ref_value.grad),
+        "device_query": query.to(device),
+        "device_key": key.to(device),
+        "device_value": value.to(device),
+        "device_grad_out": grad_out.to(device),
+    }
+
+
+def _run_privateuse1_attention(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    sample = _privateuse1_attention_sample(device)
+    q = sample["device_query"]
+    k = sample["device_key"]
+    v = sample["device_value"]
+    grad_out = sample["device_grad_out"]
+    expected = sample["expected"]
+    expected_grads = sample["expected_grads"]
+
+    def _check_forward(result, label: str) -> None:
+        _assert_close_tensor(result[0], expected, label, rtol=1e-4, atol=1e-4)
+        logsumexp = result[1]
+        if tuple(logsumexp.shape) not in {(1, 2, 8), (2, 8)}:
+            raise AssertionError(f"{label} returned malformed logsumexp shape {tuple(logsumexp.shape)}")
+        if logsumexp.dtype != torch.float32:
+            raise AssertionError(f"{label} returned malformed logsumexp dtype {logsumexp.dtype}")
+        if not torch.isfinite(logsumexp.detach().cpu()).all().item():
+            raise AssertionError(f"{label} returned non-finite logsumexp for finite inputs")
+
+    def _check_backward(result, label: str) -> None:
+        for index, (actual_grad, expected_grad) in enumerate(zip(result[:3], expected_grads)):
+            _assert_close_tensor(actual_grad, expected_grad, f"{label}.grad{index}", rtol=1e-4, atol=1e-4)
+
+    if spec.surface == "aten::_scaled_dot_product_fused_attention_overrideable":
+        result = torch.ops.aten._scaled_dot_product_fused_attention_overrideable(q, k, v, None, 0.0, False, False)
+        _check_forward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_scaled_dot_product_flash_attention":
+        result = torch.ops.aten._scaled_dot_product_flash_attention(q, k, v, 0.0, False, False)
+        _check_forward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_scaled_dot_product_efficient_attention":
+        result = torch.ops.aten._scaled_dot_product_efficient_attention(q, k, v, None, True, 0.0, False)
+        _check_forward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_flash_attention_forward":
+        result = torch.ops.aten._flash_attention_forward(q, k, v, None, None, 8, 8, 0.0, False, False)
+        _check_forward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_efficient_attention_forward":
+        result = torch.ops.aten._efficient_attention_forward(q, k, v, None, None, None, 8, 8, 0.0, 0, True)
+        _check_forward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_scaled_dot_product_fused_attention_overrideable_backward":
+        forward = torch.ops.aten._scaled_dot_product_fused_attention_overrideable(q, k, v, None, 0.0, False, False)
+        result = torch.ops.aten._scaled_dot_product_fused_attention_overrideable_backward(
+            grad_out,
+            q,
+            k,
+            v,
+            torch.empty(0, device=device),
+            [True, True, True, False],
+            forward[0],
+            forward[1],
+            forward[2],
+            forward[3],
+            forward[4],
+            forward[5],
+            0.0,
+            False,
+            forward[6],
+            forward[7],
+        )
+        _check_backward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_scaled_dot_product_flash_attention_backward":
+        forward = torch.ops.aten._scaled_dot_product_flash_attention(q, k, v, 0.0, False, False)
+        result = torch.ops.aten._scaled_dot_product_flash_attention_backward(
+            grad_out,
+            q,
+            k,
+            v,
+            forward[0],
+            forward[1],
+            forward[2],
+            forward[3],
+            forward[4],
+            forward[5],
+            0.0,
+            False,
+            forward[6],
+            forward[7],
+        )
+        _check_backward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_scaled_dot_product_efficient_attention_backward":
+        forward = torch.ops.aten._scaled_dot_product_efficient_attention(q, k, v, None, True, 0.0, False)
+        result = torch.ops.aten._scaled_dot_product_efficient_attention_backward(
+            grad_out,
+            q,
+            k,
+            v,
+            torch.empty(0, device=device),
+            forward[0],
+            forward[1],
+            forward[2],
+            forward[3],
+            0.0,
+            [True, True, True, False],
+            False,
+        )
+        _check_backward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_flash_attention_backward":
+        forward = torch.ops.aten._flash_attention_forward(q, k, v, None, None, 8, 8, 0.0, False, False)
+        result = torch.ops.aten._flash_attention_backward(
+            grad_out,
+            q,
+            k,
+            v,
+            forward[0],
+            forward[1],
+            torch.empty(0, device=device, dtype=torch.int64),
+            torch.empty(0, device=device, dtype=torch.int64),
+            8,
+            8,
+            0.0,
+            False,
+            forward[2],
+            forward[3],
+        )
+        _check_backward(result, spec.surface)
+        return
+
+    if spec.surface == "aten::_efficient_attention_backward":
+        forward = torch.ops.aten._efficient_attention_forward(q, k, v, None, None, None, 8, 8, 0.0, 0, True)
+        result = torch.ops.aten._efficient_attention_backward(
+            grad_out,
+            q,
+            k,
+            v,
+            None,
+            forward[0],
+            None,
+            None,
+            8,
+            8,
+            forward[1],
+            0.0,
+            forward[2],
+            forward[3],
+            0,
+            False,
+        )
+        _check_backward(result, spec.surface)
+        return
+
+    raise AssertionError(f"No PrivateUse1 attention implementation for {spec.surface}")
+
+
+def _run_privateuse1_matmul_backward(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    torch.manual_seed(4011)
+    grad = torch.randn(2, 4)
+    left = torch.randn(2, 3)
+    right = torch.randn(3, 4)
+    expected = (grad @ right.t(), left.t() @ grad)
+
+    device_grad = grad.to(device)
+    device_left = left.to(device)
+    device_right = right.to(device)
+    masks = ([True, True],) if spec.surface.endswith(".out") else (
+        [True, True],
+        [True, False],
+        [False, True],
+        [False, False],
+    )
+    for mask in masks:
+        if spec.surface == "aten::matmul_backward.out":
+            out0 = torch.empty_like(device_left)
+            out1 = torch.empty_like(device_right)
+            actual = torch.ops.aten.matmul_backward.out(
+                device_grad,
+                device_left,
+                device_right,
+                mask,
+                out0=out0,
+                out1=out1,
+            )
+            assert_out_identity(actual[0], out0, f"{spec.surface}.out0.mask{mask}")
+            assert_out_identity(actual[1], out1, f"{spec.surface}.out1.mask{mask}")
+        else:
+            actual = torch.ops.aten.matmul_backward(
+                device_grad,
+                device_left,
+                device_right,
+                mask,
+            )
+        for index, enabled in enumerate(mask):
+            if enabled:
+                _assert_close_tensor(actual[index], expected[index], f"{spec.surface}.mask{mask}.{index}")
+
+
+def _run_privateuse1_resize_output(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    source = torch.empty(2, 3, device=device)
+    target_size = [4, 5]
+
+    if spec.surface == "aten::_resize_output":
+        actual = torch.ops.aten._resize_output(source, target_size, torch.device(device))
+        if tuple(actual.shape) != tuple(target_size):
+            raise AssertionError(f"{spec.surface} returned shape {tuple(actual.shape)}, expected {tuple(target_size)}")
+        if actual.device.type != torch.device(device).type:
+            raise AssertionError(f"{spec.surface} returned tensor on {actual.device}, expected {device}")
+        return
+
+    if spec.surface == "aten::_resize_output.out":
+        out = torch.empty(0, device=device)
+        actual = torch.ops.aten._resize_output.out(source, target_size, torch.device(device), out=out)
+        assert_out_identity(actual, out, spec.surface)
+        if tuple(out.shape) != tuple(target_size):
+            raise AssertionError(f"{spec.surface} resized to shape {tuple(out.shape)}, expected {tuple(target_size)}")
+        if out.device.type != torch.device(device).type:
+            raise AssertionError(f"{spec.surface} returned tensor on {out.device}, expected {device}")
+        return
+
+    if spec.surface == "aten::_resize_output_":
+        actual = torch.ops.aten._resize_output_(source, target_size, torch.device(device))
+        if actual is not source:
+            raise AssertionError(f"{spec.surface} did not return the resized input tensor")
+        if tuple(source.shape) != tuple(target_size):
+            raise AssertionError(f"{spec.surface} resized to shape {tuple(source.shape)}, expected {tuple(target_size)}")
+        return
+
+    raise AssertionError(f"No PrivateUse1 resize-output implementation for {spec.surface}")
+
+
+def _run_privateuse1_batch_norm_forward(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    torch.manual_seed(4012)
+    input_tensor = torch.randn(4, 3, 5, 5)
+    weight = torch.randn(3)
+    bias = torch.randn(3)
+    eps = 1e-5
+    mean = input_tensor.mean(dim=(0, 2, 3))
+    variance = input_tensor.var(dim=(0, 2, 3), unbiased=False)
+    invstd = torch.rsqrt(variance + eps)
+    expected = (
+        (input_tensor - mean[None, :, None, None])
+        * invstd[None, :, None, None]
+        * weight[None, :, None, None]
+        + bias[None, :, None, None]
+    )
+
+    device_input = input_tensor.to(device)
+    device_mean, device_invstd = torch.ops.aten.batch_norm_stats(device_input, eps)
+
+    if spec.surface in {"aten::batch_norm_stats", "aten::batch_norm_stats.out"}:
+        if spec.surface.endswith(".out"):
+            out0 = torch.empty_like(device_mean)
+            out1 = torch.empty_like(device_invstd)
+            actual_mean, actual_invstd = torch.ops.aten.batch_norm_stats.out(
+                device_input,
+                eps,
+                out0=out0,
+                out1=out1,
+            )
+            assert_out_identity(actual_mean, out0, f"{spec.surface}.out0")
+            assert_out_identity(actual_invstd, out1, f"{spec.surface}.out1")
+        else:
+            actual_mean = device_mean
+            actual_invstd = device_invstd
+        _assert_close_tensor(actual_mean, mean, f"{spec.surface}.mean")
+        _assert_close_tensor(actual_invstd, invstd, f"{spec.surface}.invstd")
+        return
+
+    if spec.surface in {"aten::batch_norm_elemt", "aten::batch_norm_elemt.out"}:
+        if spec.surface.endswith(".out"):
+            out = torch.empty_like(device_input)
+            actual = torch.ops.aten.batch_norm_elemt.out(
+                device_input,
+                weight.to(device),
+                bias.to(device),
+                device_mean,
+                device_invstd,
+                eps,
+                out=out,
+            )
+            assert_out_identity(actual, out, spec.surface)
+        else:
+            actual = torch.ops.aten.batch_norm_elemt(
+                device_input,
+                weight.to(device),
+                bias.to(device),
+                device_mean,
+                device_invstd,
+                eps,
+            )
+        _assert_close_tensor(actual, expected, spec.surface, rtol=1e-4, atol=1e-4)
+        return
+
+    raise AssertionError(f"No PrivateUse1 batch-norm forward implementation for {spec.surface}")
+
+
+def _run_privateuse1_thnn_cell(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    torch.manual_seed(4013)
+
+    if spec.surface in {"aten::_thnn_fused_gru_cell", "aten::_thnn_fused_gru_cell.out"}:
+        input_gates = torch.randn(2, 12)
+        hidden_gates = torch.randn(2, 12)
+        hx = torch.randn(2, 4)
+        input_bias = torch.randn(12)
+        hidden_bias = torch.randn(12)
+        i_r, i_z, i_n = (input_gates + input_bias).chunk(3, 1)
+        h_r, h_z, h_n = (hidden_gates + hidden_bias).chunk(3, 1)
+        reset = torch.sigmoid(i_r + h_r)
+        update = torch.sigmoid(i_z + h_z)
+        new = torch.tanh(i_n + reset * h_n)
+        expected_hy = new + update * (hx - new)
+        device_input_gates = input_gates.to(device)
+        device_hidden_gates = hidden_gates.to(device)
+        device_hx = hx.to(device)
+        device_input_bias = input_bias.to(device)
+        device_hidden_bias = hidden_bias.to(device)
+        if spec.surface.endswith(".out"):
+            out0 = torch.empty_like(device_hx)
+            out1 = torch.empty(2, 24, device=device)
+            actual_hy, workspace = torch.ops.aten._thnn_fused_gru_cell.out(
+                device_input_gates,
+                device_hidden_gates,
+                device_hx,
+                device_input_bias,
+                device_hidden_bias,
+                out0=out0,
+                out1=out1,
+            )
+            assert_out_identity(actual_hy, out0, f"{spec.surface}.out0")
+            assert_out_identity(workspace, out1, f"{spec.surface}.out1")
+        else:
+            actual_hy, workspace = torch.ops.aten._thnn_fused_gru_cell(
+                device_input_gates,
+                device_hidden_gates,
+                device_hx,
+                device_input_bias,
+                device_hidden_bias,
+            )
+        _assert_close_tensor(actual_hy, expected_hy, f"{spec.surface}.hy", rtol=1e-4, atol=1e-4)
+        if tuple(workspace.shape) != (2, 24):
+            raise AssertionError(f"{spec.surface} returned malformed workspace shape {tuple(workspace.shape)}")
+        return
+
+    if spec.surface in {"aten::_thnn_fused_lstm_cell", "aten::_thnn_fused_lstm_cell.out"}:
+        input_gates = torch.randn(2, 16)
+        hidden_gates = torch.randn(2, 16)
+        cx = torch.randn(2, 4)
+        input_bias = torch.randn(16)
+        hidden_bias = torch.randn(16)
+        in_gate, forget_gate, cell_gate, out_gate = (input_gates + hidden_gates + input_bias + hidden_bias).chunk(4, 1)
+        in_gate = torch.sigmoid(in_gate)
+        forget_gate = torch.sigmoid(forget_gate)
+        cell_gate = torch.tanh(cell_gate)
+        out_gate = torch.sigmoid(out_gate)
+        expected_cy = forget_gate * cx + in_gate * cell_gate
+        expected_hy = out_gate * torch.tanh(expected_cy)
+        device_input_gates = input_gates.to(device)
+        device_hidden_gates = hidden_gates.to(device)
+        device_cx = cx.to(device)
+        device_input_bias = input_bias.to(device)
+        device_hidden_bias = hidden_bias.to(device)
+        if spec.surface.endswith(".out"):
+            out0 = torch.empty_like(device_cx)
+            out1 = torch.empty_like(device_cx)
+            out2 = torch.empty(2, 16, device=device)
+            actual_hy, actual_cy, workspace = torch.ops.aten._thnn_fused_lstm_cell.out(
+                device_input_gates,
+                device_hidden_gates,
+                device_cx,
+                device_input_bias,
+                device_hidden_bias,
+                out0=out0,
+                out1=out1,
+                out2=out2,
+            )
+            assert_out_identity(actual_hy, out0, f"{spec.surface}.out0")
+            assert_out_identity(actual_cy, out1, f"{spec.surface}.out1")
+            assert_out_identity(workspace, out2, f"{spec.surface}.out2")
+        else:
+            actual_hy, actual_cy, workspace = torch.ops.aten._thnn_fused_lstm_cell(
+                device_input_gates,
+                device_hidden_gates,
+                device_cx,
+                device_input_bias,
+                device_hidden_bias,
+            )
+        _assert_close_tensor(actual_hy, expected_hy, f"{spec.surface}.hy", rtol=1e-4, atol=1e-4)
+        _assert_close_tensor(actual_cy, expected_cy, f"{spec.surface}.cy", rtol=1e-4, atol=1e-4)
+        if tuple(workspace.shape) != (2, 16):
+            raise AssertionError(f"{spec.surface} returned malformed workspace shape {tuple(workspace.shape)}")
+        return
+
+    raise AssertionError(f"No PrivateUse1 THNN cell implementation for {spec.surface}")
+
+
+def _run_privateuse1_pin_memory(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    torch.manual_seed(4014)
+    source = torch.randn(4, device=device)
+
+    if spec.surface == "aten::_pin_memory":
+        actual = torch.ops.aten._pin_memory(source, None)
+    elif spec.surface == "aten::_pin_memory.out":
+        out = torch.empty_like(source)
+        actual = torch.ops.aten._pin_memory.out(source, None, out=out)
+        assert_out_identity(actual, out, spec.surface)
+    elif spec.surface == "aten::pin_memory":
+        actual = torch.ops.aten.pin_memory(source, None)
+    else:
+        raise AssertionError(f"No PrivateUse1 pin-memory implementation for {spec.surface}")
+
+    if tuple(actual.shape) != tuple(source.shape):
+        raise AssertionError(f"{spec.surface} returned malformed shape {tuple(actual.shape)}")
+    if actual.dtype != source.dtype:
+        raise AssertionError(f"{spec.surface} returned malformed dtype {actual.dtype}")
+    if actual.device.type != source.device.type:
+        raise AssertionError(f"{spec.surface} moved tensor to {actual.device}; expected device-preserving no-op semantics")
+    _assert_close_tensor(actual, source, spec.surface)
+
+
 def _run_mps_convolution(spec: OracleSpec, device: str) -> None:
     _check_backend_gate(spec, device)
     torch.manual_seed(31415)
@@ -1477,6 +1950,12 @@ _RUNNERS: dict[str, Callable[[OracleSpec, str], None]] = {
     "nested_select_backward": _run_nested_select_backward,
     "sparse_constructor_property": _run_sparse_constructor_property,
     "cpu_flash_attention": _run_cpu_flash_attention,
+    "privateuse1_attention": _run_privateuse1_attention,
+    "privateuse1_matmul_backward": _run_privateuse1_matmul_backward,
+    "privateuse1_resize_output": _run_privateuse1_resize_output,
+    "privateuse1_batch_norm_forward": _run_privateuse1_batch_norm_forward,
+    "privateuse1_thnn_cell": _run_privateuse1_thnn_cell,
+    "privateuse1_pin_memory": _run_privateuse1_pin_memory,
     "mps_convolution": _run_mps_convolution,
     "mps_sdpa_math": _run_mps_sdpa_math,
     "mps_lstm": _run_mps_lstm,
@@ -1708,6 +2187,117 @@ for _surface in (
         backend_gate="cpu",
         semantic_level=5,
         reason="CPU flash-attention helper is validated against public CPU scaled_dot_product_attention forward/backward.",
+    ))
+
+for _surface in (
+    "aten::_efficient_attention_forward",
+    "aten::_flash_attention_forward",
+    "aten::_scaled_dot_product_efficient_attention",
+    "aten::_scaled_dot_product_flash_attention",
+    "aten::_scaled_dot_product_fused_attention_overrideable",
+    "aten::_efficient_attention_backward",
+    "aten::_flash_attention_backward",
+    "aten::_scaled_dot_product_efficient_attention_backward",
+    "aten::_scaled_dot_product_flash_attention_backward",
+    "aten::_scaled_dot_product_fused_attention_overrideable_backward",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="privateuse1_attention_public_sdpa",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="privateuse1_attention",
+        backend_gate="privateuse1",
+        semantic_level=5,
+        reason="PrivateUse1 attention internals are directly validated against public CPU scaled_dot_product_attention forward values and autograd gradients.",
+    ))
+
+_register(OracleSpec(
+    surface="aten::matmul_backward",
+    oracle_id="privateuse1_matmul_backward_formula",
+    coverage_status="covered_property",
+    coverage_kind="property",
+    runner="privateuse1_matmul_backward",
+    backend_gate="privateuse1",
+    semantic_level=5,
+    reason="PrivateUse1 matmul_backward is validated against explicit matrix-gradient formulas and output_mask behavior.",
+))
+
+_register(OracleSpec(
+    surface="aten::matmul_backward.out",
+    oracle_id="privateuse1_matmul_backward_formula",
+    coverage_status="covered_property",
+    coverage_kind="property",
+    runner="privateuse1_matmul_backward",
+    backend_gate="privateuse1",
+    semantic_level=5,
+    reason="PrivateUse1 matmul_backward.out is validated against explicit matrix-gradient formulas for enabled outputs and out identity.",
+))
+
+for _surface in (
+    "aten::_resize_output",
+    "aten::_resize_output.out",
+    "aten::_resize_output_",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="privateuse1_resize_output_property",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="privateuse1_resize_output",
+        backend_gate="privateuse1",
+        semantic_level=5,
+        reason="PrivateUse1 resize-output helpers are validated for device-preserving shape mutation and in-place return identity.",
+    ))
+
+for _surface in (
+    "aten::batch_norm_stats",
+    "aten::batch_norm_stats.out",
+    "aten::batch_norm_elemt",
+    "aten::batch_norm_elemt.out",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="privateuse1_batch_norm_forward_formula",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="privateuse1_batch_norm_forward",
+        backend_gate="privateuse1",
+        semantic_level=5,
+        reason="PrivateUse1 batch-norm forward helpers are validated against explicit per-channel mean, invstd, and normalization formulas.",
+    ))
+
+for _surface in (
+    "aten::_thnn_fused_gru_cell",
+    "aten::_thnn_fused_gru_cell.out",
+    "aten::_thnn_fused_lstm_cell",
+    "aten::_thnn_fused_lstm_cell.out",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="privateuse1_thnn_cell_formula",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="privateuse1_thnn_cell",
+        backend_gate="privateuse1",
+        semantic_level=5,
+        reason="PrivateUse1 fused THNN GRU/LSTM forward cells are validated against explicit gate formulas and workspace shape contracts.",
+    ))
+
+for _surface in (
+    "aten::_pin_memory",
+    "aten::_pin_memory.out",
+    "aten::pin_memory",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="privateuse1_pin_memory_noop",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="privateuse1_pin_memory",
+        backend_gate="privateuse1",
+        semantic_level=5,
+        reason="PrivateUse1 pinned-memory surfaces are validated as device-preserving value-copy no-ops; no host-pinned allocator semantics are claimed.",
     ))
 
 for _surface in (

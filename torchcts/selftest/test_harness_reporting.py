@@ -271,6 +271,25 @@ def test_probe_capability_supports_nested_named_tensor_and_fp8(monkeypatch):
     assert "torch.float8_e4m3fn" in scripts[2]
 
 
+def test_probe_capability_imports_backend_before_device_probe(monkeypatch):
+    scripts = []
+
+    def fake_run(cmd, capture_output, text, timeout):
+        scripts.append(cmd[-1])
+        return SimpleNamespace(returncode=0, stdout="SUCCESS\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert device_module.probe_capability(
+        "privateuseone",
+        "sparse",
+        backend_import="privateuseone_backend",
+    )
+    assert "_torchcts_backend_import = 'privateuseone_backend'" in scripts[0]
+    assert "importlib.import_module(_torchcts_backend_import)" in scripts[0]
+    assert "torch.sparse_coo_tensor" in scripts[0]
+
+
 def test_probe_capability_result_preserves_failure_evidence(monkeypatch):
     def fake_run(cmd, capture_output, text, timeout):
         return SimpleNamespace(
@@ -3833,12 +3852,20 @@ def test_coverage_audit_publishes_pending_review_metadata():
     review = coverage_module.build_pending_review_artifact(audit)
 
     flash = by_name["aten::_scaled_dot_product_flash_attention"]
+    quantized_flash = by_name["aten::_scaled_dot_product_flash_attention.quantized"]
+    pin_memory = by_name["aten::_pin_memory"]
     fused_dropout = by_name["aten::_fused_dropout"]
     nested_softmax = by_name["aten::_nested_tensor_softmax_with_shape"]
 
-    assert flash["status"] == "pending_property"
-    assert flash["pending_review"]["blocker_type"] == "needs_public_proxy_proof"
-    assert flash["pending_review"]["required_closure"] == "prove_public_proxy_or_add_direct_runner"
+    assert flash["status"] == "covered_property"
+    assert flash["oracle"]["oracle_id"] == "privateuse1_attention_public_sdpa"
+
+    assert quantized_flash["status"] == "pending_property"
+    assert quantized_flash["pending_review"]["blocker_type"] == "needs_public_proxy_proof"
+    assert quantized_flash["pending_review"]["required_closure"] == "prove_public_proxy_or_add_direct_runner"
+
+    assert pin_memory["status"] == "covered_property"
+    assert pin_memory["oracle"]["oracle_id"] == "privateuse1_pin_memory_noop"
 
     assert fused_dropout["status"] == "pending_backend_pack"
     assert fused_dropout["pending_review"]["blocker_type"] == "needs_backend_pack"
@@ -3864,6 +3891,16 @@ def test_oracle_runner_executes_cpu_oracle_surfaces():
     run_oracle_for_surface("aten::_make_dual_copy", "cpu")
     run_oracle_for_surface("aten::_make_dual_copy.out", "cpu")
     run_oracle_for_surface("aten::_nested_select_backward", "cpu")
+
+
+def test_privateuse1_oracle_surfaces_require_privateuse1_device():
+    from torchcts.core.oracles import OracleUnavailable, run_oracle_for_surface
+
+    with pytest.raises(OracleUnavailable, match="requires a PrivateUse1 backend"):
+        run_oracle_for_surface("aten::_scaled_dot_product_flash_attention", "cpu")
+
+    with pytest.raises(OracleUnavailable, match="requires a PrivateUse1 backend"):
+        run_oracle_for_surface("aten::_pin_memory", "cpu")
 
 
 def test_mps_int4_oracle_dimension_guard():
