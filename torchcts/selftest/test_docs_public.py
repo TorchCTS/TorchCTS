@@ -26,9 +26,13 @@ import pytest
 pytestmark = pytest.mark.covers_category("selftest")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_README = REPO_ROOT / "README.md"
 
 PUBLIC_DOCS = [
+    PACKAGE_README,
     REPO_ROOT / "docs" / "README.md",
+    REPO_ROOT / "docs" / "harness.md",
+    REPO_ROOT / "docs" / "release.md",
     REPO_ROOT / "docs" / "coverage" / "README.md",
     REPO_ROOT / "docs" / "coverage" / "oracle-authoring.md",
     REPO_ROOT / "docs" / "coverage" / "contract-evidence.md",
@@ -53,6 +57,22 @@ RESEARCH_NOTE_FRAGMENTS = [
     "tbd",
 ]
 
+STALE_POLICY_FRAGMENTS = [
+    "known CPU reference failures",
+    "known CPU failures",
+    "Unsupported features are skipped",
+    "Use `issues.md`",
+    "Use issues.md",
+]
+
+REQUIRED_PUBLIC_CONTROLS = [
+    "--dtype",
+    "--adaptive-isolation",
+    "--known-segfault-audit",
+    "coverage check --fail-on-unknown",
+    "scripts/check_release_hygiene.py",
+]
+
 
 def _markdown_section(text: str, title: str) -> str:
     marker = f"## {title}"
@@ -68,10 +88,25 @@ def test_public_coverage_docs_exist_and_are_linked():
     assert missing == []
 
     docs_index = (REPO_ROOT / "docs" / "README.md").read_text(encoding="utf-8")
-    package_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    package_readme = PACKAGE_README.read_text(encoding="utf-8")
 
+    assert "(harness.md)" in docs_index
     assert "(coverage/README.md)" in docs_index
-    assert "(docs/coverage/README.md)" in package_readme
+    assert "(release.md)" in docs_index
+    assert "https://github.com/TorchCTS/TorchCTS/blob/main/docs/harness.md" in package_readme
+    assert "https://github.com/TorchCTS/TorchCTS/blob/main/docs/coverage/README.md" in package_readme
+    assert "https://github.com/TorchCTS/TorchCTS/blob/main/docs/release.md" in package_readme
+
+
+def test_package_readme_is_pypi_long_description_source():
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    package_readme = PACKAGE_README.read_text(encoding="utf-8")
+    release_doc = (REPO_ROOT / "docs" / "release.md").read_text(encoding="utf-8")
+
+    assert 'readme = "README.md"' in pyproject
+    assert "PyPI" in package_readme
+    assert "long description" in release_doc
+    assert "root `README.md`" in release_doc
 
 
 def test_public_coverage_docs_do_not_contain_research_note_language():
@@ -83,6 +118,29 @@ def test_public_coverage_docs_do_not_contain_research_note_language():
                 failures.append(f"{path.relative_to(REPO_ROOT)} contains {fragment!r}")
 
     assert failures == []
+
+
+def test_public_docs_do_not_contain_stale_runtime_policy_language():
+    failures = []
+    for path in PUBLIC_DOCS:
+        text = path.read_text(encoding="utf-8")
+        for fragment in STALE_POLICY_FRAGMENTS:
+            if fragment in text:
+                failures.append(f"{path.relative_to(REPO_ROOT)} contains stale fragment {fragment!r}")
+
+    assert failures == []
+
+
+def test_public_docs_cover_current_runtime_and_release_controls():
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in PUBLIC_DOCS)
+
+    missing = [fragment for fragment in REQUIRED_PUBLIC_CONTROLS if fragment not in combined]
+    assert missing == []
+
+    assert "diagnostic probe evidence" in combined
+    assert "structured accounting" in combined
+    assert "subprocess isolation never skips" in combined
+    assert "PyPI README validation" in combined
 
 
 def test_dynamic_int4_contract_evidence_matches_current_audit():

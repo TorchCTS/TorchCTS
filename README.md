@@ -6,18 +6,20 @@
 TorchCTS is a manifest-driven PyTorch backend validation suite for backend
 developers. It imports PyTorch's own OpInfo database from the installed PyTorch
 build, builds tests from OpInfo operator metadata, dtype metadata, sample-input
-generators, and error-input generators, then augments that matrix with TorchCTS
-metadata for known CPU reference failures and undefined IEEE 754 NaN/Inf cases.
-TorchCTS also includes hand-authored coverage suites for behavior PyTorch's
-dynamic OpInfo list does not fully express, including layout, stride, memory
-format, sparse/nested tensors, dtype-specific behavior, compiler behavior,
-training workflows, device APIs, memory behavior, stress cases, and model
-workloads.
+generators, and error-input generators. TorchCTS augments that matrix with
+hand-authored suites and generated dispatcher-surface coverage for behavior
+PyTorch's dynamic OpInfo list does not fully express, including layout, stride,
+memory format, sparse/nested tensors, dtype-specific behavior, compiler
+behavior, training workflows, device APIs, memory behavior, stress cases, and
+model workloads.
 
-The suite compares backend behavior against CPU references where the built-in
-test has a CPU oracle. Unsupported features are skipped when tests declare the
-matching capability requirement, and saved JSON keeps compact skip records so
-reports can distinguish passed, failed, skipped, and not-run behavior.
+TorchCTS is intended to be a strict conformance gate. A manifest declaration is
+a claim the backend has to prove: declared dtypes and capabilities collect and
+run, and runtime backend errors are reported as failures or errors. Manifest
+entries that explicitly say a dtype or capability is not supported are recorded
+as structured accounting records instead of disappearing from reports.
+Subprocess isolation for crash-prone tests protects the pytest parent process,
+but it never skips, xfails, or downgrades a backend failure.
 
 ## Why TorchCTS?
 
@@ -25,14 +27,16 @@ reports can distinguish passed, failed, skipped, and not-run behavior.
   from PyTorch OpInfo for the installed PyTorch build, plus hand-authored suites
   that complete coverage for layout, stride, dtype, device, compiler, training,
   memory, and workload behavior.
-- **Manifest-driven gating**: A `manifest.py` declares supported dtypes,
+- **Manifest-driven accounting**: A `manifest.py` declares supported dtypes,
   capabilities, resource limits, tolerance overrides, container formats, and
-  custom test directories.
+  custom test directories. Positive declarations run as testable claims;
+  negative declarations are visible as structured not-run records.
 - **Honest reports**: Results preserve pass/fail/skip data and generate
-  scorecards that separate unsupported features from failing features.
+  scorecards that separate unsupported manifest claims, deselected coverage, and
+  backend failures.
 - **Backend-oriented controls**: Resource caps, explicit tolerance overrides,
-  capability filters, custom quantized decode hooks, and CPU harness validation
-  are built into the normal workflow.
+  dtype narrowing, capability filters, custom quantized decode hooks, crash
+  isolation, and CPU harness validation are built into the normal workflow.
 
 TorchCTS's operator matrix starts from PyTorch OpInfo rather than raw dispatcher
 enumeration of every internal `aten::` overload. Full backend coverage comes
@@ -95,6 +99,17 @@ override the manifest for one run:
 torchcts run --device mps --level 4
 ```
 
+Use `--dtype` to narrow one run to specific dtypes. Short and fully qualified
+names are accepted:
+
+```bash
+torchcts run --device mps --level 4 --dtype float32 --dtype torch.bfloat16
+```
+
+The dtype filter rewrites the effective manifest for that run only. Selected
+dtypes collect as supported even if the original manifest used a narrower dtype
+declaration.
+
 Semantic level is not a capability claim and does not replace dtype, layout,
 resource, or capability gating. It is a priority/depth axis: level 1 is the fast
 primitive baseline, level 4 is broad production behavior, and level 8 is
@@ -105,6 +120,9 @@ For a collection-only skip audit:
 ```bash
 torchcts show-skips --device mps --level 4
 ```
+
+`show-skips` reports structured manifest and semantic-level accounting without
+executing tests.
 
 ### 5. Report
 
@@ -140,7 +158,40 @@ generated sample case families.
 
 Coverage policy, oracle-authoring rules, backend-pack rules, exclusion policy,
 and accepted contract evidence are documented in
-[`docs/coverage/`](docs/coverage/README.md).
+[`docs/coverage/`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/coverage/README.md).
+
+## Runtime Policy
+
+Manifest dtype and capability settings have strict meanings:
+
+- `True` means the backend claims support. TorchCTS collects matching tests and
+  any runtime unsupported-operation error is a test failure or error.
+- `False` means the backend does not claim support. TorchCTS records structured
+  manifest accounting and removes matching tests from execution.
+- Dtype regex declarations allow only matching operators; non-matching operator
+  dtypes become structured accounting records.
+- Missing dtypes in concrete hand-authored tests are recorded as
+  `dtype_not_listed`.
+
+TorchCTS still runs small diagnostic probes for declared dtypes and
+capabilities. Probe failures are written to the result JSON and diagnostic JSONL
+artifacts, but probes do not rewrite the manifest, skip tests, or abort a run.
+
+Crash-prone tests can be isolated in subprocesses:
+
+```bash
+torchcts run --device mps --adaptive-isolation auto
+python -m pytest --collect-only --known-segfault-audit --device mps --level 8
+```
+
+Known crash rules come from the packaged reviewed ledger and adaptive isolation
+comes from matching prior result/runlog evidence on the same hardware key,
+device, and PyTorch minor-version family. Both mechanisms only choose where a
+test executes. Passing, failing, timing out, or crashing keeps the same result
+semantics it would have had without isolation.
+
+More detail is in
+[`docs/harness.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/harness.md).
 
 ## Manifest Notes
 
@@ -185,7 +236,8 @@ TorchCTS provides these subcommands:
 
 - `init`: Initialize `manifest.py` from a template.
 - `run`: Run the test suite against the target backend. Pass `--level N` to
-  override the manifest semantic run depth for that run.
+  override the manifest semantic run depth for that run. Pass `--dtype DTYPE`
+  one or more times to narrow the effective manifest for that run.
 - `show-skips`: Dry-run collection to show skipped tests and reasons. Pass
   `--level N` to audit a specific semantic run depth.
 - `report`: Regenerate scorecards and reports from JSON results.
@@ -202,8 +254,21 @@ TorchCTS provides these subcommands:
 CPU-compatible tests without probing an accelerator; it is not a substitute for
 running the suite on the backend you intend to ship.
 
+Pytest-level controls used by the CLI include:
+
+- `--adaptive-isolation {auto,off}`: isolate tests with matching prior crash,
+  timeout, or suspected-hang evidence. CLI runs default to `auto`.
+- `--known-segfault-policy {isolate,off}`: enable or disable reviewed known
+  crash subprocess isolation.
+- `--known-segfault-audit`: collect tests, validate active known-crash rules,
+  print rule coverage, and exit without running tests.
+
 ## Project Structure
 
 - The package entry point is `torchcts`.
 - Manifest templates are in `torchcts/templates/`.
 - Test execution results are saved under `./results/`.
+- Runtime harness policy is documented in
+  [`docs/harness.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/harness.md).
+- Release validation is documented in
+  [`docs/release.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/release.md).

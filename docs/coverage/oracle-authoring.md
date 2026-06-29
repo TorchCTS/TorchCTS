@@ -40,6 +40,18 @@ the operation family:
 - positive and negative zero where sign is observable;
 - subnormal values where the backend contract preserves them.
 
+Some installed PyTorch CPU reference paths do not provide a valid oracle for
+all IEEE754 special values. TorchCTS handles those as version-scoped
+restrictions: generated tests must use finite clean inputs for the affected
+operator family until a newer PyTorch version removes the restriction. Version
+policy is cumulative, so a rule for one PyTorch minor version applies to newer
+versions until a later version explicitly removes it.
+
+Do not broaden generated special-value coverage when the CPU reference can
+hang, crash, or return undefined behavior for that input family. Add or remove
+the version-scoped restriction first, then refresh coverage artifacts and
+selftests.
+
 ## Backend Availability
 
 Use `OracleUnavailable("backend_not_available: ...")` when TorchCTS has a

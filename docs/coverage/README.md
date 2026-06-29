@@ -47,7 +47,8 @@ Default artifacts are written under `results/coverage/`:
 
 Unknown tensor-touching surfaces warn loudly. For compatibility they do not fail
 the coverage command by default, but `coverage check --fail-on-unknown` is the
-release gate and must pass before pushing or publishing.
+release gate and must pass before pushing or publishing. The release target is
+zero unknown tensor-touching dispatcher surfaces.
 
 Malformed exclusion JSON, invalid exclusion names, and internally inconsistent
 coverage metadata fail the coverage check.
@@ -62,6 +63,6 @@ target backend and direct dispatcher path.
 ## Source Of Truth
 
 Use `results/coverage/audit.json` for current coverage status and counts. Use
-`issues.md` for current implementation planning. Use this directory for stable
-coverage policy, oracle authoring standards, accepted contracts, backend-pack
-rules, and exclusion policy.
+`results/coverage/pending_review.json` for current pending and exclusion review
+records. Use this directory for stable coverage policy, oracle authoring
+standards, accepted contracts, backend-pack rules, and exclusion policy.
