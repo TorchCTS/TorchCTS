@@ -31,6 +31,7 @@ import torch
 
 import torchcts.conftest as harness
 import torchcts.cli as cli_module
+import torchcts.core.comparer as comparer_module
 import torchcts.core.coverage as coverage_module
 import torchcts.core.device as device_module
 import torchcts.core.opinfo_adapter as opinfo_adapter_module
@@ -1605,6 +1606,308 @@ def test_compare_tensors_records_quality_warning_for_usable_pass():
     assert metrics["usable_pass"] is True
     assert metrics["quality_warning"]
     clear_metrics()
+
+
+def _matching_sparse_pair(layout_name, values=None):
+    if values is None:
+        values = torch.tensor([1.0, 2.0], dtype=torch.float32)
+    expected_values = values.clone()
+
+    if layout_name == "coo":
+        indices = torch.tensor([[0, 1], [1, 0]])
+        actual = torch.sparse_coo_tensor(indices, values, (2, 2)).coalesce()
+        expected = torch.sparse_coo_tensor(indices.clone(), expected_values, (2, 2)).coalesce()
+        return actual, expected
+    if layout_name == "csr":
+        crow = torch.tensor([0, 1, 2])
+        col = torch.tensor([1, 0])
+        return (
+            torch.sparse_csr_tensor(crow, col, values, size=(2, 2)),
+            torch.sparse_csr_tensor(crow.clone(), col.clone(), expected_values, size=(2, 2)),
+        )
+    if layout_name == "csc":
+        ccol = torch.tensor([0, 1, 2])
+        row = torch.tensor([1, 0])
+        return (
+            torch.sparse_csc_tensor(ccol, row, values, size=(2, 2)),
+            torch.sparse_csc_tensor(ccol.clone(), row.clone(), expected_values, size=(2, 2)),
+        )
+    if layout_name == "bsr":
+        crow = torch.tensor([0, 1, 2])
+        col = torch.tensor([0, 0])
+        actual_values = values.reshape(2, 1, 1)
+        expected_values = expected_values.reshape(2, 1, 1)
+        return (
+            torch.sparse_bsr_tensor(crow, col, actual_values, size=(2, 1)),
+            torch.sparse_bsr_tensor(crow.clone(), col.clone(), expected_values, size=(2, 1)),
+        )
+    if layout_name == "bsc":
+        ccol = torch.tensor([0, 2])
+        row = torch.tensor([0, 1])
+        actual_values = values.reshape(2, 1, 1)
+        expected_values = expected_values.reshape(2, 1, 1)
+        return (
+            torch.sparse_bsc_tensor(ccol, row, actual_values, size=(2, 1)),
+            torch.sparse_bsc_tensor(ccol.clone(), row.clone(), expected_values, size=(2, 1)),
+        )
+    raise AssertionError(f"unknown sparse layout fixture: {layout_name}")
+
+
+def _sparse_structure_mismatch_pair(layout_name):
+    actual, expected = _matching_sparse_pair(layout_name)
+    if layout_name == "coo":
+        expected = torch.sparse_coo_tensor(
+            torch.tensor([[0, 1], [0, 1]]),
+            torch.tensor([1.0, 2.0]),
+            (2, 2),
+        ).coalesce()
+    elif layout_name == "csr":
+        expected = torch.sparse_csr_tensor(
+            torch.tensor([0, 2, 2]),
+            torch.tensor([0, 1]),
+            torch.tensor([1.0, 2.0]),
+            size=(2, 2),
+        )
+    elif layout_name == "csc":
+        expected = torch.sparse_csc_tensor(
+            torch.tensor([0, 2, 2]),
+            torch.tensor([0, 1]),
+            torch.tensor([1.0, 2.0]),
+            size=(2, 2),
+        )
+    elif layout_name == "bsr":
+        expected = torch.sparse_bsr_tensor(
+            torch.tensor([0, 2, 2]),
+            torch.tensor([0, 0]),
+            torch.ones(2, 1, 1),
+            size=(2, 1),
+        )
+    elif layout_name == "bsc":
+        expected = torch.sparse_bsc_tensor(
+            torch.tensor([0, 1]),
+            torch.tensor([1]),
+            torch.ones(1, 1, 1),
+            size=(2, 1),
+        )
+    return actual, expected
+
+
+@pytest.mark.parametrize("layout_name", ["coo", "csr", "csc", "bsr", "bsc"])
+def test_compare_tensors_sparse_layouts_pass(layout_name):
+    clear_metrics()
+    actual, expected = _matching_sparse_pair(layout_name)
+
+    compare_tensors(actual, expected, "exact", torch.float32)
+
+    metrics = get_metrics()
+    assert metrics["passed"] is True
+    assert metrics["max_abs_err"] == 0.0
+    assert metrics["max_rel_err"] == 0.0
+    assert metrics["cosim"] == 1.0
+    clear_metrics()
+
+
+@pytest.mark.parametrize("layout_name", ["coo", "csr", "csc", "bsr", "bsc"])
+def test_compare_tensors_sparse_structure_mismatch_records_failure(layout_name):
+    clear_metrics()
+    actual, expected = _sparse_structure_mismatch_pair(layout_name)
+
+    with pytest.raises(AssertionError, match="Sparse structure mismatch|Shape mismatch"):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+    assert get_metrics()["passed"] is False
+    assert get_metrics()["error_msg"]
+    clear_metrics()
+
+
+def test_compare_tensors_sparse_coalescedness_mismatch_fails():
+    clear_metrics()
+    indices = torch.tensor([[0, 1], [1, 0]])
+    actual = torch.sparse_coo_tensor(indices, torch.tensor([1.0, 2.0]), (2, 2))
+    expected = actual.coalesce()
+
+    with pytest.raises(AssertionError, match="is_coalesced"):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+    assert get_metrics()["passed"] is False
+    clear_metrics()
+
+
+def test_compare_tensors_sparse_values_use_exact_tolerance():
+    actual, expected = _matching_sparse_pair("coo")
+    actual = torch.sparse_coo_tensor(
+        actual._indices(),
+        torch.tensor([1.0, 3.0]),
+        actual.shape,
+    ).coalesce()
+
+    with pytest.raises(AssertionError):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+
+def test_compare_tensors_sparse_values_record_quality_warning_for_usable_pass():
+    clear_metrics()
+    indices = torch.tensor([[0], [0]])
+    actual = torch.sparse_coo_tensor(indices, torch.tensor([1.00003]), (1, 1)).coalesce()
+    expected = torch.sparse_coo_tensor(indices.clone(), torch.tensor([1.0]), (1, 1)).coalesce()
+
+    compare_tensors(actual, expected, "elementwise", torch.float32)
+
+    metrics = get_metrics()
+    assert metrics["golden_pass"] is False
+    assert metrics["usable_pass"] is True
+    assert metrics["quality_warning"]
+    clear_metrics()
+
+
+def test_compare_tensors_empty_sparse_values_pass_with_neutral_metrics():
+    clear_metrics()
+    indices = torch.empty((2, 0), dtype=torch.long)
+    values = torch.empty((0,), dtype=torch.float32)
+    actual = torch.sparse_coo_tensor(indices, values, (2, 2)).coalesce()
+    expected = torch.sparse_coo_tensor(indices.clone(), values.clone(), (2, 2)).coalesce()
+
+    compare_tensors(actual, expected, "exact", torch.float32)
+
+    metrics = get_metrics()
+    assert metrics["max_abs_err"] == 0.0
+    assert metrics["max_rel_err"] == 0.0
+    assert metrics["cosim"] == 1.0
+    clear_metrics()
+
+
+def test_compare_tensors_sparse_block_value_shape_mismatch_fails():
+    actual = torch.sparse_bsr_tensor(
+        torch.tensor([0, 1, 2]),
+        torch.tensor([0, 0]),
+        torch.ones(2, 1, 1),
+        size=(2, 2),
+    )
+    expected = torch.sparse_bsr_tensor(
+        torch.tensor([0, 1, 2]),
+        torch.tensor([0, 0]),
+        torch.ones(2, 1, 2),
+        size=(2, 2),
+    )
+
+    with pytest.raises(AssertionError, match="Sparse block value shape mismatch"):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+
+def test_compare_tensors_sparse_bsc_block_value_shape_mismatch_fails():
+    actual = torch.sparse_bsc_tensor(
+        torch.tensor([0, 1, 2]),
+        torch.tensor([0, 0]),
+        torch.ones(2, 1, 1),
+        size=(2, 2),
+    )
+    expected = torch.sparse_bsc_tensor(
+        torch.tensor([0, 1, 2]),
+        torch.tensor([0, 0]),
+        torch.ones(2, 2, 1),
+        size=(2, 2),
+    )
+
+    with pytest.raises(AssertionError, match="Sparse block value shape mismatch"):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+
+def test_compare_tensors_sparse_vs_dense_fails_with_layout_mismatch():
+    actual, _expected = _matching_sparse_pair("coo")
+
+    with pytest.raises(AssertionError, match="Sparse layout mismatch"):
+        compare_tensors(actual, actual.to_dense(), "exact", torch.float32)
+
+
+def test_compare_nan_propagation_sparse_values_and_coordinates():
+    indices = torch.tensor([[0, 1], [1, 0]])
+    actual = torch.sparse_coo_tensor(
+        indices,
+        torch.tensor([float("nan"), 1.0]),
+        (2, 2),
+    ).coalesce()
+    expected = torch.sparse_coo_tensor(
+        indices.clone(),
+        torch.tensor([float("nan"), 1.0]),
+        (2, 2),
+    ).coalesce()
+    compare_nan_propagation(actual, expected)
+
+    mismatched_expected = torch.sparse_coo_tensor(
+        torch.tensor([[0, 1], [0, 1]]),
+        torch.tensor([float("nan"), 1.0]),
+        (2, 2),
+    ).coalesce()
+    with pytest.raises(AssertionError, match="Sparse structure mismatch"):
+        compare_nan_propagation(actual, mismatched_expected)
+
+
+def test_compare_nan_propagation_compressed_sparse_values():
+    actual, expected = _matching_sparse_pair(
+        "csr",
+        values=torch.tensor([float("nan"), 1.0]),
+    )
+
+    compare_nan_propagation(actual, expected)
+
+
+def test_compare_inf_propagation_complex_sparse_values_and_signs():
+    actual, expected = _matching_sparse_pair(
+        "csr",
+        values=torch.tensor([complex(float("inf"), 0.0), complex(1.0, 0.0)], dtype=torch.complex64),
+    )
+    compare_inf_propagation(actual, expected)
+
+    _same_actual, mismatched = _matching_sparse_pair(
+        "csr",
+        values=torch.tensor([complex(float("-inf"), 0.0), complex(1.0, 0.0)], dtype=torch.complex64),
+    )
+    with pytest.raises(AssertionError, match="Inf sign mismatch"):
+        compare_inf_propagation(actual, mismatched)
+
+
+def test_compare_tensors_unknown_sparse_layout_warns_and_densifies(monkeypatch):
+    clear_metrics()
+    actual, expected = _matching_sparse_pair("coo")
+    monkeypatch.delitem(comparer_module._SPARSE_LAYOUT_HANDLERS, torch.sparse_coo)
+
+    with pytest.warns(UserWarning, match="does not know how to compare"):
+        compare_tensors(actual, expected, "exact", torch.float32)
+
+    assert "falling back to dense comparison" in get_metrics()["quality_warning"]
+    clear_metrics()
+
+
+def test_compare_tensors_unknown_sparse_layout_warns_before_shape_failure(monkeypatch):
+    clear_metrics()
+    actual, _expected = _matching_sparse_pair("coo")
+    monkeypatch.delitem(comparer_module._SPARSE_LAYOUT_HANDLERS, torch.sparse_coo)
+
+    with pytest.warns(UserWarning, match="does not know how to compare"):
+        with pytest.raises(AssertionError, match="Shape mismatch"):
+            compare_tensors(actual, torch.ones(3, 3), "exact", torch.float32)
+
+    assert "falling back to dense comparison" in get_metrics()["quality_warning"]
+    clear_metrics()
+
+
+def test_compare_unknown_sparse_densification_failure_is_actionable(monkeypatch):
+    class FailingSparse:
+        layout = "torch.sparse_future"
+
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def to_dense(self):
+            raise RuntimeError("future sparse cannot densify")
+
+    monkeypatch.setattr(comparer_module, "_is_sparse_like_tensor", lambda _t: True)
+
+    with pytest.raises(AssertionError, match="Could not densify sparse layout"):
+        comparer_module._densify_sparse_for_unknown_compare(FailingSparse())
 
 
 def test_manifest_tolerance_override_supports_string_keys():
@@ -3249,6 +3552,157 @@ def test_generated_entries_and_skip_reasons(capsys):
         skip_until_strategy_exists(entries[1], "out_variant")
 
 
+def test_cli_dtype_filter_normalizes_and_deduplicates():
+    effective, labels = harness._normalize_cli_dtype_filter([
+        "float32",
+        "torch.float32",
+        "complex128",
+    ])
+
+    assert list(effective) == [torch.float32, torch.complex128]
+    assert all(value is True for value in effective.values())
+    assert labels == ["torch.float32", "torch.complex128"]
+
+
+def test_cli_dtype_filter_rejects_unknown_dtype():
+    with pytest.raises(pytest.UsageError, match="Unknown --dtype value"):
+        harness._normalize_cli_dtype_filter(["definitely_not_a_dtype"])
+
+
+def test_cli_dtype_filter_replaces_effective_manifest_dtypes():
+    manifest = {
+        "supported_dtypes": {
+            torch.float32: True,
+            torch.float64: False,
+            "torch.complex128": "_foreach",
+        }
+    }
+
+    labels = harness._apply_cli_dtype_filter(manifest, ["float64", "torch.complex128"])
+
+    assert labels == ["torch.float64", "torch.complex128"]
+    assert manifest["supported_dtypes"] == {
+        torch.float64: True,
+        torch.complex128: True,
+    }
+    assert manifest["dtype_filter"] == ["torch.float64", "torch.complex128"]
+    assert manifest["_declared_supported_dtypes"] == [
+        {"dtype": "torch.float32", "value": True},
+        {"dtype": "torch.float64", "value": False},
+        {"dtype": "torch.complex128", "value": "_foreach"},
+    ]
+
+
+def test_generated_foreach_collection_is_dtype_parametrized():
+    entry = {
+        "name": "aten::_foreach_add.List",
+        "base_name": "_foreach_add",
+        "status": "covered_generated",
+        "surface_kind": "functional_data",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "binary",
+            }
+        },
+    }
+    manifest = {
+        "supported_dtypes": {
+            torch.float32: True,
+            torch.float64: True,
+            torch.float16: False,
+            torch.complex128: "_foreach_add",
+            torch.bfloat16: "definitely_not_foreach",
+        }
+    }
+
+    cases = generated_helpers.generated_foreach_dtype_cases([entry], manifest)
+    ids = [generated_helpers.generated_foreach_case_id(case) for case in cases]
+
+    assert [dtype for _entry, dtype in cases] == [torch.complex128, torch.float32, torch.float64]
+    assert ids == [
+        "_foreach_add.List[L4]-torch.complex128",
+        "_foreach_add.List[L4]-torch.float32",
+        "_foreach_add.List[L4]-torch.float64",
+    ]
+
+
+def test_generated_foreach_collection_honors_cli_dtype_override():
+    entry = {
+        "name": "aten::_foreach_add.List",
+        "base_name": "_foreach_add",
+        "status": "covered_generated",
+        "surface_kind": "functional_data",
+        "semantic_level": 4,
+        "generated": {"strategy": {"strategy": "manual_foreach"}},
+    }
+
+    manifest = {"supported_dtypes": {torch.float32: True}}
+    harness._apply_cli_dtype_filter(manifest, ["float64", "torch.complex128"])
+
+    cases = generated_helpers.generated_foreach_dtype_cases([entry], manifest)
+
+    assert [dtype for _entry, dtype in cases] == [torch.complex128, torch.float64]
+
+
+def test_generated_manual_shape_loop_uses_effective_manifest_dtypes(monkeypatch):
+    entry = {
+        "name": "aten::squeeze",
+        "base_name": "squeeze",
+        "status": "covered_generated",
+        "surface_kind": "view_or_alias",
+        "semantic_level": 3,
+        "generated": {"strategy": {"strategy": "manual_shape", "family": "squeeze"}},
+    }
+    manifest = {
+        "supported_dtypes": {
+            torch.float32: True,
+            torch.complex128: True,
+        }
+    }
+    harness._apply_cli_dtype_filter(manifest, ["torch.float32"])
+    seen = []
+
+    monkeypatch.setattr(generated_helpers, "_dispatcher_callable", lambda _entry: object())
+    monkeypatch.setattr(
+        generated_helpers,
+        "_manual_shape_input_conditions",
+        lambda _manifest, _entry, _dtype: [InputCondition.CLEAN],
+    )
+    monkeypatch.setattr(
+        generated_helpers,
+        "_run_manual_shape_case",
+        lambda _entry, _callable, dtype, _condition, _device, _compare, _manifest: seen.append(dtype) or True,
+    )
+
+    generated_helpers.run_manual_shape_strategy(entry, "cpu", compare=None, manifest=manifest)
+
+    assert seen == [torch.float32]
+
+
+def test_generated_functional_variants_do_not_collect_manual_foreach(monkeypatch):
+    import torchcts.generated.test_functional_variants as functional_variants
+
+    foreach_entry = {
+        "name": "aten::_foreach_add.List",
+        "status": "covered_generated",
+        "generated": {"strategy": {"strategy": "manual_foreach"}},
+    }
+    elementwise_entry = {
+        "name": "aten::add.Tensor",
+        "status": "covered_generated",
+        "generated": {"strategy": {"strategy": "manual_elementwise"}},
+    }
+    monkeypatch.setattr(
+        functional_variants,
+        "generated_cases",
+        lambda surface_kind: [foreach_entry, elementwise_entry],
+    )
+
+    assert functional_variants._functional_cases() == [elementwise_entry]
+
+
 def test_coverage_audit_uses_oracle_status_and_metadata():
     audit = coverage_module.build_audit()
     by_name = {entry["name"]: entry for entry in audit["entries"]}
@@ -3709,6 +4163,18 @@ def test_public_sample_generation_manual_shape_sample():
     assert op_inputs.strategy_name == "manual_shape"
     assert op_inputs.metadata["case_id"] == "shape_default"
     assert tuple(op_inputs.positional_args()[0].shape) == (2, 1, 3, 1)
+
+
+def test_manual_shape_tensor_split_control_tensor_stays_on_cpu():
+    input_value, args, _kwargs, case_id = sample_generation.shape_args_for_entry(
+        "aten::tensor_split.tensor_indices_or_sections",
+        torch.float32,
+        device="meta",
+    )
+
+    assert case_id == "shape_dim_list"
+    assert input_value.device.type == "meta"
+    assert args[0].device.type == "cpu"
 
 
 def test_coverage_generated_case_depth_reports_semantic_cases():

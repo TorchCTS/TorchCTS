@@ -1626,7 +1626,7 @@ def shape_args_for_entry(entry_name: str, dtype: torch.dtype, device: str = "cpu
     if entry_name == "aten::tensor_split.sections":
         return _shape_base_tensor(dtype, device, shape=(4, 4)), (2, 0), {}, "shape_dim"
     if entry_name == "aten::tensor_split.tensor_indices_or_sections":
-        return _shape_base_tensor(dtype, device, shape=(4, 4)), (torch.tensor([2], dtype=torch.long, device=device), 0), {}, "shape_dim_list"
+        return _shape_base_tensor(dtype, device, shape=(4, 4)), (torch.tensor([2], dtype=torch.long, device="cpu"), 0), {}, "shape_dim_list"
     if entry_name in {"aten::hsplit.int", "aten::vsplit.int", "aten::dsplit.int"}:
         shape = (2, 2, 4) if entry_name == "aten::dsplit.int" else (4, 4)
         return _shape_base_tensor(dtype, device, shape=shape), (2,), {}, "shape_dim"

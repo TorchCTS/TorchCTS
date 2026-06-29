@@ -31,7 +31,7 @@ PROJECT_KNOWN_SEGFAULTS = "known_segfaults.json"
 VALID_SIGNALS = {"SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL"}
 VALID_MATCHES = {"nodeid", "dispatcher", "coverage_id"}
 VALID_EVIDENCE_SCOPES = {"exact_node", "constrained_metadata", "dispatcher_surface"}
-VALID_CLASSIFICATIONS = {"confirmed_mps_crash"}
+VALID_CLASSIFICATIONS = {"confirmed_backend_crash"}
 EXACT_CONSTRAINT_KEYS = {
     "suite",
     "test_kind",
@@ -41,6 +41,7 @@ EXACT_CONSTRAINT_KEYS = {
     "coverage_status",
     "strategy",
     "strategy_family",
+    "dtype",
 }
 GLOB_CONSTRAINT_KEYS = {"nodeid_glob", "coverage_id_glob"}
 SEMANTIC_CONSTRAINT_KEYS = {"semantic_level"}
@@ -57,6 +58,7 @@ MATCH_METADATA_KEYS = (
     "strategy",
     "strategy_family",
     "semantic_level",
+    "dtype",
 )
 
 REQUIRED_ENTRY_KEYS = {
@@ -184,7 +186,7 @@ def _validate_entry(entry: dict, path: str, seen_ids: set[str]) -> dict:
         )
     if entry["classification"] not in VALID_CLASSIFICATIONS:
         raise KnownSegfaultError(
-            f"{path}: entry {entry['id']} classification must be confirmed_mps_crash"
+            f"{path}: entry {entry['id']} classification must be one of {sorted(VALID_CLASSIFICATIONS)}"
         )
     if entry["expected_signal"] not in VALID_SIGNALS:
         raise KnownSegfaultError(f"{path}: entry {entry['id']} expected_signal must be one of {sorted(VALID_SIGNALS)}")

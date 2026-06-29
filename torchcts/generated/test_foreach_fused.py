@@ -17,7 +17,8 @@
 import pytest
 
 from torchcts.generated.coverage_helpers import (
-    generated_case_id,
+    generated_foreach_case_id,
+    generated_foreach_dtype_cases,
     generated_cases,
     run_manual_foreach_strategy,
 )
@@ -37,7 +38,21 @@ def _foreach_or_fused_cases():
     return cases or [None]
 
 
+def pytest_generate_tests(metafunc):
+    if {"entry", "dtype"}.issubset(metafunc.fixturenames):
+        import torchcts.conftest as harness
+
+        cases = generated_foreach_dtype_cases(
+            _foreach_or_fused_cases(),
+            getattr(harness, "_MANIFEST", {}) or {},
+        )
+        metafunc.parametrize(
+            ("entry", "dtype"),
+            cases,
+            ids=[generated_foreach_case_id(case) for case in cases],
+        )
+
+
 @pytest.mark.covers_category("generated_foreach_fused")
-@pytest.mark.parametrize("entry", _foreach_or_fused_cases(), ids=generated_case_id)
-def test_generated_foreach_or_fused(entry, device, compare, manifest):
-    run_manual_foreach_strategy(entry, device, compare, manifest)
+def test_generated_foreach_or_fused(entry, dtype, device, compare, manifest):
+    run_manual_foreach_strategy(entry, device, compare, manifest, dtype=dtype)

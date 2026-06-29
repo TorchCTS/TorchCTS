@@ -61,7 +61,7 @@ def _known_segfault_entry(**overrides):
         "nodeid": "torchcts/example.py::test_crash",
         "dispatcher": "aten::example.default",
         "evidence_scope": "exact_node",
-        "classification": "confirmed_mps_crash",
+        "classification": "confirmed_backend_crash",
         "expected_signal": "SIGSEGV",
         "repro": {"script": "repro.py", "case": "case0"},
         "reason": "standalone repro crashes",
@@ -79,12 +79,15 @@ def _known_segfault_entry(**overrides):
     return entry
 
 
-def _generated_item(nodeid, entry):
+def _generated_item(nodeid, entry, *, fspath="torchcts/generated/test_out_variants.py", dtype=None):
+    params = {"entry": entry}
+    if dtype is not None:
+        params["dtype"] = dtype
     return SimpleNamespace(
         nodeid=nodeid,
-        fspath="torchcts/generated/test_out_variants.py",
+        fspath=fspath,
         name=nodeid.rsplit("::", 1)[-1],
-        callspec=SimpleNamespace(params={"entry": entry}),
+        callspec=SimpleNamespace(params=params),
         iter_markers=lambda name=None: iter(()),
     )
 
@@ -120,6 +123,134 @@ def _unfold_view_alias_entry():
             "strategy": {
                 "strategy": "opinfo_view_alias",
                 "opinfo_name": "unfold",
+            }
+        },
+    }
+
+
+def _hamming_window_periodic_factory_entry():
+    return {
+        "name": "aten::hamming_window.periodic",
+        "schema": (
+            "aten::hamming_window.periodic(int window_length, bool periodic, *, "
+            "ScalarType? dtype=None, Layout? layout=None, Device? device=None, "
+            "bool? pin_memory=None) -> Tensor"
+        ),
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "factory",
+        "variant_kind": "factory",
+        "semantic_level": 2,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_factory",
+                "family": "window",
+            }
+        },
+    }
+
+
+def _col2im_functional_entry():
+    return {
+        "name": "aten::col2im",
+        "schema": (
+            "aten::col2im(Tensor self, SymInt[2] output_size, int[2] kernel_size, "
+            "int[2] dilation, int[2] padding, int[2] stride) -> Tensor"
+        ),
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_convolution",
+                "family": "col2im",
+            }
+        },
+    }
+
+
+def _foreach_add_list_functional_entry():
+    return {
+        "name": "aten::_foreach_add.List",
+        "schema": "aten::_foreach_add.List(Tensor[] self, Tensor[] other, *, Scalar alpha=1) -> Tensor[]",
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "binary",
+                "foreach_name": "add",
+                "overload": "List",
+            }
+        },
+    }
+
+
+def _foreach_add_scalarlist_functional_entry():
+    return {
+        "name": "aten::_foreach_add.ScalarList",
+        "schema": "aten::_foreach_add.ScalarList(Tensor[] self, Scalar[] scalars) -> Tensor[]",
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "binary",
+                "foreach_name": "add",
+                "overload": "ScalarList",
+            }
+        },
+    }
+
+
+def _foreach_addcdiv_scalar_functional_entry():
+    return {
+        "name": "aten::_foreach_addcdiv.Scalar",
+        "schema": (
+            "aten::_foreach_addcdiv.Scalar(Tensor[] self, Tensor[] tensor1, "
+            "Tensor[] tensor2, Scalar value=1) -> Tensor[]"
+        ),
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "ternary",
+                "foreach_name": "addcdiv",
+                "overload": "Scalar",
+            }
+        },
+    }
+
+
+def _native_batch_norm_backward_entry():
+    return {
+        "name": "aten::native_batch_norm_backward",
+        "schema": (
+            "aten::native_batch_norm_backward(Tensor grad_out, Tensor input, Tensor? weight, "
+            "Tensor? running_mean, Tensor? running_var, Tensor? save_mean, Tensor? save_invstd, "
+            "bool train, float eps, bool[3] output_mask) -> (Tensor, Tensor, Tensor)"
+        ),
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "autograd_backward",
+        "variant_kind": "functional",
+        "semantic_level": 3,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_multi_output_reduction",
+                "family": "native_batch_norm_backward",
             }
         },
     }
@@ -419,10 +550,56 @@ def test_adaptive_isolation_filters_stale_nodeids_from_collection(tmp_path):
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "device type of values (mps) must be one of CPU, CUDA, XPU, Meta or PrivateUse1"}, "confirmed_mps_unsupported_dtype_or_layout"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "Expected N % 32 == 0 && K % 32 == 0 to be true, but got false."}, "confirmed_mps_unsupported_dtype_or_layout"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "Promotion for uint16, uint32, uint64 types is not supported, attempted to promote UInt16 and Long"}, "confirmed_mps_unsupported_dtype_or_layout"),
+        (
+            {
+                "nodeid": "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_acos[L4]-torch.uint16]",
+                "status": "ERROR",
+                "error_type": "RuntimeError",
+                "error_message": "aten::_foreach_acos foreach execution failed on mps: Failed to create function state object for: acos_dense_float_ushort",
+            },
+            "confirmed_mps_missing_kernel",
+        ),
+        (
+            {
+                "nodeid": "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_addcmul.Tensor[L4]-torch.complex64]",
+                "status": "ERROR",
+                "error_type": "RuntimeError",
+                "error_message": "aten::_foreach_addcmul.Tensor foreach execution failed on mps: value cannot be converted to type double without overflow",
+            },
+            "confirmed_mps_wrong_value",
+        ),
+        (
+            {
+                "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[adaptive_avg_pool2d[L2]]",
+                "status": "ERROR",
+                "error_type": "RuntimeError",
+                "error_message": "Adaptive pool MPS: input sizes must be divisible by output sizes. Non-divisible input sizes are not implemented on MPS device yet.",
+            },
+            "confirmed_mps_missing_kernel",
+        ),
+        (
+            {
+                "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[addr[L2]]",
+                "status": "ERROR",
+                "error_type": "RuntimeError",
+                "error_message": "MPS device does not support addr for non-float input",
+            },
+            "confirmed_mps_unsupported_dtype_or_layout",
+        ),
+        (
+            {
+                "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[index_reduce.out[L2]]",
+                "status": "ERROR",
+                "error_type": "RuntimeError",
+                "error_message": "Failed to create function state object for: index_reduce_amax_bool_long",
+            },
+            "confirmed_mps_missing_kernel",
+        ),
         ({"status": "ERROR", "error_type": "NotImplementedError", "error_message": "\"arange_cpu\" not implemented for 'UInt16'"}, "torchcts_bad_oracle"),
         ({"status": "ERROR", "error_type": "NotImplementedError", "error_message": "\"equal_cpu\" not implemented for 'ComplexHalf'"}, "torchcts_bad_assertion"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "Expected a 'cpu' device type for generator but found 'mps'"}, "torchcts_invalid_sample"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "high must be a scalar tensor and on CPU"}, "torchcts_invalid_sample"),
+        ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "tensor_split expected tensor_indices_or_sections to be on cpu, but it's on mps:0"}, "torchcts_invalid_sample"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "normal expects mean to be non-complex"}, "confirmed_mps_unsupported_dtype_or_layout"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "mode only supports CPU, CUDA and XPU device type, got: mps"}, "confirmed_mps_missing_kernel"),
         ({"status": "ERROR", "error_type": "RuntimeError", "error_message": "Expected tensor to have CPU Backend, but got tensor with MPS Backend"}, "confirmed_mps_missing_kernel"),
@@ -731,6 +908,159 @@ def test_packaged_known_segfaults_cover_generated_unfold_view_alias_node():
     assert match["evidence_scope"] == "dispatcher_surface"
 
 
+def test_packaged_known_segfaults_cover_generated_hamming_window_periodic_node():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    nodeid = "torchcts/generated/test_factories.py::test_generated_factory[hamming_window.periodic[L2]]"
+    item = _generated_item(
+        nodeid,
+        _hamming_window_periodic_factory_entry(),
+        fspath="torchcts/generated/test_factories.py",
+    )
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-hamming-window-periodic-generated-factory-pytorch-2-12"
+    assert match["matched_by"] == "dispatcher"
+    assert match["evidence_scope"] == "constrained_metadata"
+    assert match["constraints"]["strategy_family"] == ["window"]
+
+
+def test_packaged_known_segfaults_cover_generated_col2im_node():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    nodeid = "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[col2im[L4]]"
+    item = _generated_item(
+        nodeid,
+        _col2im_functional_entry(),
+        fspath="torchcts/generated/test_functional_variants.py",
+    )
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-col2im-generated-functional-pytorch-2-12"
+    assert match["matched_by"] == "dispatcher"
+    assert match["evidence_scope"] == "constrained_metadata"
+    assert match["constraints"]["strategy_family"] == ["col2im"]
+
+
+def test_packaged_known_segfaults_cover_generated_manual_foreach_nodes():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    crash_entries = {
+        "_foreach_add.List[L4]": _foreach_add_list_functional_entry(),
+        "_foreach_add.ScalarList[L4]": _foreach_add_scalarlist_functional_entry(),
+        "_foreach_addcdiv.Scalar[L4]": _foreach_addcdiv_scalar_functional_entry(),
+    }
+    for case_id, entry in crash_entries.items():
+        for dtype in (torch.float64, torch.complex128):
+            dtype_str = str(dtype)
+            nodeid = (
+                "torchcts/generated/test_foreach_fused.py::"
+                f"test_generated_foreach_or_fused[{case_id}-{dtype_str}]"
+            )
+            item = _generated_item(
+                nodeid,
+                entry,
+                fspath=nodeid.split("::", 1)[0],
+                dtype=dtype,
+            )
+            metadata = harness._extract_result_metadata(item)
+            match = known_segfaults.match_known_segfault(
+                item,
+                active,
+                metadata=metadata,
+            )
+
+            assert match is not None
+            assert match["id"] == "mps-generated-manual-foreach-pytorch-2-12"
+            assert match["matched_by"] == "coverage_id"
+            assert match["evidence_scope"] == "constrained_metadata"
+            assert match["constraints"]["coverage_id_glob"] == ["aten::_foreach_*"]
+            assert match["constraints"]["dtype"] == ["torch.float64", "torch.complex128"]
+            assert match["matched_metadata"]["dtype"] == dtype_str
+            assert any(
+                glob.startswith(nodeid.split("::", 1)[0])
+                for glob in match["constraints"]["nodeid_glob"]
+            )
+
+    safe_entry = _foreach_add_list_functional_entry()
+    for dtype in (torch.float32, torch.float16, torch.bfloat16):
+        dtype_str = str(dtype)
+        nodeid = (
+            "torchcts/generated/test_foreach_fused.py::"
+            f"test_generated_foreach_or_fused[_foreach_add.List[L4]-{dtype_str}]"
+        )
+        item = _generated_item(
+            nodeid,
+            safe_entry,
+            fspath=nodeid.split("::", 1)[0],
+            dtype=dtype,
+        )
+
+        assert known_segfaults.match_known_segfault(
+            item,
+            active,
+            metadata=harness._extract_result_metadata(item),
+        ) is None
+
+
+def test_packaged_known_segfaults_cover_generated_autograd_backward_family():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    nodeid = (
+        "torchcts/generated/test_autograd_backward_variants.py::"
+        "test_generated_autograd_backward_variant[native_batch_norm_backward[L3]]"
+    )
+    item = _generated_item(
+        nodeid,
+        _native_batch_norm_backward_entry(),
+        fspath="torchcts/generated/test_autograd_backward_variants.py",
+    )
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-generated-autograd-backward-teardown-pytorch-2-12"
+    assert match["matched_by"] == "coverage_id"
+    assert match["evidence_scope"] == "constrained_metadata"
+    assert match["constraints"]["surface_kind"] == ["autograd_backward"]
+
+
 def test_known_segfault_schema_accepts_dispatcher_and_coverage_id_entries():
     payload = {
         "version": 1,
@@ -786,6 +1116,8 @@ def test_known_segfault_schema_rejects_bad_constraints():
         (_known_segfault_entry(constraints={"nope": ["generated"]}), "unknown"),
         (_known_segfault_entry(constraints={"suite": []}), "must not be empty"),
         (_known_segfault_entry(constraints={"semantic_level": [9]}), "semantic levels"),
+        (_known_segfault_entry(constraints={"dtype": []}), "must not be empty"),
+        (_known_segfault_entry(constraints={"dtype": [1]}), "non-empty strings"),
     ]
 
     for entry, pattern in cases:
@@ -820,6 +1152,38 @@ def test_known_segfault_dispatcher_match_uses_metadata_and_constraints():
 
     assert known_segfaults.entry_matches(entry, nodeid, metadata)
     assert not known_segfaults.entry_matches(entry, nodeid, other_metadata)
+
+
+def test_known_segfault_dtype_constraint_uses_metadata():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::example.default",
+                    evidence_scope="constrained_metadata",
+                    constraints={
+                        "suite": ["generated"],
+                        "dtype": ["torch.float64"],
+                    },
+                )
+            ],
+        }
+    ])[0]
+    nodeid = "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[example-torch.float64]"
+
+    assert known_segfaults.entry_matches(
+        entry,
+        nodeid,
+        {"dispatcher_name": "aten::example.default", "suite": "generated", "dtype": "torch.float64"},
+    )
+    assert not known_segfaults.entry_matches(
+        entry,
+        nodeid,
+        {"dispatcher_name": "aten::example.default", "suite": "generated", "dtype": "torch.float32"},
+    )
 
 
 def test_known_segfault_nodeid_wins_over_dispatcher():
@@ -884,6 +1248,7 @@ def test_harness_known_segfault_fields_preserve_failure_semantics():
         "match": "dispatcher",
         "matched_by": "dispatcher",
         "dispatcher": "aten::example.default",
+        "classification": "confirmed_backend_crash",
         "evidence_scope": "dispatcher_surface",
         "constraints": {"suite": ["generated"]},
         "matched_nodeid": "torchcts/example.py::test_crash",
@@ -896,6 +1261,7 @@ def test_harness_known_segfault_fields_preserve_failure_semantics():
     fields = harness._known_segfault_result_fields(match, actual_signal="SIGABRT")
 
     assert fields["known_segfault_id"] == "mps-example"
+    assert fields["known_segfault_classification"] == "confirmed_backend_crash"
     assert fields["known_segfault_expected_signal"] == "SIGSEGV"
     assert fields["known_segfault_unexpected_signal"] == "SIGABRT"
     assert fields["known_segfault_match"] == "dispatcher"
@@ -904,6 +1270,22 @@ def test_harness_known_segfault_fields_preserve_failure_semantics():
     assert fields["known_segfault_matched_nodeid"] == "torchcts/example.py::test_crash"
     assert fields["known_segfault_matched_metadata"]["dispatcher_name"] == "aten::example.default"
     assert "status" not in fields
+
+
+def test_harness_known_segfault_process_classification_is_backend_generic():
+    crash = _known_segfault_entry()
+    wrong_value = _known_segfault_entry(
+        dispatcher="aten::_grid_sampler_2d_cpu_fallback_backward",
+    )
+
+    assert harness._known_segfault_process_classification(crash) == "confirmed_backend_crash"
+    assert (
+        harness._known_segfault_process_classification(
+            wrong_value,
+            stdout="Tensor-likes are not close! Mismatched elements: 4 / 4",
+        )
+        == "confirmed_backend_wrong_value"
+    )
 
 
 def test_harness_known_segfault_validation_accepts_matching_dispatcher_rule(monkeypatch):
@@ -957,6 +1339,44 @@ def test_harness_known_segfault_validation_rejects_stale_in_scope_rule():
         harness._validate_known_segfault_collection(config, [entry], [item])
 
 
+def test_harness_known_segfault_validation_ignores_dtype_excluded_rule():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="coverage_id",
+                    nodeid="torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_add.List[L4]-torch.float64]",
+                    dispatcher="aten::_foreach_*",
+                    evidence_scope="constrained_metadata",
+                    constraints={
+                        "suite": ["generated"],
+                        "coverage_kind": ["generated"],
+                        "strategy": ["manual_foreach"],
+                        "coverage_id_glob": ["aten::_foreach_*"],
+                        "dtype": ["torch.float64", "torch.complex128"],
+                    },
+                )
+            ],
+        }
+    ])[0]
+    nodeid = (
+        "torchcts/generated/test_foreach_fused.py::"
+        "test_generated_foreach_or_fused[_foreach_add.List[L4]-torch.float32]"
+    )
+    item = _generated_item(
+        nodeid,
+        _foreach_add_list_functional_entry(),
+        fspath="torchcts/generated/test_foreach_fused.py",
+        dtype=torch.float32,
+    )
+    config = SimpleNamespace(args=["torchcts/generated"], getoption=lambda name: "generated")
+
+    descriptors = harness._validate_known_segfault_collection(config, [entry], [item])
+
+    assert descriptors[0]["metadata"]["dtype"] == "torch.float32"
+
+
 def test_harness_known_segfault_validation_ignores_unrelated_targeted_node():
     entry = known_segfaults.validate_known_segfaults([
         {
@@ -986,6 +1406,57 @@ def test_harness_known_segfault_validation_ignores_unrelated_targeted_node():
     descriptors = harness._validate_known_segfault_collection(config, [entry], [item])
 
     assert descriptors[0]["metadata"]["suite"] == "selftest"
+
+
+def test_harness_known_segfault_validation_ignores_unrelated_targeted_generated_file():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid="torchcts/generated/test_factories.py::test_generated_factory[hamming_window.periodic[L2]]",
+                    dispatcher="aten::hamming_window.periodic",
+                    evidence_scope="constrained_metadata",
+                    constraints={
+                        "suite": ["generated"],
+                        "coverage_kind": ["generated"],
+                        "surface_kind": ["factory"],
+                        "variant_kind": ["factory"],
+                        "strategy": ["manual_factory"],
+                        "strategy_family": ["window"],
+                        "semantic_level": [2],
+                    },
+                )
+            ],
+        }
+    ])[0]
+    item = _generated_item(
+        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_add_relu.Scalar[L1]]",
+        {
+            "name": "aten::_add_relu.Scalar",
+            "status": "covered_generated",
+            "coverage_kind": "generated",
+            "surface_kind": "functional_data",
+            "variant_kind": "functional",
+            "semantic_level": 1,
+            "generated": {
+                "strategy": {
+                    "strategy": "manual_elementwise",
+                    "family": "_add_relu",
+                }
+            },
+        },
+        fspath="torchcts/generated/test_functional_variants.py",
+    )
+    config = SimpleNamespace(
+        args=["torchcts/generated/test_functional_variants.py"],
+        getoption=lambda name: "generated",
+    )
+
+    descriptors = harness._validate_known_segfault_collection(config, [entry], [item])
+
+    assert descriptors[0]["metadata"]["dispatcher_name"] == "aten::_add_relu.Scalar"
 
 
 def test_harness_known_segfault_audit_prints_rule_counts(capsys):

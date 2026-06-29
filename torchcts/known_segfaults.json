@@ -7,7 +7,7 @@
       "match": "dispatcher",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
       "evidence_scope": "dispatcher_surface",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
@@ -26,7 +26,7 @@
       "match": "dispatcher",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
       "evidence_scope": "dispatcher_surface",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
@@ -46,7 +46,7 @@
       "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_backward]",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback_backward.default",
       "evidence_scope": "exact_node",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
@@ -66,7 +66,7 @@
       "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[range.out_[L2]]",
       "dispatcher": "aten::range.out_",
       "evidence_scope": "exact_node",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_factory_out_repro.py",
@@ -86,7 +86,7 @@
       "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
       "dispatcher": "aten::reflection_pad3d.out",
       "evidence_scope": "dispatcher_surface",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "python -m pytest torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]] --device mps --level-exact 3 --known-segfault-policy off",
@@ -106,7 +106,7 @@
       "nodeid": "torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]]",
       "dispatcher": "aten::unfold",
       "evidence_scope": "dispatcher_surface",
-      "classification": "confirmed_mps_crash",
+      "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "python -m pytest torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]] --device mps --level-exact 3 --known-segfault-policy off",
@@ -118,6 +118,125 @@
       "pytorch_max": null,
       "hardware": "any",
       "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-hamming-window-periodic-generated-factory-pytorch-2-12",
+      "backend": "mps",
+      "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_factories.py::test_generated_factory[hamming_window.periodic[L2]]",
+      "dispatcher": "aten::hamming_window.periodic",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m torchcts run --device mps --level 8 --known-segfault-policy off",
+        "case": "full_run_last_started_hamming_window_periodic_l2_2026_06_29"
+      },
+      "reason": "Full MPS level-8 run on 2026-06-29 segfaulted in the parent process after the runlog recorded hamming_window.periodic[L2] as the last started node and before any result record was written for that node. The minimal exact-node repro can fail earlier on a manifest-claimed float64 path, so keep this as a constrained generated-factory isolation rule rather than a broad standalone dispatcher-surface claim.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["factory"],
+        "variant_kind": ["factory"],
+        "strategy": ["manual_factory"],
+        "strategy_family": ["window"],
+        "semantic_level": [2],
+        "nodeid_glob": ["torchcts/generated/test_factories.py::test_generated_factory[hamming_window.periodic*"]
+      }
+    },
+    {
+      "id": "mps-col2im-generated-functional-pytorch-2-12",
+      "backend": "mps",
+      "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[col2im[L4]]",
+      "dispatcher": "aten::col2im",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m torchcts run --device mps --level 8 --known-segfault-policy off",
+        "case": "full_run_last_started_col2im_l4_2026_06_29"
+      },
+      "reason": "Full MPS level-8 run on 2026-06-29 segfaulted after the runlog recorded col2im[L4] as the last started node and before any result record was written for that node. Python stack was in prepare_sample -> convolution_sample -> _run_convolution_once -> run_manual_convolution_strategy; C stack was in MPS nonzero. The minimal exact-node subprocess repro can fail earlier on a manifest-claimed complex128/float64 path, so keep this as a constrained generated-functional isolation rule rather than a broad standalone dispatcher-surface claim.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["functional_data"],
+        "variant_kind": ["functional"],
+        "strategy": ["manual_convolution"],
+        "strategy_family": ["col2im"],
+        "semantic_level": [4],
+        "nodeid_glob": ["torchcts/generated/test_functional_variants.py::test_generated_functional_variant[col2im*"]
+      }
+    },
+    {
+      "id": "mps-generated-manual-foreach-pytorch-2-12",
+      "backend": "mps",
+      "match": "coverage_id",
+      "nodeid": "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_add.List[L4]]",
+      "dispatcher": "aten::_foreach_*",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m pytest -q torchcts/generated --device mps --level 8 --known-segfault-policy off",
+        "case": "generated_sweep_manual_foreach_family_2026_06_29"
+      },
+      "reason": "Generated-only MPS level-8 sweeps on 2026-06-29 exposed repeated generated manual-foreach parent-process segfaults after MPS float64 and complex128 coverage was reenabled. Current evidence points to f64/c128 foreach samples, so isolate only those generated manual-foreach dtype nodes unless future parent-safe runs prove additional dtypes unsafe.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "strategy": ["manual_foreach"],
+        "semantic_level": [4],
+        "coverage_id_glob": ["aten::_foreach_*"],
+        "dtype": ["torch.float64", "torch.complex128"],
+        "nodeid_glob": [
+          "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach*"
+        ]
+      }
+    },
+    {
+      "id": "mps-generated-autograd-backward-teardown-pytorch-2-12",
+      "backend": "mps",
+      "match": "coverage_id",
+      "nodeid": "torchcts/generated/test_autograd_backward_variants.py::test_generated_autograd_backward_variant[native_batch_norm_backward[L3]]",
+      "dispatcher": "aten::*backward*",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m pytest -q torchcts/generated/test_autograd_backward_variants.py --device mps --level 8 --adaptive-isolation off",
+        "case": "generated_autograd_backward_file_teardown_sigsegv_2026_06_29"
+      },
+      "reason": "Generated autograd-backward MPS level-8 file sweep on 2026-06-29 completed TorchCTS result writing with session_completed=true, then the Python process exited with SIGSEGV/returncode 139. The final runlog node was a pending_backend_pack skip and exact-node repro of native_batch_norm_backward failed cleanly, so the evidence points to parent-process MPS state corruption across this generated autograd-backward file rather than a single standalone dispatcher crash. Isolate the constrained generated/autograd-backward coverage family to preserve parent process survival while keeping all child failures visible.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["autograd_backward"],
+        "variant_kind": ["functional"],
+        "coverage_id_glob": ["aten::*backward*"],
+        "nodeid_glob": ["torchcts/generated/test_autograd_backward_variants.py::test_generated_autograd_backward_variant[*"]
+      }
     }
   ]
 }

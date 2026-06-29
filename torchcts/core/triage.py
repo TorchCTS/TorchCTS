@@ -321,6 +321,16 @@ def classify_record(record: dict | None, subprocess_result: dict | None = None) 
         return _classification("MPS int8 packed matmul kernel rejects shapes outside its 32-aligned implementation limit", "confirmed_mps_unsupported_dtype_or_layout")
     if "promotion for uint16, uint32, uint64 types is not supported" in text:
         return _classification("MPS rejects unsigned integer promotion for a CPU-valid dispatcher sample", "confirmed_mps_unsupported_dtype_or_layout")
+    if "_foreach_" in combined and "foreach execution failed on mps" in text and "value cannot be converted to type double without overflow" in text:
+        return _classification("MPS rejected a CPU-valid complex foreach scalar-conversion sample", "confirmed_mps_wrong_value")
+    if "_foreach_" in combined and "foreach execution failed on mps" in text and "failed to create function state object for:" in text:
+        return _classification("MPS failed to create a kernel state object for this CPU-valid foreach dispatcher sample", "confirmed_mps_missing_kernel")
+    if "adaptive" in combined and "pool" in combined and "non-divisible input sizes are not implemented on mps" in text:
+        return _classification("MPS adaptive pooling kernel does not implement this CPU-valid non-divisible output-size case", "confirmed_mps_missing_kernel")
+    if "addr" in combined and "mps device does not support addr for non-float input" in text:
+        return _classification("MPS addr rejects this CPU-valid non-float input dtype", "confirmed_mps_unsupported_dtype_or_layout")
+    if "index_reduce" in combined and "failed to create function state object for:" in text:
+        return _classification("MPS failed to create a kernel state object for this CPU-valid index_reduce sample", "confirmed_mps_missing_kernel")
     if "float64 dtype" in text or "mps doesn't support complex" in text or "does not have support for that dtype" in text:
         return _classification("manifest enables a dtype/layout rejected by this MPS build", "manifest_overclaim")
     if "arange_cpu" in text and "not implemented for 'uint16'" in text:
@@ -331,6 +341,8 @@ def classify_record(record: dict | None, subprocess_result: dict | None = None) 
         return _classification("TorchCTS generated a target-device generator for a dispatcher surface that requires a CPU generator", "torchcts_invalid_sample")
     if "high must be a scalar tensor and on cpu" in text:
         return _classification("TorchCTS generated a device tensor bound for a dispatcher surface that requires a CPU scalar tensor bound", "torchcts_invalid_sample")
+    if "tensor_split expected tensor_indices_or_sections to be on cpu" in text:
+        return _classification("TorchCTS generated a device tensor bound for a tensor_split control argument that PyTorch requires on CPU", "torchcts_invalid_sample")
     if "normal expects mean to be non-complex" in text:
         return _classification("MPS rejects a complex normal sample that the CPU oracle accepts", "confirmed_mps_unsupported_dtype_or_layout")
     if "only supports cpu, cuda and xpu device type" in text and "mps" in text:

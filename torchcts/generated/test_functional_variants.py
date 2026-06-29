@@ -36,6 +36,8 @@ def _functional_cases():
         if entry is None:
             return [None]
         strategy = entry.get("generated", {}).get("strategy") or {}
+        if strategy.get("strategy") == "manual_foreach":
+            continue
         if entry.get("status") in {"unknown", "excluded"} or strategy.get("strategy"):
             cases.append(entry)
     return cases or [None]

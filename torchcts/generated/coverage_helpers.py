@@ -25,6 +25,8 @@ from torchcts.core.device import synchronize
 from torchcts.core.oracles import OracleUnavailable, run_oracle_for_surface
 from torchcts.core.opinfo_adapter import (
     InputCondition,
+    dtype_manifest_disposition,
+    dtype_to_str,
     get_forward_op_tests,
     get_live_opinfo,
     get_op_sample_inputs,
@@ -95,6 +97,58 @@ def generated_case_id(entry: dict | None) -> str:
     base = entry["name"].replace("aten::", "").replace("/", "_")
     level = entry.get("semantic_level")
     return f"{base}[L{level}]" if level is not None else base
+
+
+def manifest_effective_dtype_items(
+    manifest: dict,
+    *,
+    op_name: str | None = None,
+) -> list[tuple[torch.dtype, str]]:
+    """Return manifest-allowed dtype items from the effective run manifest."""
+
+    supported_dtypes = manifest.get("supported_dtypes", {})
+
+    items: list[tuple[torch.dtype, str]] = []
+    seen: set[torch.dtype] = set()
+    for dtype_key in supported_dtypes:
+        if isinstance(dtype_key, torch.dtype):
+            dtype = dtype_key
+            dtype_str = dtype_to_str(dtype)
+        else:
+            dtype_text = str(dtype_key)
+            dtype = str_to_dtype(dtype_text) or str_to_dtype(f"torch.{dtype_text}")
+            dtype_str = dtype_to_str(dtype) if dtype is not None else dtype_text
+        if dtype is None or dtype in seen:
+            continue
+        disposition = dtype_manifest_disposition(dtype, dtype_str, supported_dtypes, op_name)
+        if disposition.allowed:
+            items.append((dtype, dtype_to_str(dtype)))
+            seen.add(dtype)
+    return sorted(items, key=lambda item: item[1])
+
+
+def generated_foreach_dtype_cases(
+    entries: list[dict | None],
+    manifest: dict,
+) -> list[tuple[dict | None, torch.dtype | None]]:
+    cases: list[tuple[dict | None, torch.dtype | None]] = []
+    for entry in entries:
+        if entry is None:
+            continue
+        dtype_items = manifest_effective_dtype_items(
+            manifest,
+            op_name=entry.get("name"),
+        )
+        cases.extend((entry, dtype) for dtype, _dtype_str in dtype_items)
+    return cases or [(None, None)]
+
+
+def generated_foreach_case_id(case: tuple[dict | None, torch.dtype | None]) -> str:
+    entry, dtype = case
+    base = generated_case_id(entry)
+    if dtype is None:
+        return base
+    return f"{base}-{dtype_to_str(dtype)}"
 
 
 def skip_until_strategy_exists(entry: dict | None, strategy_name: str) -> None:
@@ -3989,7 +4043,13 @@ def _compare_tensor_list(actual, expected, input_condition: str, dtype, compare,
             compare(actual_item, expected_item, category=category, dtype=dtype)
 
 
-def run_manual_foreach_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:
+def run_manual_foreach_strategy(
+    entry: dict | None,
+    device: str,
+    compare,
+    manifest: dict,
+    dtype: torch.dtype | None = None,
+) -> None:
     if entry is None:
         pytest.skip("No default coverage audit found for generated foreach/fused tests")
     if entry.get("status") == "unknown":
@@ -4006,9 +4066,10 @@ def run_manual_foreach_strategy(entry: dict | None, device: str, compare, manife
     ieee754_seed = manifest.get("ieee754_seed", 67)
     surface_kind = entry.get("surface_kind")
 
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
-        for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
-            sample = _manual_foreach_sample(entry, dtype, input_condition, ieee754_seed)
+    dtype_items = [(dtype, dtype_to_str(dtype))] if dtype is not None else _manifest_dtype_items(manifest)
+    for case_dtype, _dtype_str in dtype_items:
+        for input_condition in _manual_input_conditions(manifest, entry["base_name"], case_dtype):
+            sample = _manual_foreach_sample(entry, case_dtype, input_condition, ieee754_seed)
             cpu_self = sample.input
             cpu_args = sample.args
             cpu_kwargs = sample.kwargs
@@ -4063,7 +4124,7 @@ def run_manual_foreach_strategy(entry: dict | None, device: str, compare, manife
             except Exception as exc:
                 raise RuntimeError(f"{entry['name']} foreach execution failed on {device}: {exc}") from exc
 
-            _compare_tensor_list(actual, expected, input_condition, dtype, compare, "elementwise")
+            _compare_tensor_list(actual, expected, input_condition, case_dtype, compare, "elementwise")
             if surface_kind == "functional_data":
                 if isinstance(dev_self, (list, tuple)):
                     for actual_item, input_item in zip(actual, dev_self):

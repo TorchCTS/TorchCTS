@@ -298,6 +298,7 @@ def _known_segfault_result_fields(match, *, resolved=False, actual_signal=None):
         "isolation_source": "known_segfault",
         "known_segfault_id": match["id"],
         "known_segfault_dispatcher": match["dispatcher"],
+        "known_segfault_classification": match.get("classification"),
         "known_segfault_reason": match["reason"],
         "known_segfault_expected_signal": match["expected_signal"],
         "known_segfault_repro": dict(match["repro"]),
@@ -323,8 +324,8 @@ def _known_segfault_process_classification(match, stdout="", stderr=""):
         and "tensor-likes are not close" in text
         and "mismatched elements" in text
     ):
-        return "confirmed_mps_wrong_value"
-    return "confirmed_mps_crash"
+        return "confirmed_backend_wrong_value"
+    return "confirmed_backend_crash"
 
 
 def _canonical_collection_path(value):
@@ -361,18 +362,27 @@ def _selected_collection_args(config):
 def _known_segfault_entry_in_scope(config, entry, descriptors):
     from torchcts.core.known_segfaults import canonicalize_nodeid, entry_matches
 
-    if any(
-        entry_matches(entry, descriptor["canonical_nodeid"], descriptor["metadata"], include_constraints=False)
+    primary_matches = [
+        descriptor
         for descriptor in descriptors
-    ):
+        if entry_matches(entry, descriptor["canonical_nodeid"], descriptor["metadata"], include_constraints=False)
+    ]
+    if primary_matches:
+        dtype_constraints = (entry.get("constraints") or {}).get("dtype") or []
+        if dtype_constraints and not any(
+            str(descriptor["metadata"].get("dtype")) in dtype_constraints
+            for descriptor in primary_matches
+        ):
+            return False
         return True
 
     suite_option = config.getoption("--suite") if hasattr(config, "getoption") else None
     suite_constraints = (entry.get("constraints") or {}).get("suite") or []
-    if suite_option and suite_option in suite_constraints:
-        return True
 
     selected_args = _selected_collection_args(config)
+    if suite_option and suite_option in suite_constraints and not selected_args:
+        return True
+
     selected_nodes = [arg for arg in selected_args if "::" in arg]
     if selected_nodes:
         entry_nodeid = entry.get("nodeid")
@@ -395,7 +405,7 @@ def _known_segfault_entry_in_scope(config, entry, descriptors):
     if suite_constraints:
         for suite in suite_constraints:
             suite_path = f"torchcts/{suite}"
-            if any(_path_selects_file(path, suite_path) or _path_selects_file(suite_path, path) for path in selected_paths):
+            if any(_path_selects_file(path, suite_path) for path in selected_paths):
                 return True
     return False
 
@@ -1024,6 +1034,47 @@ def _apply_resource_limit_overrides(manifest, cli_max_mem=None, cli_max_tensor=N
         limits["max_tensor_size_mb"] = cli_max_tensor
     return limits
 
+
+def _normalize_cli_dtype_filter(cli_dtypes):
+    effective = {}
+    labels = []
+    for raw_name in cli_dtypes or []:
+        dtype_name = str(raw_name).strip()
+        dtype = str_to_dtype(dtype_name)
+        if dtype is None and not dtype_name.startswith("torch."):
+            dtype = str_to_dtype(f"torch.{dtype_name}")
+        if dtype is None:
+            raise pytest.UsageError(f"Unknown --dtype value: {raw_name!r}")
+        if dtype in effective:
+            continue
+        effective[dtype] = True
+        labels.append(dtype_to_str(dtype))
+    return effective, labels
+
+
+def _serialize_supported_dtype_declarations(supported_dtypes):
+    declarations = []
+    for dtype_key, value in (supported_dtypes or {}).items():
+        if isinstance(dtype_key, torch.dtype):
+            dtype_label = dtype_to_str(dtype_key)
+        else:
+            dtype_label = str(dtype_key)
+        declarations.append({"dtype": dtype_label, "value": value})
+    return declarations
+
+
+def _apply_cli_dtype_filter(manifest, cli_dtypes):
+    if not cli_dtypes:
+        return []
+    effective, labels = _normalize_cli_dtype_filter(cli_dtypes)
+    manifest["_declared_supported_dtypes"] = _serialize_supported_dtype_declarations(
+        manifest.get("supported_dtypes", {})
+    )
+    manifest["supported_dtypes"] = effective
+    manifest["dtype_filter"] = labels
+    return labels
+
+
 def pytest_configure(config):
     global _MANIFEST, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR, _START_TIME, _SHOW_SKIPS, _REPORT_SKIPS
     global _SUBPROCESS_MODE, _MEMORY_MODE, _CLEANUP_THRESHOLD, _MAX_DEVICE_MEM, _MAX_TENSOR_SIZE, _BASELINE_RESULTS
@@ -1150,6 +1201,8 @@ def pytest_configure(config):
             except Exception as e:
                 print(f"Error: {e}", file=sys.stderr)
                 pytest.exit(str(e))
+
+    _apply_cli_dtype_filter(_MANIFEST, config.getoption("--dtype"))
 
     declared_device_count = _MANIFEST.get("device_count", 1)
     runtime_device_count = None if _COLLECT_ONLY else _get_runtime_device_count(_DEVICE_NAME)
@@ -1431,16 +1484,6 @@ def pytest_collection_modifyitems(session, config, items):
     supported_dtypes = _MANIFEST.get("supported_dtypes", {})
     skip_ops = set(_MANIFEST.get("skip_ops", []))
     device_count = _MANIFEST.get("effective_device_count", _MANIFEST.get("device_count", 1))
-    
-    # Optional CLI dtype filter
-    cli_dtypes = config.getoption("--dtype")
-    if cli_dtypes:
-        # Overwrite manifest dtypes with CLI filters
-        supported_dtypes = {}
-        for dt_name in cli_dtypes:
-            dt = str_to_dtype(dt_name) or str_to_dtype(f"torch.{dt_name}")
-            if dt:
-                supported_dtypes[dt] = True
 
     keep_items = []
     dtype_deselected_items = []
@@ -1669,6 +1712,7 @@ def flush_results_to_disk():
             "collect_only": _COLLECT_ONLY,
             "semantic_level": _REQUESTED_SEMANTIC_LEVEL,
             "semantic_level_selection": _SEMANTIC_LEVEL_SELECTION.to_metadata(),
+            "dtype_filter": list(_MANIFEST.get("dtype_filter") or []),
             "skip_count": len(_SESSION_SKIPS),
             "session_completed": _SESSION_COMPLETED,
             "harness_probe_failure_count": len(_SESSION_PROBE_FAILURES),
