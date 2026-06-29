@@ -141,8 +141,8 @@ def test_build_report_counts_opinfo_and_ignores_plumbing():
     assert "OpInfo ops discovered:     4" in scorecard
     assert "Ops tested (PASS):         1" in scorecard
     assert "Ops tested (FAIL):         1" in scorecard
-    assert "Ops skipped (manifest):    1" in scorecard
-    assert "Ops skipped (unsupported): 1" in scorecard
+    assert "Ops skipped (manifest):    2" in scorecard
+    assert "Ops skipped (unsupported): 0" in scorecard
     assert "inference" in scorecard
     assert "2/3 passed" in scorecard
 
@@ -285,7 +285,16 @@ def test_probe_capability_result_preserves_failure_evidence(monkeypatch):
     assert not device_module.probe_capability("privateuseone", "named_tensor")
 
 
-def test_declared_capability_probe_failure_is_manifest_overclaim():
+def test_declared_capability_probe_failure_is_diagnostic(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("TORCHCTS_RESULTS_DIR", str(tmp_path))
+    monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
+    monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
+    monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", False)
     caps = {"named_tensor": True}
 
     def fake_probe(device_name, capability):
@@ -299,31 +308,57 @@ def test_declared_capability_probe_failure_is_manifest_overclaim():
             stderr="NYI: named tensors only support CPU\n",
         )
 
-    failures = harness._apply_declared_capability_probes(
+    records = harness._apply_declared_capability_probes(
         caps,
         "privateuseone",
         probe_func=fake_probe,
     )
 
     assert caps["named_tensor"] is True
-    assert len(failures) == 1
-    assert "Manifest overclaim: capability 'named_tensor'" in failures[0]
-    assert "NYI: named tensors" in failures[0]
+    assert len(records) == 1
+    assert records[0]["probe_kind"] == "capability"
+    assert records[0]["name"] == "named_tensor"
+    assert records[0]["stage"] == "declared_capability_probe"
+    assert records[0]["declared"] is True
+    assert records[0]["outcome"] == "failed"
+    assert records[0]["returncode"] == 1
+    assert "NYI: named tensors" in records[0]["stderr_tail"]
+    assert "tests will still run" in capsys.readouterr().err
+    path = next(tmp_path.glob("unit_hw_harness_probe_failures_*.jsonl"))
+    payload = json.loads(path.read_text(encoding="utf-8").strip())
+    assert payload["name"] == "named_tensor"
 
 
-def test_declared_dtype_probe_failure_is_manifest_overclaim(monkeypatch):
+def test_declared_dtype_probe_failure_is_diagnostic(tmp_path, monkeypatch, capsys):
     def fake_zeros(*args, **kwargs):
         raise RuntimeError("value cannot be converted to type float without overflow")
 
+    monkeypatch.setenv("TORCHCTS_RESULTS_DIR", str(tmp_path))
+    monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
+    monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
+    monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", False)
     monkeypatch.setattr(harness.torch, "zeros", fake_zeros)
     supported_dtypes = {torch.float32: True}
 
-    failures = harness._apply_declared_dtype_probes(supported_dtypes, "privateuseone")
+    records = harness._apply_declared_dtype_probes(supported_dtypes, "privateuseone")
 
     assert supported_dtypes == {torch.float32: True}
-    assert len(failures) == 1
-    assert "Manifest overclaim: dtype 'torch.float32'" in failures[0]
-    assert "value cannot be converted" in failures[0]
+    assert len(records) == 1
+    assert records[0]["probe_kind"] == "dtype"
+    assert records[0]["name"] == "torch.float32"
+    assert records[0]["stage"] == "declared_dtype_probe"
+    assert records[0]["declared"] is True
+    assert records[0]["outcome"] == "failed"
+    assert "value cannot be converted" in records[0]["error_message"]
+    assert "tests will still run" in capsys.readouterr().err
+    path = next(tmp_path.glob("unit_hw_harness_probe_failures_*.jsonl"))
+    payload = json.loads(path.read_text(encoding="utf-8").strip())
+    assert payload["name"] == "torch.float32"
 
 
 def test_atomic_json_dump_preserves_existing_file_on_failure(tmp_path):
@@ -401,6 +436,124 @@ def test_runtime_evidence_falls_back_and_safely_formats_errors(tmp_path, monkeyp
     assert len(records[0]["error_message"]) == 4000
     assert records[0]["error_message"].endswith("...")
     assert records[1]["error_message"].startswith("<unprintable BadStr")
+
+
+def test_runtime_evidence_writes_harness_probe_jsonl(tmp_path, monkeypatch):
+    monkeypatch.setenv("TORCHCTS_RESULTS_DIR", str(tmp_path))
+    monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
+    monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
+    monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+
+    record = runtime_evidence.record_harness_probe_failure(
+        "dtype",
+        "torch.float64",
+        RuntimeError("x" * 5000),
+        stage="declared_dtype_probe",
+    )
+
+    path = next(tmp_path.glob("unit_hw_harness_probe_failures_*.jsonl"))
+    payload = json.loads(path.read_text(encoding="utf-8").strip())
+    assert payload == record
+    assert payload["device_name"] == "privateuseone"
+    assert payload["hardware_key"] == "unit_hw"
+    assert payload["pytorch_version"] == "9.9.9"
+    assert payload["probe_kind"] == "dtype"
+    assert payload["name"] == "torch.float64"
+    assert payload["stage"] == "declared_dtype_probe"
+    assert payload["declared"] is True
+    assert payload["outcome"] == "failed"
+    assert payload["error_type"] == "RuntimeError"
+    assert len(payload["error_message"]) == 4000
+    assert payload["error_message"].endswith("...")
+
+
+def test_flush_results_includes_harness_probe_failures(tmp_path, monkeypatch):
+    record = {
+        "created_at": "2026-06-29T00:00:00Z",
+        "device_name": "privateuseone",
+        "hardware_key": "unit_hw",
+        "pytorch_version": "9.9.9",
+        "probe_kind": "dtype",
+        "name": "torch.float64",
+        "stage": "declared_dtype_probe",
+        "declared": True,
+        "outcome": "failed",
+        "error_type": "RuntimeError",
+        "error_message": "probe failed",
+        "returncode": None,
+        "timed_out": False,
+        "stdout_tail": "",
+        "stderr_tail": "",
+        "command_args": [],
+    }
+    monkeypatch.setattr(harness, "_ARTIFACT_WRITES_ENABLED", True)
+    monkeypatch.setattr(harness, "_IS_XDIST_WORKER", False)
+    monkeypatch.setattr(harness, "_RESULTS_DIR", str(tmp_path))
+    monkeypatch.setattr(harness, "_HARDWARE_KEY", "unit_hw")
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "privateuseone")
+    monkeypatch.setattr(harness, "_START_TIME", 0)
+    monkeypatch.setattr(harness, "_SESSION_RESULTS", {})
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [record])
+    monkeypatch.setattr(harness, "_SESSION_COMPLETED", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    harness.flush_results_to_disk()
+
+    payload = json.loads((tmp_path / "unit_hw_latest.json").read_text(encoding="utf-8"))
+    assert payload["metadata"]["harness_probe_failure_count"] == 1
+    assert payload["metadata"]["harness_probe_failure_artifact"].endswith(
+        "unit_hw_harness_probe_failures_{}.jsonl".format(os.getpid())
+    )
+    assert payload["harness_probe_failures"] == [record]
+
+
+def test_merge_xdist_worker_files_dedupes_harness_probe_failures(tmp_path):
+    base_record = {
+        "probe_kind": "dtype",
+        "name": "torch.float64",
+        "stage": "declared_dtype_probe",
+        "error_type": "RuntimeError",
+        "error_message": "probe failed",
+        "returncode": None,
+    }
+    other_record = {
+        "probe_kind": "capability",
+        "name": "named_tensor",
+        "stage": "declared_capability_probe",
+        "error_type": "CapabilityProbeFailed",
+        "error_message": "probe failed",
+        "returncode": 1,
+    }
+    latest = tmp_path / "unit_hw_latest.json"
+    latest.write_text(
+        json.dumps({
+            "metadata": {"elapsed_sec": 1.0},
+            "results": {},
+            "skips": {},
+            "harness_probe_failures": [base_record],
+        }),
+        encoding="utf-8",
+    )
+    worker = tmp_path / "unit_hw_latest.gw0.json"
+    worker.write_text(
+        json.dumps({
+            "metadata": {"elapsed_sec": 2.0},
+            "results": {"node": {"status": "PASS"}},
+            "skips": {},
+            "harness_probe_failures": [base_record, other_record],
+        }),
+        encoding="utf-8",
+    )
+
+    harness._merge_xdist_worker_files(str(tmp_path), "unit_hw")
+
+    payload = json.loads(latest.read_text(encoding="utf-8"))
+    assert payload["metadata"]["harness_probe_failure_count"] == 2
+    assert payload["harness_probe_failures"] == [base_record, other_record]
+    assert payload["results"] == {"node": {"status": "PASS"}}
 
 
 def test_opinfo_known_failure_package_policy_is_removed():
@@ -562,6 +715,140 @@ def test_matrix_exp_forward_collection_is_clean_only_for_regex_ieee754():
 
     assert matrix_exp_tests
     assert {condition for _, _, condition in matrix_exp_tests} == {InputCondition.CLEAN}
+
+
+def test_opinfo_forward_dtype_false_creates_structured_skip(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_manifest_dtype_op"
+        dtypes = (torch.float32,)
+        backward_dtypes = (torch.float32,)
+        supports_autograd = True
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+
+    tests = opinfo_adapter_module.get_forward_op_tests({
+        "capabilities": {"ieee754": False},
+        "supported_dtypes": {torch.float32: False},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == []
+    assert len(skips) == 1
+    record = next(iter(skips.values()))
+    assert record["suite"] == "opinfo"
+    assert record["test_kind"] == "opinfo"
+    assert record["op"] == "fake_manifest_dtype_op"
+    assert record["dtype"] == "torch.float32"
+    assert record["input_condition"] == InputCondition.CLEAN
+    assert record["skip_reason"] == "dtype_not_supported"
+
+
+def test_opinfo_regex_filtered_dtype_creates_structured_skip(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_manifest_regex_op"
+        dtypes = (torch.complex64,)
+        backward_dtypes = (torch.complex64,)
+        supports_autograd = True
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+
+    tests = opinfo_adapter_module.get_forward_op_tests({
+        "capabilities": {"ieee754": False},
+        "supported_dtypes": {torch.complex64: r"^fft"},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == []
+    assert len(skips) == 1
+    record = next(iter(skips.values()))
+    assert record["skip_reason"] == "dtype_regex_filtered"
+    assert record["dtype"] == "torch.complex64"
+
+
+def test_opinfo_missing_dtype_is_omitted_without_structured_skip(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_manifest_missing_op"
+        dtypes = (torch.float32,)
+        backward_dtypes = (torch.float32,)
+        supports_autograd = True
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+
+    tests = opinfo_adapter_module.get_forward_op_tests({
+        "capabilities": {"ieee754": False},
+        "supported_dtypes": {},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == []
+    assert skips == {}
+
+
+def test_opinfo_backward_dtype_false_creates_structured_skip(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_manifest_backward_op"
+        dtypes = (torch.float32,)
+        backward_dtypes = (torch.float32,)
+        supports_autograd = True
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+
+    tests = opinfo_adapter_module.get_backward_op_tests({
+        "capabilities": {},
+        "supported_dtypes": {torch.float32: False},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == []
+    assert len(skips) == 1
+    record = next(iter(skips.values()))
+    assert record["capability"] == "training"
+    assert record["op"] == "fake_manifest_backward_op"
+    assert record["skip_reason"] == "dtype_not_supported"
+
+
+def test_opinfo_allowed_dtype_still_creates_executable_test(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_manifest_allowed_op"
+        dtypes = (torch.float32,)
+        backward_dtypes = (torch.float32,)
+        supports_autograd = True
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+
+    tests = opinfo_adapter_module.get_forward_op_tests({
+        "capabilities": {"ieee754": False},
+        "supported_dtypes": {torch.float32: True},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == [("fake_manifest_allowed_op", "torch.float32", InputCondition.CLEAN)]
+    assert skips == {}
 
 
 def test_generic_backward_excludes_nondeterministic_oracles():
@@ -798,6 +1085,38 @@ def test_build_report_ignores_runtime_skips_in_score_totals():
     assert "training        0/0 passed" in scorecard
     assert "training        0/1 passed" not in scorecard
     assert "float32" not in scorecard
+
+
+def test_build_report_surfaces_structured_dtype_skips():
+    current_data = {
+        "metadata": {
+            "device_name": "cpu",
+            "hardware_key": "cpu_test_1gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+        },
+        "results": {},
+        "skips": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[manifest-skip-clean-abs-torch.float64]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "skip_reason": "dtype_not_supported",
+                "op": "abs",
+                "dtype": "torch.float64",
+                "detail": "torch.float64 is declared unsupported in supported_dtypes",
+            },
+        },
+    }
+
+    scorecard, markdown = build_report(current_data, include_skips=True)
+
+    assert "Ops skipped (manifest):    1" in scorecard
+    assert "Ops skipped (unsupported): 0" in scorecard
+    assert "float64    0/0 ⬚ skip=1" in scorecard
+    assert "**dtype_not_supported**: 1 skips" in markdown
+    assert "**float64**: 1 skips" in markdown
 
 
 def test_build_report_tracks_split_rng_capabilities():
@@ -1445,12 +1764,14 @@ class _Marker:
 
 
 class _CollectionItem:
-    def __init__(self, name, fspath, markers=None):
+    def __init__(self, name, fspath, markers=None, params=None):
         self.name = name
         self.fspath = fspath
         self.nodeid = f"{fspath}::{name}"
         self._markers = markers or {}
         self.added_markers = []
+        if params is not None:
+            self.callspec = SimpleNamespace(params=params)
 
     def get_closest_marker(self, name):
         return self._markers.get(name)
@@ -1464,11 +1785,11 @@ class _CollectionItem:
         self.added_markers.append(marker)
 
 
-def test_collection_dry_run_does_not_call_torch_compile_before_backend_import(monkeypatch):
+def test_collection_does_not_call_torch_compile_preflight(monkeypatch):
     def fail_compile(*args, **kwargs):
-        raise AssertionError("torch.compile must not run during backend-import-free collection")
+        raise AssertionError("torch.compile must not run as a collection preflight")
 
-    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_DEVICE_NAME", "privateuseone")
     monkeypatch.setattr(harness, "_MANIFEST", {
@@ -1480,6 +1801,138 @@ def test_collection_dry_run_does_not_call_torch_compile_before_backend_import(mo
     monkeypatch.setattr(harness.torch, "compile", fail_compile)
 
     harness.pytest_collection_modifyitems(None, _CollectionConfig(), [])
+
+
+def test_dtype_manifest_disposition_handles_true_false_regex_and_missing():
+    supported = {
+        torch.float32: True,
+        torch.float64: False,
+        torch.complex64: r"^fft",
+    }
+
+    assert opinfo_adapter_module.dtype_manifest_disposition(
+        torch.float32, "torch.float32", supported, "add"
+    ).allowed
+
+    unsupported = opinfo_adapter_module.dtype_manifest_disposition(
+        torch.float64, "torch.float64", supported, "add"
+    )
+    assert not unsupported.allowed
+    assert unsupported.skip_reason == "dtype_not_supported"
+
+    regex_allowed = opinfo_adapter_module.dtype_manifest_disposition(
+        torch.complex64, "torch.complex64", supported, "fft.fft"
+    )
+    assert regex_allowed.allowed
+
+    regex_filtered = opinfo_adapter_module.dtype_manifest_disposition(
+        torch.complex64, "torch.complex64", supported, "add"
+    )
+    assert not regex_filtered.allowed
+    assert regex_filtered.skip_reason == "dtype_regex_filtered"
+
+    missing = opinfo_adapter_module.dtype_manifest_disposition(
+        torch.bfloat16, "torch.bfloat16", supported, "add"
+    )
+    assert not missing.allowed
+    assert missing.skip_reason == "dtype_not_listed"
+
+
+def test_collection_dtype_false_is_structured_deselection(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    item = _CollectionItem(
+        "test_unary_float_op",
+        "torchcts/operators/test_fake.py",
+        params={"op_name": "abs", "dtype": torch.float64},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float64: False},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "dtype_not_supported"
+
+
+def test_collection_dtype_true_remains_executable(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    item = _CollectionItem(
+        "test_unary_float_op",
+        "torchcts/operators/test_fake.py",
+        params={"op_name": "abs", "dtype": torch.float64},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float64: True},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == [item]
+    assert config.deselected == []
+    assert harness._SESSION_SKIPS == {}
+
+
+def test_collection_src_dst_and_gradcheck_dtype_false_are_structured_deselections(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    copy_item = _CollectionItem(
+        "test_copy_cast",
+        "torchcts/operators/test_fake.py",
+        params={"src_dtype": torch.float32, "dst_dtype": torch.float64},
+    )
+    gradcheck_item = _CollectionItem(
+        "test_gradcheck",
+        "torchcts/autograd/test_fake.py",
+        params={},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float32: True, torch.float64: False},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [copy_item, gradcheck_item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [copy_item, gradcheck_item]
+    assert harness._SESSION_SKIPS[copy_item.nodeid]["skip_reason"] == "dtype_not_supported"
+    assert harness._SESSION_SKIPS[gradcheck_item.nodeid]["skip_reason"] == "dtype_not_supported"
 
 
 def test_semantic_level_selection_parses_exact_and_range():
@@ -1642,6 +2095,33 @@ def test_gate_tests_bypass_suite_filter_but_not_capability_filter(monkeypatch):
     assert items == [item]
     assert config.deselected == []
     assert harness._SESSION_SKIPS == {}
+
+
+def test_gate_failure_is_recorded_without_session_exit(monkeypatch):
+    item = _CollectionItem(
+        "test_registration_gate",
+        "torchcts/device_api/test_fake.py",
+        markers={"gate": _Marker()},
+    )
+    monkeypatch.setattr(harness, "_SESSION_RESULTS", {})
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "privateuseone")
+
+    class _ExcInfo:
+        typename = "AssertionError"
+        value = AssertionError("gate failed")
+        tb = None
+
+    call = SimpleNamespace(when="call", excinfo=_ExcInfo(), duration=0.01)
+
+    harness.pytest_runtest_makereport(item, call)
+
+    record = harness._SESSION_RESULTS[item.nodeid]
+    assert record["status"] == "FAIL"
+    assert record["error_type"] == "AssertionError"
+    assert "gate failed" in record["error_message"]
 
 
 def test_rng_and_device_generator_capabilities_filter_independently(monkeypatch):

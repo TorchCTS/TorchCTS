@@ -243,6 +243,8 @@ def _validate_tolerance_overrides(result, manifest):
     for (category, dtype), value in normalized.items():
         if category not in _KNOWN_TOLERANCE_CATEGORIES:
             result.errors.append(f"Invalid tolerance_overrides category '{category}'")
+        # Defense-in-depth: dtype should always be resolved after normalization,
+        # but guard against future changes to normalize_tolerance_overrides.
         if dtype_from_manifest_key(dtype) is None:
             result.errors.append(f"Invalid tolerance_overrides dtype {dtype!r}")
         if isinstance(value, TieredTol):

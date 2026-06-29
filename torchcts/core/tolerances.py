@@ -270,7 +270,7 @@ def get_tolerance(category, dtype, tier="golden", manifest_overrides=None):
                 entry = DEFAULT_TOLERANCES[default_key]
             else:
                 # Absolute fallback
-                entry = Tol(1e-3, 1e-3)
+                entry = TieredTol(golden=Tol(1e-3, 1e-3), usable=Tol(5e-3, 5e-3))
         
         # Unwrap TieredTol if needed
         if isinstance(entry, TieredTol):

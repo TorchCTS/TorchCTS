@@ -94,6 +94,18 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     results = current_data.get("results", {})
     skips_dict = current_data.get("skips", {})
+    manifest_skip_reasons = {
+        "op_excluded",
+        "dtype_not_supported",
+        "dtype_regex_filtered",
+        "dtype_not_listed",
+        "capability_not_declared",
+    }
+    dtype_skip_reasons = {
+        "dtype_not_supported",
+        "dtype_regex_filtered",
+        "dtype_not_listed",
+    }
 
     def suite_for(nodeid, res):
         if res.get("suite"):
@@ -174,7 +186,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         if not op_name:
             continue
         reason = res.get("skip_reason")
-        if reason in ("op_excluded", "dtype_regex_filtered", "capability_not_declared"):
+        if reason in manifest_skip_reasons:
             skipped_ops_manifest.add(op_name)
         else:
             skipped_ops_unsupported.add(op_name)
@@ -262,12 +274,22 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         # clean representation: e.g. torch.float32 or float32
         dt = dt.replace("torch.", "")
         if dt not in dtype_counts:
-            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0}
+            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0}
         dtype_counts[dt]["total"] += 1
         if res.get("status") == "PASS":
             dtype_counts[dt]["pass"] += 1
         else:
             dtype_counts[dt]["fail"] += 1
+    for nodeid, res in skips_dict.items():
+        if res.get("skip_reason") not in dtype_skip_reasons:
+            continue
+        dt = res.get("dtype")
+        if not dt:
+            continue
+        dt = dt.replace("torch.", "")
+        if dt not in dtype_counts:
+            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0}
+        dtype_counts[dt]["skip"] += 1
 
     # ── Semantic Level Coverage ──
     semantic_counts = {}
@@ -313,6 +335,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     # ── Regressions ──
     regressions_text = []
+    baseline_results = {}
     if baseline_data:
         baseline_results = baseline_data.get("results", {})
         baseline_time = baseline_data.get("metadata", {}).get("timestamp", "unknown")
@@ -406,8 +429,12 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         line_parts = []
         for dt in chunk:
             stats = dtype_counts[dt]
-            ind = "✅" if stats["fail"] == 0 else "❌"
-            line_parts.append(f"  {dt:<10} {stats['pass']}/{stats['total']} {ind}")
+            if stats["total"] == 0 and stats["skip"]:
+                ind = "⬚"
+            else:
+                ind = "✅" if stats["fail"] == 0 else "❌"
+            skip_text = f" skip={stats['skip']}" if stats["skip"] else ""
+            line_parts.append(f"  {dt:<10} {stats['pass']}/{stats['total']} {ind}{skip_text}")
         summary_lines.append("  ".join(line_parts))
     summary_lines.append("")
 
@@ -524,7 +551,19 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         for reason, items in reason_groups.items():
             md_lines.append(f"- **{reason}**: {len(items)} skips")
         md_lines.append("")
-        
+
+        dtype_skip_groups = {}
+        for _nodeid, res in skips_dict.items():
+            if res.get("skip_reason") not in dtype_skip_reasons:
+                continue
+            dt = (res.get("dtype") or "unknown").replace("torch.", "")
+            dtype_skip_groups[dt] = dtype_skip_groups.get(dt, 0) + 1
+        if dtype_skip_groups:
+            md_lines.append("### Dtype Skips:")
+            for dt, count in sorted(dtype_skip_groups.items()):
+                md_lines.append(f"- **{dt}**: {count} skips")
+            md_lines.append("")
+
         md_lines.append("### Full Skip List:")
         md_lines.append("| Test Name | Reason | Detail |")
         md_lines.append("|---|---|---|")

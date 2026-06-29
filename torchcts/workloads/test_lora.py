@@ -42,7 +42,7 @@ class LoRALinear(torch.nn.Module):
 @pytest.mark.workload
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("r", [4, 8])
-def test_lora_forward_backward(r, dtype, device, manifest, compare, input_gen):
+def test_lora_forward_backward(r, dtype, device, manifest, compare):
 
     model_cpu = LoRALinear(16, 8, r=r)
     model_dev = LoRALinear(16, 8, r=r).to(device)

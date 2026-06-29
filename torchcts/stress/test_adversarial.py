@@ -20,7 +20,6 @@
 
 import pytest
 import torch
-import math
 from torchcts.core.device import synchronize
 
 pytestmark = pytest.mark.covers_category("stress")

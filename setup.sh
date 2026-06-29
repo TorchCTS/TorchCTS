@@ -167,7 +167,7 @@ PIP="${VENV_DIR}/bin/pip"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 
 info "Upgrading pip and wheel..."
-"$PIP" install --upgrade pip wheel --quiet
+"$PIP" install --upgrade pip setuptools wheel --quiet
 
 info "Installing PyTorch (${TORCH_VARIANT})..."
 if [ -n "$TORCH_INDEX_URL" ]; then

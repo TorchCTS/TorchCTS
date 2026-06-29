@@ -99,40 +99,35 @@ def coo_data():
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_coo_tensor.indices_size")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_creation(device, dtype, coo_data):
+def test_sparse_coo_creation(device, coo_data):
     i, v, size = coo_data
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size).to_dense(), device, i, v)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::coalesce")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_coalesce(device, dtype, coo_data):
+def test_sparse_coo_coalesce(device, coo_data):
     i, v, size = coo_data
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size).coalesce(), device, i, v)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::t")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_transpose(device, dtype, coo_data):
+def test_sparse_coo_transpose(device, coo_data):
     i, v, size = coo_data
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size).t(), device, i, v)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::add.Tensor")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_add(device, dtype, coo_data):
+def test_sparse_coo_add(device, coo_data):
     i, v, size = coo_data
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size) + torch.sparse_coo_tensor(i_t, v_t, size), device, i, v)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_sparse_mm")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_mm(device, dtype, coo_data):
+def test_sparse_coo_mm(device, coo_data):
     i, v, size = coo_data
     dense = torch.randn(3, 2, dtype=torch.float32)
     check_sparse_op(lambda i_t, v_t, d: torch.sparse.mm(torch.sparse_coo_tensor(i_t, v_t, size), d), device, i, v, dense)
@@ -142,8 +137,7 @@ def test_sparse_coo_mm(device, dtype, coo_data):
 @pytest.mark.covers("aten::to_sparse_csr")
 @pytest.mark.covers("aten::to_sparse_csc")
 @pytest.mark.covers("aten::to_sparse_bsr")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_conversions(device, dtype, coo_data):
+def test_sparse_coo_conversions(device, coo_data):
     i, v, size = coo_data
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size).to_sparse_csr(), device, i, v)
     check_sparse_op(lambda i_t, v_t: torch.sparse_coo_tensor(i_t, v_t, size).to_sparse_csc(), device, i, v)
@@ -155,8 +149,7 @@ def test_sparse_coo_conversions(device, dtype, coo_data):
 @pytest.mark.covers("aten::values")
 @pytest.mark.covers("aten::is_coalesced")
 @pytest.mark.covers("aten::sparse_dim")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_public_accessors(device, dtype, coo_data):
+def test_sparse_coo_public_accessors(device, coo_data):
     i, v, size = coo_data
 
     def op(i_t, v_t):
@@ -169,8 +162,7 @@ def test_sparse_coo_public_accessors(device, dtype, coo_data):
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_indices")
 @pytest.mark.covers("aten::_values")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_raw_accessors(device, dtype, coo_data):
+def test_sparse_coo_raw_accessors(device, coo_data):
     i, v, size = coo_data
 
     def op(i_t, v_t):
@@ -185,8 +177,7 @@ def test_sparse_coo_raw_accessors(device, dtype, coo_data):
 @pytest.mark.covers("aten::_sparse_sum.dim")
 @pytest.mark.covers("aten::_sparse_softmax.int")
 @pytest.mark.covers("aten::_sparse_log_softmax.int")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_coo_reductions_and_softmax(device, dtype, coo_data):
+def test_sparse_coo_reductions_and_softmax(device, coo_data):
     i, v, size = coo_data
 
     def op_sum(i_t, v_t):
@@ -203,8 +194,7 @@ def test_sparse_coo_reductions_and_softmax(device, dtype, coo_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_sparse_addmm")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_addmm(device, dtype, coo_data):
+def test_sparse_addmm(device, coo_data):
     i, v, size = coo_data
     dense_a = torch.randn(3, 2, dtype=torch.float32)
     dense_b = torch.randn(2, 3, dtype=torch.float32)
@@ -224,8 +214,7 @@ def test_sparse_addmm(device, dtype, coo_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_mask")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_mask(device, dtype, coo_data):
+def test_sparse_mask(device, coo_data):
     i, v, size = coo_data
     dense = torch.randn(size, dtype=torch.float32)
     check_sparse_op(
@@ -251,24 +240,21 @@ def csr_data():
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_csr_tensor.crow_col_value_size")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csr_creation(device, dtype, csr_data):
+def test_sparse_csr_creation(device, csr_data):
     crow, col, val, size = csr_data
     check_sparse_op(lambda r, c, v: torch.sparse_csr_tensor(r, c, v, size).to_dense(), device, crow, col, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::transpose.int")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csr_transpose(device, dtype, csr_data):
+def test_sparse_csr_transpose(device, csr_data):
     crow, col, val, size = csr_data
     check_sparse_op(lambda r, c, v: torch.sparse_csr_tensor(r, c, v, size).transpose(0, 1), device, crow, col, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_sparse_mm")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csr_mm(device, dtype, csr_data):
+def test_sparse_csr_mm(device, csr_data):
     crow, col, val, size = csr_data
     dense = torch.randn(3, 2, dtype=torch.float32)
     check_sparse_op(lambda r, c, v, d: torch.sparse.mm(torch.sparse_csr_tensor(r, c, v, size), d), device, crow, col, val, dense)
@@ -276,8 +262,7 @@ def test_sparse_csr_mm(device, dtype, csr_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_to_sparse")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csr_conversions(device, dtype, csr_data):
+def test_sparse_csr_conversions(device, csr_data):
     crow, col, val, size = csr_data
     check_sparse_op(lambda r, c, v: torch.sparse_csr_tensor(r, c, v, size).to_sparse_coo(), device, crow, col, val)
 
@@ -298,8 +283,7 @@ def csc_data():
 @pytest.mark.covers("aten::crow_indices")
 @pytest.mark.covers("aten::col_indices")
 @pytest.mark.covers("aten::values")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csr_accessors(device, dtype, csr_data):
+def test_sparse_csr_accessors(device, csr_data):
     crow, col, val, size = csr_data
 
     def op(r, c, v):
@@ -311,24 +295,21 @@ def test_sparse_csr_accessors(device, dtype, csr_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_csc_tensor.ccol_row_value_size")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csc_creation(device, dtype, csc_data):
+def test_sparse_csc_creation(device, csc_data):
     ccol, row, val, size = csc_data
     check_sparse_op(lambda c, r, v: torch.sparse_csc_tensor(c, r, v, size).to_dense(), device, ccol, row, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::transpose.int")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csc_transpose(device, dtype, csc_data):
+def test_sparse_csc_transpose(device, csc_data):
     ccol, row, val, size = csc_data
     check_sparse_op(lambda c, r, v: torch.sparse_csc_tensor(c, r, v, size).transpose(0, 1), device, ccol, row, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_sparse_addmm")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csc_mm(device, dtype, csc_data):
+def test_sparse_csc_mm(device, csc_data):
     ccol, row, val, size = csc_data
     dense = torch.randn(3, 2, dtype=torch.float32)
     check_sparse_op(lambda c, r, v, d: torch.sparse.mm(torch.sparse_csc_tensor(c, r, v, size), d), device, ccol, row, val, dense)
@@ -336,8 +317,7 @@ def test_sparse_csc_mm(device, dtype, csc_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::_to_sparse_csr")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csc_conversions(device, dtype, csc_data):
+def test_sparse_csc_conversions(device, csc_data):
     ccol, row, val, size = csc_data
     check_sparse_op(lambda c, r, v: torch.sparse_csc_tensor(c, r, v, size).to_sparse_csr(), device, ccol, row, val)
 
@@ -358,8 +338,7 @@ def bsr_data():
 @pytest.mark.covers("aten::ccol_indices")
 @pytest.mark.covers("aten::row_indices")
 @pytest.mark.covers("aten::values")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_csc_accessors(device, dtype, csc_data):
+def test_sparse_csc_accessors(device, csc_data):
     ccol, row, val, size = csc_data
 
     def op(c, r, v):
@@ -371,16 +350,14 @@ def test_sparse_csc_accessors(device, dtype, csc_data):
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_bsr_tensor.crow_col_value_size")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_bsr_creation(device, dtype, bsr_data):
+def test_sparse_bsr_creation(device, bsr_data):
     crow, col, val, size = bsr_data
     check_sparse_op(lambda r, c, v: torch.sparse_bsr_tensor(r, c, v, size).to_dense(), device, crow, col, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::to_sparse_bsc")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_bsr_conversions(device, dtype, bsr_data):
+def test_sparse_bsr_conversions(device, bsr_data):
     crow, col, val, size = bsr_data
     check_sparse_op(lambda r, c, v: torch.sparse_bsr_tensor(r, c, v, size).to_sparse_bsc((2, 2)), device, crow, col, val)
 
@@ -399,16 +376,14 @@ def bsc_data():
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::sparse_bsc_tensor.ccol_row_value_size")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_bsc_creation(device, dtype, bsc_data):
+def test_sparse_bsc_creation(device, bsc_data):
     ccol, row, val, size = bsc_data
     check_sparse_op(lambda c, r, v: torch.sparse_bsc_tensor(c, r, v, size).to_dense(), device, ccol, row, val)
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
 @pytest.mark.covers("aten::to_sparse_bsr")
-@pytest.mark.parametrize("dtype", [torch.float32])
-def test_sparse_bsc_conversions(device, dtype, bsc_data):
+def test_sparse_bsc_conversions(device, bsc_data):
     ccol, row, val, size = bsc_data
     check_sparse_op(lambda c, r, v: torch.sparse_bsc_tensor(c, r, v, size).to_sparse_bsr((2, 2)), device, ccol, row, val)
 

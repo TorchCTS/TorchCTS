@@ -102,4 +102,4 @@ def test_binary_int_op(op_name, dtype, device, manifest, compare, input_gen):
     except Exception as e:
         raise RuntimeError(f"Binary integer op '{op_name}' failed on {device}: {e}") from e
 
-    compare(actual, expected, category="exact" if dtype in (actual.dtype, expected.dtype) else "elementwise", dtype=actual.dtype)
+    compare(actual, expected, category="exact", dtype=actual.dtype)

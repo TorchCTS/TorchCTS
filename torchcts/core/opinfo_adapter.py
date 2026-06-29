@@ -22,6 +22,7 @@ import os
 import sys
 import json
 import re
+from dataclasses import dataclass
 import torch
 
 from torchcts.core.version_rules import (
@@ -440,16 +441,104 @@ def is_cpu_reference_failure(exc):
 # Manifest dtype filter helper
 # ---------------------------------------------------------------------------
 
-def _dtype_matches_manifest(dt, dt_str, supported_dtypes, op_name):
-    """Check if a dtype is allowed by the manifest's supported_dtypes config."""
-    dtype_filter = supported_dtypes.get(dt, supported_dtypes.get(dt_str))
-    if dtype_filter is None:
-        return False
+@dataclass(frozen=True)
+class DTypeDisposition:
+    allowed: bool
+    skip_reason: str | None = None
+    detail: str = ""
+
+
+_PENDING_MANIFEST_SKIPS = {}
+
+
+def _dtype_filter_for_manifest(dt, dt_str, supported_dtypes):
+    if dt in supported_dtypes:
+        return supported_dtypes[dt], True
+    if dt_str in supported_dtypes:
+        return supported_dtypes[dt_str], True
+    return None, False
+
+
+def dtype_manifest_disposition(dt, dt_str=None, supported_dtypes=None, op_name=None, *, dtype_label=None):
+    """Return the manifest disposition for one dtype/op pair."""
+    supported_dtypes = supported_dtypes or {}
+    if dt_str is None:
+        dt_str = dtype_to_str(dt)
+    dtype_label = dtype_label or dt_str
+    dtype_filter, listed = _dtype_filter_for_manifest(dt, dt_str, supported_dtypes)
+    if not listed:
+        return DTypeDisposition(
+            False,
+            "dtype_not_listed",
+            f"{dtype_label} not in supported_dtypes",
+        )
     if dtype_filter is True:
-        return True
+        return DTypeDisposition(True)
+    if dtype_filter is False:
+        return DTypeDisposition(
+            False,
+            "dtype_not_supported",
+            f"{dtype_label} is declared unsupported in supported_dtypes",
+        )
     if isinstance(dtype_filter, str):
-        return bool(re.search(dtype_filter, op_name))
-    return False
+        if op_name and re.search(dtype_filter, op_name):
+            return DTypeDisposition(True)
+        op_detail = f"op {op_name} " if op_name else ""
+        return DTypeDisposition(
+            False,
+            "dtype_regex_filtered",
+            f"{op_detail}filtered out by {dtype_label} regex: {dtype_filter}",
+        )
+    return DTypeDisposition(
+        False,
+        "dtype_not_supported",
+        f"{dtype_label} has unsupported manifest filter value {dtype_filter!r}",
+    )
+
+
+def clear_pending_manifest_skips():
+    _PENDING_MANIFEST_SKIPS.clear()
+
+
+def consume_pending_manifest_skips():
+    pending = dict(_PENDING_MANIFEST_SKIPS)
+    _PENDING_MANIFEST_SKIPS.clear()
+    return pending
+
+
+def _opinfo_skip_record(op_name, dtype_str, skip_reason, detail, *, phase, input_condition=None):
+    if phase == "forward":
+        nodeid = (
+            "torchcts/opinfo/test_opinfo_forward.py::"
+            f"test_op_forward[manifest-skip-{input_condition}-{op_name}-{dtype_str}]"
+        )
+    else:
+        nodeid = (
+            "torchcts/opinfo/test_opinfo_backward.py::"
+            f"test_op_backward[manifest-skip-{op_name}-{dtype_str}]"
+        )
+    record = {
+        "suite": "opinfo",
+        "test_kind": "opinfo",
+        "capability": "inference" if phase == "forward" else "training",
+        "is_plumbing": False,
+        "is_conformance": True,
+        "op": op_name,
+        "dtype": dtype_str,
+        "covers": [],
+        "covers_categories": ["opinfo_forward" if phase == "forward" else "opinfo_backward"],
+        "coverage_kind": "opinfo",
+        "surface_kind": None,
+        "variant_kind": None,
+        "coverage_id": None,
+        "coverage_status": None,
+        "semantic_skip_reason": None,
+        "skip_reason": skip_reason,
+        "detail": detail,
+    }
+    if input_condition is not None:
+        record["input_condition"] = input_condition
+    _PENDING_MANIFEST_SKIPS[nodeid] = record
 
 # ---------------------------------------------------------------------------
 # IEEE 754 undefined ops + capability check
@@ -552,12 +641,26 @@ def get_forward_op_tests(manifest):
         for d in sorted(op.dtypes, key=lambda x: str(x)):
             dt_str = dtype_to_str(d)
 
-            if _dtype_matches_manifest(d, dt_str, supported_dtypes, op.name):
+            disposition = dtype_manifest_disposition(d, dt_str, supported_dtypes, op.name)
+            if disposition.allowed:
                 tests.append((op.name, dt_str, InputCondition.CLEAN))
                 # Add IEEE 754 tiers for float/complex dtypes
                 if (d.is_floating_point or d.is_complex) and _ieee754_enabled_for_op(op.name, ieee754_cap):
                     tests.append((op.name, dt_str, InputCondition.HAS_NAN))
                     tests.append((op.name, dt_str, InputCondition.HAS_INF))
+            elif disposition.skip_reason in ("dtype_not_supported", "dtype_regex_filtered"):
+                conditions = [InputCondition.CLEAN]
+                if (d.is_floating_point or d.is_complex) and _ieee754_enabled_for_op(op.name, ieee754_cap):
+                    conditions.extend([InputCondition.HAS_NAN, InputCondition.HAS_INF])
+                for condition in conditions:
+                    _opinfo_skip_record(
+                        op.name,
+                        dt_str,
+                        disposition.skip_reason,
+                        disposition.detail,
+                        phase="forward",
+                        input_condition=condition,
+                    )
 
     return tests
 
@@ -601,8 +704,17 @@ def get_backward_op_tests(manifest):
 
             dt_str = dtype_to_str(d)
 
-            if _dtype_matches_manifest(d, dt_str, supported_dtypes, op.name):
+            disposition = dtype_manifest_disposition(d, dt_str, supported_dtypes, op.name)
+            if disposition.allowed:
                 tests.append((op.name, dt_str))
+            elif disposition.skip_reason in ("dtype_not_supported", "dtype_regex_filtered"):
+                _opinfo_skip_record(
+                    op.name,
+                    dt_str,
+                    disposition.skip_reason,
+                    disposition.detail,
+                    phase="backward",
+                )
 
     return tests
 
@@ -664,10 +776,27 @@ def discover_ieee754_undefined_ops():
         class _OpTimeout(Exception):
             pass
 
-        def _timeout_handler(signum, frame):
-            raise _OpTimeout()
+        _has_sigalrm = hasattr(signal, "SIGALRM")
 
-        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+        if _has_sigalrm:
+            def _timeout_handler(signum, frame):
+                raise _OpTimeout()
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+
+        # NaN-aware comparison: matching NaN positions = equal
+        def _bitwise_equal(a, b):
+            """True if tensors are identical including NaN positions."""
+            if a.shape != b.shape or a.dtype != b.dtype:
+                return False
+            if a.is_floating_point() or a.is_complex():
+                nan_match = torch.isnan(a) == torch.isnan(b)
+                if not nan_match.all():
+                    return False
+                finite = ~torch.isnan(a)
+                if finite.any():
+                    return torch.equal(a[finite], b[finite])
+                return True
+            return torch.equal(a, b)
 
         try:
             for op in cmi.op_db:
@@ -680,10 +809,12 @@ def discover_ieee754_undefined_ops():
                     continue
 
                 try:
-                    signal.alarm(5)  # 5 second timeout per op
+                    if _has_sigalrm:
+                        signal.alarm(5)  # 5 second timeout per op
                     samples = list(op.sample_inputs("cpu", torch.float32, requires_grad=False))
                     if not samples:
-                        signal.alarm(0)
+                        if _has_sigalrm:
+                            signal.alarm(0)
                         continue
 
                     sample = samples[0]
@@ -705,40 +836,29 @@ def discover_ieee754_undefined_ops():
                             # Both raise = consistent rejection, not undefined
                             continue
 
-                    # Compare outputs (NaN-aware: matching NaN positions = equal)
-                    def _bitwise_equal(a, b):
-                        """True if tensors are identical including NaN positions."""
-                        if a.shape != b.shape or a.dtype != b.dtype:
-                            return False
-                        if a.is_floating_point() or a.is_complex():
-                            # NaN == NaN should be True for this check
-                            nan_match = torch.isnan(a) == torch.isnan(b)
-                            if not nan_match.all():
-                                return False
-                            finite = ~torch.isnan(a)
-                            if finite.any():
-                                return torch.equal(a[finite], b[finite])
-                            return True
-                        return torch.equal(a, b)
+                        # Compare outputs for this condition
+                        try:
+                            found_undefined = False
+                            if isinstance(result1, torch.Tensor) and isinstance(result2, torch.Tensor):
+                                if not _bitwise_equal(result1, result2):
+                                    found_undefined = True
+                            elif isinstance(result1, (tuple, list)):
+                                for r1, r2 in zip(result1, result2):
+                                    if isinstance(r1, torch.Tensor) and isinstance(r2, torch.Tensor):
+                                        if not _bitwise_equal(r1, r2):
+                                            found_undefined = True
+                                            break
+                        except (_OpTimeout, KeyboardInterrupt):
+                            raise
+                        except Exception:
+                            found_undefined = True
 
-                    try:
-                        if isinstance(result1, torch.Tensor) and isinstance(result2, torch.Tensor):
-                            if not _bitwise_equal(result1, result2):
-                                undefined.add(op.name)
-                                break
-                        elif isinstance(result1, (tuple, list)):
-                            for r1, r2 in zip(result1, result2):
-                                if isinstance(r1, torch.Tensor) and isinstance(r2, torch.Tensor):
-                                    if not _bitwise_equal(r1, r2):
-                                        undefined.add(op.name)
-                                        break
-                    except (_OpTimeout, KeyboardInterrupt):
-                        raise
-                    except Exception:
-                        undefined.add(op.name)
-                        break
+                        if found_undefined:
+                            undefined.add(op.name)
+                            break  # break out of condition loop
 
-                    signal.alarm(0)  # cancel alarm after successful op
+                    if _has_sigalrm:
+                        signal.alarm(0)  # cancel alarm after successful op
                 except _OpTimeout:
                     # Op hung with NaN/Inf input — mark as undefined
                     undefined.add(op.name)
@@ -746,11 +866,13 @@ def discover_ieee754_undefined_ops():
                 except Exception:
                     # Skip ops that crash during sample generation or have
                     # unsupported tensor types (e.g. sparse CSR)
-                    signal.alarm(0)
+                    if _has_sigalrm:
+                        signal.alarm(0)
                     continue
         finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
+            if _has_sigalrm:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
 
     return undefined
 

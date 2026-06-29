@@ -20,7 +20,6 @@
 
 import pytest
 import torch
-import math
 
 pytestmark = pytest.mark.covers_category("stress")
 

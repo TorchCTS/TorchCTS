@@ -77,6 +77,8 @@ def test_group_norm(dtype, device, compare, input_gen):
     expected = torch.nn.functional.group_norm(x_cpu, num_groups, w_cpu, b_cpu)
     if dtype == torch.float16:
         expected = expected.half()
+    elif dtype == torch.bfloat16:
+        expected = expected.to(torch.bfloat16)
         
     actual = torch.nn.functional.group_norm(x_dev, num_groups, weight_dev, bias_dev)
     synchronize(device)
@@ -88,8 +90,7 @@ def test_group_norm(dtype, device, compare, input_gen):
 @pytest.mark.parametrize("dtype", NORM_DTYPES)
 def test_batch_norm(dtype, device, compare, input_gen):
     if device == "cpu" and dtype in (torch.float16, torch.bfloat16):
-        # CPU batch_norm doesn't support half/bfloat16 in eager PyTorch
-        return
+        pytest.skip("CPU batch_norm doesn't support half/bfloat16 in eager PyTorch")
         
     shape = (4, 8, 16, 16)
     num_features = 8
@@ -135,12 +136,14 @@ def test_instance_norm(dtype, device, compare, input_gen):
     x_dev = input_gen(shape, dtype, device)
     
     x_cpu = x_dev.cpu()
-    if dtype == torch.float16:
+    if dtype in (torch.float16, torch.bfloat16):
         x_cpu = x_cpu.float()
         
     expected = torch.nn.functional.instance_norm(x_cpu, use_input_stats=True)
     if dtype == torch.float16:
         expected = expected.half()
+    elif dtype == torch.bfloat16:
+        expected = expected.to(torch.bfloat16)
         
     actual = torch.nn.functional.instance_norm(x_dev, use_input_stats=True)
     synchronize(device)

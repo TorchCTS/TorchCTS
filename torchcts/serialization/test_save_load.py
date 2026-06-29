@@ -36,7 +36,7 @@ def test_save_load_roundtrip(dtype, device, manifest, compare, tmp_path):
     torch.save(x_dev.cpu(), save_path)
     
     # Load back and move to device
-    x_loaded = torch.load(save_path).to(device)
+    x_loaded = torch.load(save_path, weights_only=True).to(device)
     synchronize(device)
     
     compare(x_loaded, x_dev, category="serialization", dtype=dtype)

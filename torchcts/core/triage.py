@@ -917,7 +917,7 @@ def active_known_segfault_summary(
         return [
             {
                 "id": entry["id"],
-                "nodeid": entry["nodeid"],
+                "nodeid": entry.get("nodeid"),
                 "dispatcher": entry["dispatcher"],
                 "expected_signal": entry["expected_signal"],
                 "repro": entry["repro"],

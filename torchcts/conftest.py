@@ -84,9 +84,18 @@ from torchcts.core.device import (
     memory_allocated
 )
 from torchcts.core.report import get_hardware_key
-from torchcts.core.opinfo_adapter import str_to_dtype, dtype_to_str
+from torchcts.core.opinfo_adapter import (
+    consume_pending_manifest_skips,
+    dtype_manifest_disposition,
+    str_to_dtype,
+    dtype_to_str,
+)
 from torchcts.core.comparer import clear_metrics, get_metrics
 from torchcts.core.input_gen import refresh_shared_data
+from torchcts.core.runtime_evidence import (
+    harness_probe_failure_key,
+    record_harness_probe_failure,
+)
 from torchcts.core.semantic_levels import (
     DEFAULT_REQUESTED_SEMANTIC_LEVEL,
     SemanticLevelError,
@@ -106,6 +115,13 @@ _RESULTS_DIR = "./results"
 _START_TIME = 0
 _SESSION_RESULTS = {}
 _SESSION_SKIPS = {}
+_SESSION_PROBE_FAILURES = []
+_SESSION_PROBE_FAILURE_KEYS = set()
+_DTYPE_MANIFEST_SKIP_REASONS = frozenset({
+    "dtype_not_supported",
+    "dtype_regex_filtered",
+    "dtype_not_listed",
+})
 _BASELINE_RESULTS = {}
 _SHOW_SKIPS = False
 _REPORT_SKIPS = False
@@ -530,7 +546,7 @@ def _failure_stage_for_exception(error_type, error_message):
     message = (error_message or "").lower()
     if error_type == "AssertionError":
         return "comparison"
-    if "cpu oracle" in message or "expected" in message and "cpu" in message:
+    if "cpu oracle" in message or ("expected" in message and "cpu" in message):
         return "cpu_oracle"
     if "copy" in message and "cpu" in message:
         return "sync_or_copy"
@@ -598,41 +614,74 @@ def _probe_failure_tail(text, limit=1200):
     return text if len(text) <= limit else text[-limit:]
 
 
-def _manifest_probe_failure_message(kind, name, detail):
-    return (
-        f"Manifest overclaim: {kind} {name!r} is declared supported, "
-        f"but its runtime probe failed.\n{detail}\n"
-        "Fix the backend or narrow the manifest."
+def _harness_probe_artifact_path():
+    if not _RESULTS_DIR or not _HARDWARE_KEY:
+        return None
+    return os.path.join(
+        _RESULTS_DIR,
+        f"{_HARDWARE_KEY}_harness_probe_failures_{os.getpid()}.jsonl",
     )
 
 
+def _warn_probe_failure_once(record):
+    if _COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT:
+        return
+    message = _probe_failure_tail(record.get("error_message"), limit=300).replace("\n", " | ")
+    print(
+        "Warning: declared {kind} {name!r} failed diagnostic probe "
+        "({stage}); tests will still run. {etype}: {message}".format(
+            kind=record.get("probe_kind"),
+            name=record.get("name"),
+            stage=record.get("stage"),
+            etype=record.get("error_type"),
+            message=message,
+        ),
+        file=sys.stderr,
+    )
+
+
+def _record_session_probe_failure(probe_kind, name, exc_or_result, *, stage):
+    record = record_harness_probe_failure(probe_kind, name, exc_or_result, stage=stage)
+    if record is None:
+        return None
+    key = harness_probe_failure_key(record)
+    if key in _SESSION_PROBE_FAILURE_KEYS:
+        return record
+    _SESSION_PROBE_FAILURE_KEYS.add(key)
+    _SESSION_PROBE_FAILURES.append(record)
+    _warn_probe_failure_once(record)
+    return record
+
+
 def _apply_declared_dtype_probes(supported_dtypes, device_name):
-    failures = []
+    records = []
     for dt, val in list(supported_dtypes.items()):
         if not val:
             continue
         probe_dtype = dt if isinstance(dt, torch.dtype) else str_to_dtype(str(dt))
         dtype_name = dtype_to_str(probe_dtype) if probe_dtype is not None else str(dt)
         if probe_dtype is None:
-            failures.append(
-                _manifest_probe_failure_message(
+            records.append(
+                _record_session_probe_failure(
                     "dtype",
                     dtype_name,
-                    f"Could not resolve manifest dtype key {dt!r}.",
+                    ValueError(f"Could not resolve manifest dtype key {dt!r}."),
+                    stage="declared_dtype_probe",
                 )
             )
             continue
         try:
             torch.zeros(1, dtype=probe_dtype, device=device_name)
         except Exception as exc:
-            failures.append(
-                _manifest_probe_failure_message(
+            records.append(
+                _record_session_probe_failure(
                     "dtype",
                     dtype_name,
-                    f"{type(exc).__name__}: {_probe_failure_tail(exc)}",
+                    exc,
+                    stage="declared_dtype_probe",
                 )
             )
-    return failures
+    return [record for record in records if record is not None]
 
 
 def _apply_declared_capability_probes(caps, device_name, probe_func=None):
@@ -640,22 +689,22 @@ def _apply_declared_capability_probes(caps, device_name, probe_func=None):
         from torchcts.core.device import probe_capability_result
 
         probe_func = probe_capability_result
-    failures = []
+    records = []
     for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
         if not caps.get(cap, False):
             continue
         probe = probe_func(device_name, cap)
         if probe.supported:
             continue
-        evidence = probe.to_dict()
-        detail = (
-            f"{evidence.get('error_type')}: {evidence.get('error_message')}\n"
-            f"returncode={evidence.get('returncode')} timed_out={evidence.get('timed_out')}\n"
-            f"stderr_tail:\n{evidence.get('stderr_tail')}\n"
-            f"stdout_tail:\n{evidence.get('stdout_tail')}"
+        records.append(
+            _record_session_probe_failure(
+                "capability",
+                cap,
+                probe,
+                stage="declared_capability_probe",
+            )
         )
-        failures.append(_manifest_probe_failure_message("capability", cap, detail))
-    return failures
+    return [record for record in records if record is not None]
 
 
 def _extract_result_metadata(item):
@@ -776,6 +825,49 @@ def _extract_result_metadata(item):
     metadata["semantic_level_selection"] = _SEMANTIC_LEVEL_SELECTION.to_metadata()
 
     return metadata
+
+
+def _skip_record_for_item(item, skip_reason, detail):
+    metadata = _extract_result_metadata(item)
+    return {
+        "suite": metadata["suite"],
+        "test_kind": metadata["test_kind"],
+        "capability": metadata["capability"],
+        "is_plumbing": metadata["is_plumbing"],
+        "is_conformance": metadata["is_conformance"],
+        "op": metadata["op"] or item.name,
+        "dtype": metadata["dtype"],
+        "covers": metadata["covers"],
+        "covers_categories": metadata["covers_categories"],
+        "coverage_kind": metadata["coverage_kind"],
+        "surface_kind": metadata["surface_kind"],
+        "variant_kind": metadata["variant_kind"],
+        "coverage_id": metadata["coverage_id"],
+        "coverage_status": metadata["coverage_status"],
+        "input_condition": metadata.get("input_condition"),
+        "semantic_level": metadata["semantic_level"],
+        "requested_level": metadata["requested_level"],
+        "semantic_level_selection": metadata["semantic_level_selection"],
+        "level_reason": metadata["level_reason"],
+        "level_source": metadata["level_source"],
+        "semantic_skip_reason": skip_reason if skip_reason.startswith("semantic_") else None,
+        "skip_reason": skip_reason,
+        "detail": detail,
+    }
+
+
+def _merge_pending_manifest_skips(*, include_opinfo):
+    pending = consume_pending_manifest_skips()
+    if not include_opinfo:
+        return
+    default_level = suite_default_level("opinfo")
+    for nodeid, record in pending.items():
+        record.setdefault("requested_level", _REQUESTED_SEMANTIC_LEVEL)
+        record.setdefault("semantic_level_selection", _SEMANTIC_LEVEL_SELECTION.to_metadata())
+        record.setdefault("semantic_level", default_level.level)
+        record.setdefault("level_reason", default_level.reason)
+        record.setdefault("level_source", default_level.source)
+        _SESSION_SKIPS[nodeid] = record
 
 
 def _get_runtime_device_count(device_name):
@@ -940,9 +1032,10 @@ def pytest_configure(config):
     global _KNOWN_SEGFAULT_AUDIT
     global _ADAPTIVE_ISOLATION_MODE, _ADAPTIVE_ISOLATION_LOAD, _ADAPTIVE_ISOLATION_ACTIVE
     global _ADAPTIVE_ISOLATION_REJECTED, _ADAPTIVE_ISOLATION_WARNINGS, _SESSION_COMPLETED
+    global _SESSION_PROBE_FAILURES, _SESSION_PROBE_FAILURE_KEYS
 
     # Register custom markers
-    config.addinivalue_line("markers", "gate: backend registration gate tests — run first, abort on failure")
+    config.addinivalue_line("markers", "gate: backend registration gate tests — run first")
     config.addinivalue_line("markers", "smoke: smoke tests only")
     config.addinivalue_line("markers", "medium: medium tests")
     config.addinivalue_line("markers", "opinfo: OpInfo breadth tests")
@@ -1102,43 +1195,6 @@ def pytest_configure(config):
                     detected_mems.append(4)  # fallback
             hw_config["device_memory_gb"] = detected_mems
 
-    # Probes and capability overrides (only when executing, not in validation/collectonly modes)
-    if not is_validation and not _COLLECT_ONLY:
-        # Dynamic Dtype Probing — in-process torch.zeros, safe for all processes
-        supported_dtypes = _MANIFEST.setdefault("supported_dtypes", {})
-        dtype_probe_failures = _apply_declared_dtype_probes(
-            supported_dtypes,
-            _DEVICE_NAME,
-        )
-        if dtype_probe_failures:
-            pytest.exit("\n\n".join(dtype_probe_failures), returncode=1)
-
-        # Dynamic Capability Probing — subprocess-based.
-        # Skip in xdist workers: concurrent subprocess probes cause hangs.
-        if not _IS_XDIST_WORKER:
-            caps = _MANIFEST.setdefault("capabilities", {})
-            capability_probe_failures = _apply_declared_capability_probes(
-                caps,
-                _DEVICE_NAME,
-            )
-            if capability_probe_failures:
-                pytest.exit("\n\n".join(capability_probe_failures), returncode=1)
-
-            # Hard prerequisite: inference must be True
-            if not caps.get("inference", True):
-                pytest.exit(
-                    "FATAL: capability 'inference' is False. A backend that cannot "
-                    "perform inference cannot be tested.",
-                    returncode=1,
-                )
-
-    # 3. Hardware details
-    # Build effective hardware unsupported patterns based on device
-    global _HARDWARE_UNSUPPORTED_PATTERNS
-    _HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
-    if _DEVICE_NAME == "mps":
-        _HARDWARE_UNSUPPORTED_PATTERNS.extend(_HARDWARE_UNSUPPORTED_PATTERNS_MPS)
-
     _HARDWARE_KEY = get_hardware_key(_DEVICE_NAME, _MANIFEST)
     _RESULTS_DIR = config.getoption("--results-dir")
     os.environ["TORCHCTS_RESULTS_DIR"] = str(_RESULTS_DIR)
@@ -1155,11 +1211,44 @@ def pytest_configure(config):
     _ADAPTIVE_ISOLATION_REJECTED = []
     _ADAPTIVE_ISOLATION_WARNINGS = []
     _SESSION_COMPLETED = False
+    _SESSION_PROBE_FAILURES = []
+    _SESSION_PROBE_FAILURE_KEYS = set()
     policy_option = config.getoption("--known-segfault-policy")
     _KNOWN_SEGFAULT_POLICY = policy_option or "isolate"
     _KNOWN_SEGFAULT_AUDIT = bool(config.getoption("--known-segfault-audit"))
     _KNOWN_SEGFAULTS_ACTIVE = []
     _KNOWN_SEGFAULT_WARNINGS = []
+
+    # Diagnostic probes only. Probe failures never decide conformance outcomes.
+    if not is_validation and not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT):
+        supported_dtypes = _MANIFEST.setdefault("supported_dtypes", {})
+        _apply_declared_dtype_probes(
+            supported_dtypes,
+            _DEVICE_NAME,
+        )
+
+        # Skip in xdist workers: concurrent subprocess probes cause hangs.
+        if not _IS_XDIST_WORKER:
+            caps = _MANIFEST.setdefault("capabilities", {})
+            _apply_declared_capability_probes(
+                caps,
+                _DEVICE_NAME,
+            )
+
+            # Hard prerequisite: inference must be True
+            if not caps.get("inference", True):
+                pytest.exit(
+                    "FATAL: capability 'inference' is False. A backend that cannot "
+                    "perform inference cannot be tested.",
+                    returncode=1,
+                )
+
+    # 3. Hardware details
+    # Build effective hardware unsupported patterns based on device
+    global _HARDWARE_UNSUPPORTED_PATTERNS
+    _HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
+    if _DEVICE_NAME == "mps":
+        _HARDWARE_UNSUPPORTED_PATTERNS.extend(_HARDWARE_UNSUPPORTED_PATTERNS_MPS)
     if _KNOWN_SEGFAULT_POLICY == "isolate":
         try:
             from torchcts.core.known_segfaults import (
@@ -1343,24 +1432,6 @@ def pytest_collection_modifyitems(session, config, items):
     skip_ops = set(_MANIFEST.get("skip_ops", []))
     device_count = _MANIFEST.get("effective_device_count", _MANIFEST.get("device_count", 1))
     
-    # Dynamic compiler functional check
-    if caps.get("compile", False) and not (_COLLECT_ONLY or _SHOW_SKIPS):
-        try:
-            with _without_stale_conda_env_for_venv():
-                @torch.compile(fullgraph=True)
-                def _dummy_fn(x):
-                    return x + 1.0
-                _dummy_fn(torch.ones(1, device=_DEVICE_NAME))
-        except Exception as exc:
-            pytest.exit(
-                _manifest_probe_failure_message(
-                    "capability",
-                    "compile",
-                    f"{type(exc).__name__}: {_probe_failure_tail(exc)}",
-                ),
-                returncode=1,
-            )
-            
     # Optional CLI dtype filter
     cli_dtypes = config.getoption("--dtype")
     if cli_dtypes:
@@ -1372,10 +1443,12 @@ def pytest_collection_modifyitems(session, config, items):
                 supported_dtypes[dt] = True
 
     keep_items = []
+    dtype_deselected_items = []
     
     for item in items:
         skip_reason = None
         detail = ""
+        dtype_manifest_skip = False
         
         # Determine ATen op name
         op_name = None
@@ -1405,25 +1478,11 @@ def pytest_collection_modifyitems(session, config, items):
         if not skip_reason and hasattr(item, "callspec") and "dtype" in item.callspec.params:
             dt = item.callspec.params["dtype"]
             dt_str = dtype_to_str(dt)
-            
-            dtype_allowed = False
-            dtype_filter = None
-            
-            if dt in supported_dtypes:
-                dtype_allowed = True
-                dtype_filter = supported_dtypes[dt]
-            elif dt_str in supported_dtypes:
-                dtype_allowed = True
-                dtype_filter = supported_dtypes[dt_str]
-                
-            if not dtype_allowed:
-                skip_reason = "dtype_not_listed"
-                detail = f"{dt_str} not in supported_dtypes"
-            elif isinstance(dtype_filter, str) and op_name:
-                import re
-                if not re.search(dtype_filter, op_name):
-                    skip_reason = "dtype_regex_filtered"
-                    detail = f"op {op_name} filtered out by {dt_str} regex: {dtype_filter}"
+            disposition = dtype_manifest_disposition(dt, dt_str, supported_dtypes, op_name)
+            if not disposition.allowed:
+                skip_reason = disposition.skip_reason
+                detail = disposition.detail
+                dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
                     
         # 3. Op exclusions
         if not skip_reason and op_name and op_name in skip_ops:
@@ -1435,10 +1494,18 @@ def pytest_collection_modifyitems(session, config, items):
             for dtype_param in ("src_dtype", "dst_dtype"):
                 if dtype_param in item.callspec.params:
                     dt = item.callspec.params[dtype_param]
-                    if dt not in supported_dtypes:
-                        dt_str = dtype_to_str(dt)
-                        skip_reason = "dtype_not_listed"
-                        detail = f"{dt_str} ({dtype_param}) not in supported_dtypes"
+                    dt_str = dtype_to_str(dt)
+                    disposition = dtype_manifest_disposition(
+                        dt,
+                        dt_str,
+                        supported_dtypes,
+                        op_name,
+                        dtype_label=f"{dt_str} ({dtype_param})",
+                    )
+                    if not disposition.allowed:
+                        skip_reason = disposition.skip_reason
+                        detail = disposition.detail
+                        dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
                         break
 
         # 5. CPU device cannot run cross-device or device-module tests
@@ -1485,9 +1552,17 @@ def pytest_collection_modifyitems(session, config, items):
         if not skip_reason:
             test_name = item.name
             if "test_gradcheck" in test_name:
-                if torch.float64 not in supported_dtypes:
-                    skip_reason = "dtype_not_listed"
-                    detail = "float64 not in supported_dtypes (required for gradcheck)"
+                disposition = dtype_manifest_disposition(
+                    torch.float64,
+                    "torch.float64",
+                    supported_dtypes,
+                    op_name,
+                    dtype_label="torch.float64 (required for gradcheck)",
+                )
+                if not disposition.allowed:
+                    skip_reason = disposition.skip_reason
+                    detail = disposition.detail
+                    dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
 
         # 10. MPS index_reduce NaN hang workaround
         if not skip_reason and _DEVICE_NAME == "mps" and op_name == "index_reduce":
@@ -1519,33 +1594,18 @@ def pytest_collection_modifyitems(session, config, items):
                     )
 
         if skip_reason:
-            metadata = _extract_result_metadata(item)
-            _SESSION_SKIPS[item.nodeid] = {
-                "suite": metadata["suite"],
-                "capability": metadata["capability"],
-                "is_plumbing": metadata["is_plumbing"],
-                "is_conformance": metadata["is_conformance"],
-                "op": metadata["op"] or item.name,
-                "dtype": metadata["dtype"],
-                "covers": metadata["covers"],
-                "coverage_kind": metadata["coverage_kind"],
-                "surface_kind": metadata["surface_kind"],
-                "variant_kind": metadata["variant_kind"],
-                "coverage_id": metadata["coverage_id"],
-                "coverage_status": metadata["coverage_status"],
-                "semantic_level": metadata["semantic_level"],
-                "requested_level": metadata["requested_level"],
-                "semantic_level_selection": metadata["semantic_level_selection"],
-                "level_reason": metadata["level_reason"],
-                "level_source": metadata["level_source"],
-                "semantic_skip_reason": skip_reason if skip_reason.startswith("semantic_") else None,
-                "skip_reason": skip_reason,
-                "detail": detail
-            }
-            item.add_marker(pytest.mark.skip(reason=detail))
-            keep_items.append(item)
+            _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail)
+            if dtype_manifest_skip:
+                dtype_deselected_items.append(item)
+            else:
+                item.add_marker(pytest.mark.skip(reason=detail))
+                keep_items.append(item)
         else:
             keep_items.append(item)
+
+    _merge_pending_manifest_skips(include_opinfo=config.getoption("--suite") in (None, "opinfo"))
+    if dtype_deselected_items:
+        config.hook.pytest_deselected(items=dtype_deselected_items)
 
     known_segfault_descriptors = []
     if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:
@@ -1593,7 +1653,7 @@ def pytest_collection_modifyitems(session, config, items):
 
 def flush_results_to_disk():
     global _SESSION_RESULTS, _SESSION_SKIPS, _START_TIME, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR
-    global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED
+    global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED, _SESSION_PROBE_FAILURES
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
@@ -1611,9 +1671,14 @@ def flush_results_to_disk():
             "semantic_level_selection": _SEMANTIC_LEVEL_SELECTION.to_metadata(),
             "skip_count": len(_SESSION_SKIPS),
             "session_completed": _SESSION_COMPLETED,
+            "harness_probe_failure_count": len(_SESSION_PROBE_FAILURES),
+            "harness_probe_failure_artifact": (
+                _harness_probe_artifact_path() if _SESSION_PROBE_FAILURES else None
+            ),
         },
         "results": _SESSION_RESULTS,
         "skips": _SESSION_SKIPS,
+        "harness_probe_failures": _SESSION_PROBE_FAILURES,
     }
     
     
@@ -1642,14 +1707,28 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     # Load existing latest.json as base (if any)
     merged_results = {}
     merged_skips = {}
+    merged_probe_failures = []
+    merged_probe_failure_keys = set()
     merged_metadata = None
     total_elapsed = 0.0
+
+    def add_probe_failures(records):
+        for record in records or []:
+            if not isinstance(record, dict):
+                continue
+            key = harness_probe_failure_key(record)
+            if key in merged_probe_failure_keys:
+                continue
+            merged_probe_failure_keys.add(key)
+            merged_probe_failures.append(record)
+
     if os.path.exists(latest_path):
         try:
             with open(latest_path, "r", encoding="utf-8") as f:
                 existing = json.load(f)
             merged_results = existing.get("results", {})
             merged_skips = existing.get("skips", {})
+            add_probe_failures(existing.get("harness_probe_failures", []))
             merged_metadata = existing.get("metadata")
         except Exception:
             pass
@@ -1661,6 +1740,7 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
                 wdata = json.load(f)
             merged_results.update(wdata.get("results", {}))
             merged_skips.update(wdata.get("skips", {}))
+            add_probe_failures(wdata.get("harness_probe_failures", []))
             wm = wdata.get("metadata", {})
             total_elapsed = max(total_elapsed, wm.get("elapsed_sec", 0.0))
             if merged_metadata is None:
@@ -1670,11 +1750,16 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     
     if merged_metadata and total_elapsed > 0:
         merged_metadata["elapsed_sec"] = total_elapsed
+    if merged_metadata is not None:
+        merged_metadata["harness_probe_failure_count"] = len(merged_probe_failures)
+        if merged_probe_failures and not merged_metadata.get("harness_probe_failure_artifact"):
+            merged_metadata["harness_probe_failure_artifact"] = None
     
     merged_data = {
         "metadata": merged_metadata or {},
         "results": merged_results,
         "skips": merged_skips,
+        "harness_probe_failures": merged_probe_failures,
     }
     _atomic_json_dump(latest_path, merged_data)
     
@@ -1767,15 +1852,6 @@ def input_gen():
 
 def pytest_runtest_makereport(item, call):
     global _SESSION_RESULTS
-    
-    # If a gate test fails, abort the entire session immediately
-    if call.when == "call" and call.excinfo is not None and item.get_closest_marker("gate"):
-        if call.excinfo.typename != "Skipped":
-            pytest.exit(
-                f"GATE FAILURE: {item.name} — backend is not functional.\n"
-                f"  {call.excinfo.typename}: {call.excinfo.value}",
-                returncode=1,
-            )
 
     # Run only at the end of the call phase (or setup if setup fails)
     if call.when == "call" or (call.when == "setup" and call.excinfo is not None):

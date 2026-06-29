@@ -49,7 +49,7 @@ def test_checkpoint_roundtrip(dtype, device, manifest, compare, tmp_path):
     torch.save(state, checkpoint_path)
     
     # 2. Load state
-    loaded_state = torch.load(checkpoint_path, map_location=device)
+    loaded_state = torch.load(checkpoint_path, map_location=device, weights_only=True)
     
     model_new = SimpleModel().to(device)
     opt_new = torch.optim.Adam(model_new.parameters(), lr=0.1)

@@ -22,7 +22,7 @@ import argparse
 import sys
 import os
 import shutil
-import importlib
+
 import json
 import subprocess
 
@@ -338,6 +338,7 @@ def main():
         
         # Load manifest to check show_traceback
         show_traceback = False
+        manifest = {}
         manifest_path = os.path.join(os.getcwd(), "manifest.py")
         if os.path.exists(manifest_path):
             try:
@@ -410,7 +411,7 @@ def main():
                     print("\nAvailable backends detected:")
                     for idx, entry in enumerate(detected, 1):
                         print(f"  [{idx}] {entry[0]} ({entry[1]})")
-                    non_interactive = "--non-interactive" in sys.argv or os.environ.get("BACKEND_VALIDATOR_NON_INTERACTIVE") == "1"
+                    non_interactive = "--non-interactive" in sys.argv or "TORCHCTS_NON_INTERACTIVE" in os.environ or "BACKEND_VALIDATOR_NON_INTERACTIVE" in os.environ
                     if non_interactive:
                         backend_list = ", ".join(f"{e[0]} ({e[1]})" for e in detected)
                         print(f"Error: Ambiguous device selection in non-interactive mode. Detected: {backend_list}", file=sys.stderr)
@@ -453,7 +454,7 @@ def main():
     
     # Init subcommand
     init_parser = subparsers.add_parser("init", help="Initialize manifest.py from template")
-    init_parser.add_parser_argument = init_parser.add_argument  # compatibility/convenience
+
     template_choices = [name for name, _ in _discover_templates()]
     init_parser.add_argument("--template", choices=template_choices, help="Template type")
     init_parser.add_argument("--non-interactive", action="store_true", help="Run in non-interactive mode")
