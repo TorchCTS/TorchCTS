@@ -51,7 +51,6 @@ def make_binary_inputs(op_name, shape, dtype, device, input_gen):
     return a, b
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::add.Tensor")
 @pytest.mark.covers("aten::atan2")
 @pytest.mark.covers("aten::div.Tensor")
@@ -79,7 +78,6 @@ def test_binary_float_op(op_name, dtype, device, manifest, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::add.Tensor")
 @pytest.mark.covers("aten::div.Tensor")
 @pytest.mark.covers("aten::fmod.Tensor")

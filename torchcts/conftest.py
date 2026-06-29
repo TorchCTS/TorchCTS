@@ -934,7 +934,6 @@ def pytest_addoption(parser):
         default="auto",
         help="Isolate tests with matching prior crash/hang evidence without skipping them",
     )
-    group.addoption("--benchmark", action="store_true", help="Run tests in benchmarking mode")
     group.addoption("--validation", action="store_true", help="Validate harness and CPU-compatible tests without probing an accelerator")
 
 def load_manifest():
@@ -1094,7 +1093,6 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "stress: stress tests")
     config.addinivalue_line("markers", "requires(capability): required capabilities")
     config.addinivalue_line("markers", "adversarial: adversarial test suite")
-    config.addinivalue_line("markers", "benchmarkable: safe to repeat many times in benchmark mode")
     config.addinivalue_line("markers", "covers(dispatcher_name, surface=None): dispatcher overload covered by this test")
     config.addinivalue_line("markers", "covers_category(category): coverage category covered by this test")
     config.addinivalue_line("markers", "generated: generated coverage tests")
@@ -2001,9 +1999,6 @@ def pytest_runtest_makereport(item, call):
             "duration_ms": call.duration * 1000,
             "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         }
-        
-        if hasattr(item, "bench_stats"):
-            record["bench_stats"] = item.bench_stats
         runtime_unsupported = getattr(item, "_runtime_unsupported_error", None)
         if runtime_unsupported:
             record["runtime_unsupported_matched_pattern"] = runtime_unsupported["matched_pattern"]
@@ -2454,48 +2449,6 @@ def pytest_sessionfinish(session, exitstatus):
                     sys.stdout.flush()
                 except Exception:
                     pass
-
-def pytest_pyfunc_call(pyfuncitem):
-    if pyfuncitem.config.getoption("--benchmark"):
-        global _DEVICE_NAME
-        if pyfuncitem.get_closest_marker("benchmarkable") is None:
-            pytest.skip("Benchmark mode only runs tests marked benchmarkable.")
-        # Resolve argument names needed by the test function
-        args_to_pass = {k: v for k, v in pyfuncitem.funcargs.items() if k in pyfuncitem._fixtureinfo.argnames}
-        
-        # Warmup (10 iterations)
-        for _ in range(10):
-            pyfuncitem.obj(**args_to_pass)
-            
-        # Repetitions (100 iterations)
-        import time
-        import numpy as np
-        latencies = []
-        for _ in range(100):
-            clear_metrics()
-            start = time.perf_counter()
-            pyfuncitem.obj(**args_to_pass)
-            synchronize(_DEVICE_NAME)
-            latencies.append(time.perf_counter() - start)
-            
-        # Compute stats
-        latencies_ms = np.array(latencies) * 1000
-        median = float(np.median(latencies_ms))
-        min_val = float(np.min(latencies_ms))
-        max_val = float(np.max(latencies_ms))
-        std = float(np.std(latencies_ms))
-        
-        pyfuncitem.bench_stats = {
-            "median_ms": median,
-            "min_ms": min_val,
-            "max_ms": max_val,
-            "std_ms": std,
-            "repetitions": 100
-        }
-        
-        print(f"\nBENCHMARK [{pyfuncitem.name}]: Median: {median:.3f} ms, Min: {min_val:.3f} ms, Max: {max_val:.3f} ms, Std: {std:.3f} ms")
-        return True # Handled execution
-    return None
 
 def pytest_ignore_collect(collection_path, config):
     path_str = str(collection_path)

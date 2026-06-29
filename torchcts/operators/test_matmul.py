@@ -25,7 +25,6 @@ from torchcts.core.device import synchronize
 MATMUL_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::dot")
 @pytest.mark.covers("aten::mv")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
@@ -41,7 +40,6 @@ def test_dot_mv(dtype, op_name, device, compare, input_gen):
         compare(torch.mv(M_dev, v_dev), torch.mv(M_dev.cpu(), v_dev.cpu()), category="matmul", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::mm")
 @pytest.mark.parametrize("layout_a", ["contiguous", "transpose"])
 @pytest.mark.parametrize("layout_b", ["contiguous", "transpose"])
@@ -65,7 +63,6 @@ def test_mm_layouts(dtype, layout_a, layout_b, device, compare, input_gen):
 
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::_int_mm")
 @pytest.mark.covers("aten::_int_mm.out")
 def test_int_mm_dispatcher_variants(device):
@@ -88,7 +85,6 @@ def test_int_mm_dispatcher_variants(device):
 
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::bmm")
 @pytest.mark.parametrize("layout_a", ["contiguous", "transpose"])
 @pytest.mark.parametrize("layout_b", ["contiguous", "transpose"])
@@ -110,7 +106,6 @@ def test_bmm_layouts(dtype, layout_a, layout_b, device, compare, input_gen):
     compare(actual, expected, category="matmul", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::addmm")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
 def test_addmm(dtype, device, compare, input_gen):
@@ -127,7 +122,6 @@ def test_addmm(dtype, device, compare, input_gen):
     compare(actual, expected, category="matmul", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::matmul")
 @pytest.mark.parametrize("dtype", MATMUL_DTYPES)
 def test_matmul_general(dtype, device, compare, input_gen):

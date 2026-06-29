@@ -25,7 +25,6 @@ from torchcts.core.device import synchronize
 ACTIVATION_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::gelu")
 @pytest.mark.covers("aten::hardswish")
 @pytest.mark.covers("aten::mish")
@@ -52,7 +51,6 @@ def test_activations_basic(op_name, dtype, device, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::_log_softmax")
 @pytest.mark.covers("aten::_softmax")
 @pytest.mark.parametrize("op_name", ["softmax", "log_softmax"])

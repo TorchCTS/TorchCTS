@@ -2522,59 +2522,6 @@ def test_resource_limit_cli_overrides_mutate_manifest_limits():
     assert manifest["resource_limits"] is limits
 
 
-class _BenchmarkConfig:
-    def __init__(self, enabled=True):
-        self.enabled = enabled
-
-    def getoption(self, option, default=None):
-        if option == "--benchmark":
-            return self.enabled
-        return default
-
-
-class _FixtureInfo:
-    argnames = []
-
-
-class _PyfuncItem:
-    def __init__(self, marker=None):
-        self.config = _BenchmarkConfig()
-        self.funcargs = {}
-        self._fixtureinfo = _FixtureInfo()
-        self.name = "test_fake_benchmarkable"
-        self._marker = marker
-        self.calls = 0
-
-    def get_closest_marker(self, name):
-        if name == "benchmarkable":
-            return self._marker
-        return None
-
-    def obj(self):
-        self.calls += 1
-
-
-def test_benchmark_mode_skips_unmarked_tests():
-    item = _PyfuncItem(marker=None)
-
-    with pytest.raises(pytest.skip.Exception, match="Benchmark mode only runs tests marked benchmarkable"):
-        harness.pytest_pyfunc_call(item)
-
-    assert item.calls == 0
-
-
-def test_benchmark_mode_runs_marked_tests(monkeypatch):
-    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
-    monkeypatch.setattr(harness, "clear_metrics", lambda: None)
-    monkeypatch.setattr(harness, "synchronize", lambda device_name: None)
-
-    item = _PyfuncItem(marker=object())
-
-    assert harness.pytest_pyfunc_call(item) is True
-    assert item.calls == 110
-    assert item.bench_stats["repetitions"] == 100
-
-
 def test_check_hardware_alignment_macos_warning(monkeypatch, capsys):
     monkeypatch.setattr(device_module.sys, "platform", "darwin")
     # Mock MPS to be unavailable

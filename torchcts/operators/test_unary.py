@@ -55,7 +55,6 @@ def make_unary_input(op_name, shape, dtype, device, input_gen):
     return input_gen(shape, dtype, device)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::abs")
 @pytest.mark.covers("aten::ceil")
 @pytest.mark.covers("aten::cos")
@@ -93,7 +92,6 @@ def test_unary_float_op(op_name, dtype, device, manifest, compare, input_gen):
     compare(actual, expected, category="elementwise", dtype=dtype)
 
 @pytest.mark.smoke
-@pytest.mark.benchmarkable
 @pytest.mark.covers("aten::abs")
 @pytest.mark.covers("aten::ceil")
 @pytest.mark.covers("aten::floor")
