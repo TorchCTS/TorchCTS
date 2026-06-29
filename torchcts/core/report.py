@@ -101,11 +101,45 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         "dtype_not_listed",
         "capability_not_declared",
     }
+    selection_skip_reasons = {
+        "semantic_level_gt_requested",
+        "semantic_level_out_of_range",
+    }
+    coverage_skip_reasons = {
+        "coverage_unknown",
+        "coverage_excluded",
+        "coverage_strategy_pending",
+        "pending_backend_pack",
+        "backend_not_available",
+        "coverage_capability_disabled",
+    }
+    runtime_skip_reasons = {
+        "runtime_skip",
+    }
     dtype_skip_reasons = {
         "dtype_not_supported",
         "dtype_regex_filtered",
         "dtype_not_listed",
     }
+
+    not_run_bucket_labels = {
+        "manifest": "Ops not run (manifest)",
+        "selection": "Ops not run (selection)",
+        "coverage": "Ops not run (coverage)",
+        "runtime": "Ops not run (runtime)",
+        "other": "Ops not run (other)",
+    }
+
+    def not_run_bucket_for_reason(reason):
+        if reason in manifest_skip_reasons:
+            return "manifest"
+        if reason in selection_skip_reasons:
+            return "selection"
+        if reason in coverage_skip_reasons:
+            return "coverage"
+        if reason in runtime_skip_reasons:
+            return "runtime"
+        return "other"
 
     def suite_for(nodeid, res):
         if res.get("suite"):
@@ -161,8 +195,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     all_opinfo_ops_tested = set()
     passed_ops = set()
     failed_ops = set()
-    skipped_ops_manifest = set()
-    skipped_ops_unsupported = set()
+    skipped_ops_by_bucket = {bucket: set() for bucket in not_run_bucket_labels}
 
     for nodeid, res in results.items():
         if res.get("status") == "SKIP":
@@ -185,17 +218,17 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         op_name = res.get("op")
         if not op_name:
             continue
-        reason = res.get("skip_reason")
-        if reason in manifest_skip_reasons:
-            skipped_ops_manifest.add(op_name)
-        else:
-            skipped_ops_unsupported.add(op_name)
+        bucket = not_run_bucket_for_reason(res.get("skip_reason"))
+        skipped_ops_by_bucket[bucket].add(op_name)
 
-    total_ops_discovered = len(all_opinfo_ops_tested | skipped_ops_manifest | skipped_ops_unsupported)
+    skipped_ops_all = set()
+    for ops in skipped_ops_by_bucket.values():
+        skipped_ops_all.update(ops)
+
+    total_ops_discovered = len(all_opinfo_ops_tested | skipped_ops_all)
     num_pass = len(passed_ops)
     num_fail = len(failed_ops)
-    num_skip_manifest = len(skipped_ops_manifest)
-    num_skip_unsupported = len(skipped_ops_unsupported)
+    num_skips_by_bucket = {bucket: len(ops) for bucket, ops in skipped_ops_by_bucket.items()}
 
     def pct(n):
         return f"{n / (total_ops_discovered or 1) * 100:.1f}%"
@@ -400,8 +433,12 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     summary_lines.append(f"  OpInfo ops discovered:     {total_ops_discovered}")
     summary_lines.append(f"  Ops tested (PASS):         {num_pass:<4} ({pct(num_pass)})")
     summary_lines.append(f"  Ops tested (FAIL):         {num_fail:<4} ({pct(num_fail)})")
-    summary_lines.append(f"  Ops skipped (manifest):    {num_skip_manifest:<4} ({pct(num_skip_manifest)})")
-    summary_lines.append(f"  Ops skipped (unsupported): {num_skip_unsupported:<4} ({pct(num_skip_unsupported)})")
+    for bucket in ("manifest", "selection", "coverage", "runtime"):
+        count = num_skips_by_bucket[bucket]
+        summary_lines.append(f"  {not_run_bucket_labels[bucket]}: {count:<4} ({pct(count)})")
+    other_count = num_skips_by_bucket["other"]
+    if other_count:
+        summary_lines.append(f"  {not_run_bucket_labels['other']}:    {other_count:<4} ({pct(other_count)})")
     summary_lines.append("")
     
     if regressions_text:

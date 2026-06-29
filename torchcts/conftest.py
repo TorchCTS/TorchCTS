@@ -146,7 +146,7 @@ _SESSION_COMPLETED = False
 _XDIST_WORKER_ID = os.environ.get("PYTEST_XDIST_WORKER")  # e.g. "gw0", "gw1" or None
 _IS_XDIST_WORKER = _XDIST_WORKER_ID is not None
 
-_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL = [
+_RUNTIME_UNSUPPORTED_PATTERNS_UNIVERSAL = [
     # PyTorch dispatcher: op not registered for backend
     r"Could not run '.*' with arguments from the '.*' backend",
     r"Could not run '.*' from the '.*' device",
@@ -173,7 +173,7 @@ _HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL = [
     r"value cannot be converted to type .* without overflow",
 ]
 
-_HARDWARE_UNSUPPORTED_PATTERNS_MPS = [
+_RUNTIME_UNSUPPORTED_PATTERNS_MPS = [
     r"Adaptive pool MPS: input sizes must be divisible by output sizes",
     r"grid_sampler_3d: Unsupported Nearest interpolation",
     r"linalg_inv: not supported for complex types yet",
@@ -184,7 +184,7 @@ _HARDWARE_UNSUPPORTED_PATTERNS_MPS = [
 ]
 
 # Effective pattern list — built during pytest_configure based on device
-_HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
+_RUNTIME_UNSUPPORTED_PATTERNS = list(_RUNTIME_UNSUPPORTED_PATTERNS_UNIVERSAL)
 
 _MAX_DEVICE_MEM = None
 _MAX_TENSOR_SIZE = None
@@ -605,15 +605,13 @@ def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
         return "backend_not_available"
     if "coverage_strategy_pending" in err_msg:
         return "coverage_strategy_pending"
-    if hasattr(item, "_hardware_unsupported_reason"):
-        return "hardware_unsupported"
     return "runtime_skip"
 
 
-def _hardware_unsupported_pattern_match(message: str) -> str | None:
+def _runtime_unsupported_pattern_match(message: str) -> str | None:
     import re
 
-    for pattern in _HARDWARE_UNSUPPORTED_PATTERNS:
+    for pattern in _RUNTIME_UNSUPPORTED_PATTERNS:
         if re.search(pattern, message or ""):
             return pattern
     return None
@@ -1295,11 +1293,11 @@ def pytest_configure(config):
                 )
 
     # 3. Hardware details
-    # Build effective hardware unsupported patterns based on device
-    global _HARDWARE_UNSUPPORTED_PATTERNS
-    _HARDWARE_UNSUPPORTED_PATTERNS = list(_HARDWARE_UNSUPPORTED_PATTERNS_UNIVERSAL)
+    # Build effective runtime unsupported-pattern classification based on device.
+    global _RUNTIME_UNSUPPORTED_PATTERNS
+    _RUNTIME_UNSUPPORTED_PATTERNS = list(_RUNTIME_UNSUPPORTED_PATTERNS_UNIVERSAL)
     if _DEVICE_NAME == "mps":
-        _HARDWARE_UNSUPPORTED_PATTERNS.extend(_HARDWARE_UNSUPPORTED_PATTERNS_MPS)
+        _RUNTIME_UNSUPPORTED_PATTERNS.extend(_RUNTIME_UNSUPPORTED_PATTERNS_MPS)
     if _KNOWN_SEGFAULT_POLICY == "isolate":
         try:
             from torchcts.core.known_segfaults import (
@@ -1901,6 +1899,8 @@ def pytest_runtest_makereport(item, call):
         status = "PASS"
         err_msg = None
         err_type = None
+        skip_reason = None
+        skip_detail = None
         
         if call.excinfo is not None:
             if call.excinfo.typename == "Skipped":
@@ -1911,35 +1911,8 @@ def pytest_runtest_makereport(item, call):
                 # Record in skip session audit
                 previous_skip = _SESSION_SKIPS.get(item.nodeid)
                 skip_reason = _runtime_skip_reason(err_msg, previous_skip, item)
-                
-                metadata = _extract_result_metadata(item)
-                _SESSION_SKIPS[item.nodeid] = {
-                    "suite": metadata["suite"],
-                    "capability": metadata["capability"],
-                    "is_plumbing": metadata["is_plumbing"],
-                    "is_conformance": metadata["is_conformance"],
-                    "op": metadata["op"] or item.name,
-                    "dispatcher_name": metadata["dispatcher_name"],
-                    "schema": metadata["schema"],
-                    "strategy": metadata["strategy"],
-                    "strategy_family": metadata["strategy_family"],
-                    "sample_descriptor": metadata["sample_descriptor"],
-                    "dtype": metadata["dtype"],
-                    "covers": metadata["covers"],
-                    "coverage_kind": metadata["coverage_kind"],
-                    "surface_kind": metadata["surface_kind"],
-                    "variant_kind": metadata["variant_kind"],
-                    "coverage_id": metadata["coverage_id"],
-                    "coverage_status": metadata["coverage_status"],
-                    "semantic_level": metadata["semantic_level"],
-                    "requested_level": metadata["requested_level"],
-                    "semantic_level_selection": metadata["semantic_level_selection"],
-                    "level_reason": metadata["level_reason"],
-                    "level_source": metadata["level_source"],
-                    "semantic_skip_reason": skip_reason if skip_reason.startswith("semantic_") else None,
-                    "skip_reason": skip_reason,
-                    "detail": previous_skip["detail"] if previous_skip else err_msg
-                }
+                skip_detail = previous_skip.get("detail") if previous_skip else err_msg
+                _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, skip_detail)
             else:
                 status = "FAIL" if call.excinfo.typename == "AssertionError" else "ERROR"
                 err_msg = str(call.excinfo.value)
@@ -1982,11 +1955,7 @@ def pytest_runtest_makereport(item, call):
             "semantic_level_selection": metadata["semantic_level_selection"],
             "level_reason": metadata["level_reason"],
             "level_source": metadata["level_source"],
-            "semantic_skip_reason": (
-                "semantic_level_out_of_range"
-                if status == "SKIP" and not _SEMANTIC_LEVEL_SELECTION.contains(metadata["semantic_level"])
-                else None
-            ),
+            "semantic_skip_reason": skip_reason if skip_reason and skip_reason.startswith("semantic_") else None,
             "maxerr": metrics["max_abs_err"] if status == "PASS" or metrics["max_abs_err"] > 0 else None,
             "cosim": metrics["cosim"] if status == "PASS" else None,
             "golden_pass": metrics.get("golden_pass", True) if status == "PASS" else None,
@@ -1999,6 +1968,9 @@ def pytest_runtest_makereport(item, call):
             "duration_ms": call.duration * 1000,
             "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         }
+        if status == "SKIP":
+            record["skip_reason"] = skip_reason
+            record["skip_detail"] = skip_detail
         runtime_unsupported = getattr(item, "_runtime_unsupported_error", None)
         if runtime_unsupported:
             record["runtime_unsupported_matched_pattern"] = runtime_unsupported["matched_pattern"]
@@ -2467,7 +2439,7 @@ def pytest_runtest_call(item):
         if exc_type.__name__ in ("Skipped", "Failed", "OutcomeException"):
             return
         msg = str(exc_val)
-        matched_pattern = _hardware_unsupported_pattern_match(msg)
+        matched_pattern = _runtime_unsupported_pattern_match(msg)
         if matched_pattern:
             item._runtime_unsupported_error = {
                 "matched_pattern": matched_pattern,

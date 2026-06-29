@@ -142,8 +142,11 @@ def test_build_report_counts_opinfo_and_ignores_plumbing():
     assert "OpInfo ops discovered:     4" in scorecard
     assert "Ops tested (PASS):         1" in scorecard
     assert "Ops tested (FAIL):         1" in scorecard
-    assert "Ops skipped (manifest):    2" in scorecard
-    assert "Ops skipped (unsupported): 0" in scorecard
+    assert "Ops not run (manifest): 2" in scorecard
+    assert "Ops not run (selection): 0" in scorecard
+    assert "Ops not run (coverage): 0" in scorecard
+    assert "Ops not run (runtime): 0" in scorecard
+    assert "Ops skipped (unsupported)" not in scorecard
     assert "inference" in scorecard
     assert "2/3 passed" in scorecard
 
@@ -1113,11 +1116,62 @@ def test_build_report_surfaces_structured_dtype_skips():
 
     scorecard, markdown = build_report(current_data, include_skips=True)
 
-    assert "Ops skipped (manifest):    1" in scorecard
-    assert "Ops skipped (unsupported): 0" in scorecard
+    assert "Ops not run (manifest): 1" in scorecard
+    assert "Ops not run (selection): 0" in scorecard
+    assert "Ops not run (coverage): 0" in scorecard
+    assert "Ops not run (runtime): 0" in scorecard
+    assert "Ops skipped (unsupported)" not in scorecard
     assert "float64    0/0 ⬚ skip=1" in scorecard
     assert "**dtype_not_supported**: 1 skips" in markdown
     assert "**float64**: 1 skips" in markdown
+
+
+def test_build_report_separates_selection_and_other_opinfo_not_run_reasons():
+    current_data = {
+        "metadata": {
+            "device_name": "cpu",
+            "hardware_key": "cpu_test_1gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+        },
+        "results": {},
+        "skips": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[abs-torch.float32]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "skip_reason": "semantic_level_gt_requested",
+                "op": "abs",
+                "dtype": "torch.float32",
+            },
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[sin-torch.float32]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "skip_reason": "unexpected_future_reason",
+                "op": "sin",
+                "dtype": "torch.float32",
+            },
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[cos-torch.float32]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "op": "cos",
+                "dtype": "torch.float32",
+            },
+        },
+    }
+
+    scorecard, _ = build_report(current_data, include_skips=True)
+
+    assert "OpInfo ops discovered:     3" in scorecard
+    assert "Ops not run (manifest): 0" in scorecard
+    assert "Ops not run (selection): 1" in scorecard
+    assert "Ops not run (coverage): 0" in scorecard
+    assert "Ops not run (runtime): 0" in scorecard
+    assert "Ops not run (other):    2" in scorecard
+    assert "Ops skipped (unsupported)" not in scorecard
 
 
 def test_build_report_tracks_split_rng_capabilities():
@@ -1265,7 +1319,7 @@ def test_runtime_skip_reason_keeps_backend_unavailable_structured():
 
 
 def test_runtime_unsupported_pattern_is_classification_only():
-    pattern = harness._hardware_unsupported_pattern_match(
+    pattern = harness._runtime_unsupported_pattern_match(
         "value cannot be converted to type int64_t without overflow"
     )
 
@@ -2425,6 +2479,41 @@ def test_gate_failure_is_recorded_without_session_exit(monkeypatch):
     assert record["status"] == "FAIL"
     assert record["error_type"] == "AssertionError"
     assert "gate failed" in record["error_message"]
+
+
+def test_runtime_skip_result_record_includes_structured_skip_reason(monkeypatch):
+    item = _CollectionItem(
+        "test_op_forward[abs-torch.float32]",
+        "torchcts/opinfo/test_opinfo_forward.py",
+        markers={"semantic_level": _Marker(2)},
+    )
+    monkeypatch.setattr(harness, "_SESSION_RESULTS", {})
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {
+        item.nodeid: {
+            "skip_reason": "semantic_level_gt_requested",
+            "detail": "semantic_level=2 exceeds requested level 1",
+        }
+    })
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 1)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 1))
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_ARTIFACT_WRITES_ENABLED", False)
+
+    class _ExcInfo:
+        typename = "Skipped"
+        value = pytest.skip.Exception("semantic_level=2 exceeds requested level 1")
+        tb = None
+
+    call = SimpleNamespace(when="setup", excinfo=_ExcInfo(), duration=0.01)
+
+    harness.pytest_runtest_makereport(item, call)
+
+    record = harness._SESSION_RESULTS[item.nodeid]
+    assert record["status"] == "SKIP"
+    assert record["skip_reason"] == "semantic_level_gt_requested"
+    assert record["skip_detail"] == "semantic_level=2 exceeds requested level 1"
+    assert record["semantic_skip_reason"] == "semantic_level_gt_requested"
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "semantic_level_gt_requested"
 
 
 def test_rng_and_device_generator_capabilities_filter_independently(monkeypatch):
