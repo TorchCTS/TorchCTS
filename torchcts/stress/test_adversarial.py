@@ -50,6 +50,12 @@ def compare_tensor_outputs(cpu_t, dev_t):
         # Using a slightly higher tolerance for adversarial bounds/near-singular outputs
         assert torch.allclose(cpu_t[non_special], dev_t_cpu[non_special], rtol=1e-2, atol=1e-2)
 
+
+def _is_unsupported_error(exc):
+    msg = str(exc).lower()
+    return any(term in msg for term in ("not implemented", "not supported", "requires compiling"))
+
+
 def run_adversarial_op(op_fn, *args, device, **kwargs):
     __tracebackhide__ = True
     cpu_args = [x.to("cpu") if isinstance(x, torch.Tensor) else x for x in args]
@@ -69,26 +75,18 @@ def run_adversarial_op(op_fn, *args, device, **kwargs):
         try:
             op_fn(*dev_args, **dev_kwargs)
             synchronize(device)
-        except (NotImplementedError, RuntimeError) as dev_e:
-            err_msg = str(dev_e).lower()
-            if "not implemented" in err_msg or "not supported" in err_msg or "support" in err_msg:
-                pytest.skip(f"Operator not implemented on backend: {dev_e}")
-            # Success: both raised exceptions
+        except Exception as dev_e:
+            if isinstance(dev_e, NotImplementedError) or _is_unsupported_error(dev_e):
+                pytest.fail(
+                    f"CPU raised {type(cpu_exception).__name__}, but backend reported unsupported: {dev_e}"
+                )
             return
-        except Exception:
-            # Any other exception is fine
-            return
-        
+
         pytest.fail(f"CPU raised {type(cpu_exception).__name__}: {cpu_exception}, but backend did not raise any exception")
     else:
         try:
             dev_out = op_fn(*dev_args, **dev_kwargs)
             synchronize(device)
-        except (NotImplementedError, RuntimeError) as dev_e:
-            err_msg = str(dev_e).lower()
-            if "not implemented" in err_msg or "not supported" in err_msg or "support" in err_msg:
-                pytest.skip(f"Operator not implemented on backend: {dev_e}")
-            raise
         except Exception as dev_e:
             pytest.fail(f"CPU succeeded, but backend raised {type(dev_e).__name__}: {dev_e}")
             

@@ -4024,8 +4024,14 @@ def _load_or_build_default_audit() -> dict:
     return audit
 
 
+def _build_and_write_default_audit() -> dict:
+    audit = build_audit()
+    write_audit_artifacts(audit)
+    return audit
+
+
 def run_report_command() -> int:
-    audit = _load_or_build_default_audit()
+    audit = _build_and_write_default_audit()
     summary = render_summary_markdown(audit)
     _ensure_output_dir()
     DEFAULT_SUMMARY_PATH.write_text(summary, encoding="utf-8")
@@ -4040,7 +4046,7 @@ def run_report_command() -> int:
 
 
 def run_materialize_command() -> int:
-    audit = _load_or_build_default_audit()
+    audit = _build_and_write_default_audit()
     if audit.get("errors"):
         for error in audit["errors"]:
             print(f"Error: {error}")
@@ -4151,7 +4157,7 @@ def _validate_audit_consistency(audit: dict) -> list[str]:
 
 
 def run_check_command(strict_unknowns: bool = False) -> int:
-    audit = _load_or_build_default_audit()
+    audit = _build_and_write_default_audit()
     errors = list(audit.get("errors", []))
     errors.extend(_validate_audit_consistency(audit))
     if strict_unknowns and audit["metadata"]["unknown_count"]:

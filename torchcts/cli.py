@@ -549,11 +549,6 @@ def main():
             import torch
             import torch.testing._internal.common_methods_invocations as cmi
             print(f"OpInfo database loaded: {len(cmi.op_db)} ops from PyTorch {torch.__version__}")
-            from torchcts.core.opinfo_adapter import load_known_failures
-            known = load_known_failures()
-            fwd_count = len(known.get("forward", {}))
-            bwd_count = len(known.get("backward", {}))
-            print(f"Known CPU failures: {fwd_count} forward, {bwd_count} backward")
             if getattr(args, 'discover_ieee754_undefined', False):
                 from torchcts.core.opinfo_adapter import discover_ieee754_undefined_ops, save_ieee754_undefined
                 print("Discovering ops with undefined CPU NaN/Inf behavior...")

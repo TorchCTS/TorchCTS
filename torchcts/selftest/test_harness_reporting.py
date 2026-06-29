@@ -35,6 +35,7 @@ import torchcts.core.coverage as coverage_module
 import torchcts.core.device as device_module
 import torchcts.core.opinfo_adapter as opinfo_adapter_module
 import torchcts.core.reference_oracles as reference_oracles
+import torchcts.core.runtime_evidence as runtime_evidence
 import torchcts.core.version_rules as version_rules
 import torchcts.generated.coverage_helpers as generated_helpers
 import torchcts.sample_generation as sample_generation
@@ -63,6 +64,7 @@ from torchcts.dtypes.test_quantized import _run_custom_decoder_case
 from torchcts.opinfo.test_opinfo_forward import _compare_special_tier as _opinfo_compare_special_tier
 from torchcts.opinfo.test_opinfo_forward import _move_sample_obj
 from torchcts.opinfo.test_opinfo_errors import _assert_expected_error
+from torchcts.opinfo.test_opinfo_errors import _assert_exception_matches_expected
 
 pytestmark = pytest.mark.covers_category("selftest")
 
@@ -265,6 +267,65 @@ def test_probe_capability_supports_nested_named_tensor_and_fp8(monkeypatch):
     assert "torch.float8_e4m3fn" in scripts[2]
 
 
+def test_probe_capability_result_preserves_failure_evidence(monkeypatch):
+    def fake_run(cmd, capture_output, text, timeout):
+        return SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="RuntimeError: backend refused named tensors\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = device_module.probe_capability_result("privateuseone", "named_tensor")
+
+    assert not result.supported
+    assert result.error_type == "CapabilityProbeFailed"
+    assert "backend refused named tensors" in result.stderr
+    assert not device_module.probe_capability("privateuseone", "named_tensor")
+
+
+def test_declared_capability_probe_failure_is_manifest_overclaim():
+    caps = {"named_tensor": True}
+
+    def fake_probe(device_name, capability):
+        return device_module.CapabilityProbeResult(
+            device_name=device_name,
+            capability=capability,
+            supported=False,
+            returncode=1,
+            error_type="CapabilityProbeFailed",
+            error_message="NYI: named tensors only support CPU",
+            stderr="NYI: named tensors only support CPU\n",
+        )
+
+    failures = harness._apply_declared_capability_probes(
+        caps,
+        "privateuseone",
+        probe_func=fake_probe,
+    )
+
+    assert caps["named_tensor"] is True
+    assert len(failures) == 1
+    assert "Manifest overclaim: capability 'named_tensor'" in failures[0]
+    assert "NYI: named tensors" in failures[0]
+
+
+def test_declared_dtype_probe_failure_is_manifest_overclaim(monkeypatch):
+    def fake_zeros(*args, **kwargs):
+        raise RuntimeError("value cannot be converted to type float without overflow")
+
+    monkeypatch.setattr(harness.torch, "zeros", fake_zeros)
+    supported_dtypes = {torch.float32: True}
+
+    failures = harness._apply_declared_dtype_probes(supported_dtypes, "privateuseone")
+
+    assert supported_dtypes == {torch.float32: True}
+    assert len(failures) == 1
+    assert "Manifest overclaim: dtype 'torch.float32'" in failures[0]
+    assert "value cannot be converted" in failures[0]
+
+
 def test_atomic_json_dump_preserves_existing_file_on_failure(tmp_path):
     latest_path = tmp_path / "cpu_test_1gb_latest.json"
     latest_path.write_text('{"previous": true}\n', encoding="utf-8")
@@ -274,6 +335,78 @@ def test_atomic_json_dump_preserves_existing_file_on_failure(tmp_path):
 
     assert json.loads(latest_path.read_text(encoding="utf-8")) == {"previous": True}
     assert not any(path.name.endswith(".tmp") for path in tmp_path.iterdir())
+
+
+def test_runtime_evidence_writes_opinfo_oracle_jsonl(tmp_path, monkeypatch):
+    monkeypatch.setenv("TORCHCTS_RESULTS_DIR", str(tmp_path))
+    monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
+    monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
+    monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+
+    runtime_evidence.record_opinfo_oracle_failure(
+        "forward",
+        "fake.op",
+        "torch.float32",
+        "cpu_reference",
+        RuntimeError("reference unavailable"),
+        input_condition="clean",
+        sample_index=2,
+        nodeid="node::id",
+    )
+
+    path = next(tmp_path.glob("unit_hw_opinfo_oracle_failures_*.jsonl"))
+    record = json.loads(path.read_text(encoding="utf-8").strip())
+    assert record["device_name"] == "privateuseone"
+    assert record["hardware_key"] == "unit_hw"
+    assert record["pytorch_version"] == "9.9.9"
+    assert record["phase"] == "forward"
+    assert record["op_name"] == "fake.op"
+    assert record["sample_index"] == 2
+    assert record["error_type"] == "RuntimeError"
+    assert record["error_message"] == "reference unavailable"
+
+
+def test_runtime_evidence_falls_back_and_safely_formats_errors(tmp_path, monkeypatch):
+    class BadStr(Exception):
+        def __str__(self):
+            raise RuntimeError("broken __str__")
+
+    for key in (
+        "TORCHCTS_RESULTS_DIR",
+        "TORCHCTS_HARDWARE_KEY",
+        "TORCHCTS_DEVICE_NAME",
+        "TORCHCTS_PYTORCH_VERSION",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    runtime_evidence.record_opinfo_oracle_failure(
+        "forward",
+        "fake.op",
+        "torch.float32",
+        "cpu_reference",
+        RuntimeError("x" * 5000),
+    )
+    runtime_evidence.record_opinfo_oracle_failure(
+        "forward",
+        "fake.op",
+        "torch.float32",
+        "cpu_reference",
+        BadStr(),
+    )
+
+    path = next((tmp_path / "results").glob("unknown_opinfo_oracle_failures_*.jsonl"))
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert records[0]["hardware_key"] == "unknown"
+    assert len(records[0]["error_message"]) == 4000
+    assert records[0]["error_message"].endswith("...")
+    assert records[1]["error_message"].startswith("<unprintable BadStr")
+
+
+def test_opinfo_known_failure_package_policy_is_removed():
+    assert not hasattr(opinfo_adapter_module, "record_known_failure")
+    assert not hasattr(opinfo_adapter_module, "load_known_failures")
+    assert not hasattr(opinfo_adapter_module, "_KNOWN_FAILURES_PATH")
 
 
 def test_prepare_sample_preserves_special_polynomial_order_argument():
@@ -408,61 +541,6 @@ def test_ieee754_undefined_loader_cascades_until_explicit_remove(tmp_path, monke
     assert "all_213" in loaded
 
 
-def test_known_failures_loader_uses_versioned_add_remove_rules(tmp_path, monkeypatch):
-    cache = tmp_path / "known_failures.json"
-    cache.write_text(
-        json.dumps({
-            "2.12": {
-                "add": {
-                    "forward": {"old_forward@torch.float32": "old forward"},
-                    "backward": {"old_backward@torch.float32": "old backward"},
-                },
-            },
-            "2.12.1": {
-                "add": {
-                    "forward": {"patch_forward@torch.float32": "patch forward"},
-                },
-                "remove": {
-                    "backward": ["old_backward@torch.float32"],
-                },
-            },
-            "2.12.1+cpu": {
-                "add": {
-                    "forward": {"build_only@torch.float32": "build only"},
-                },
-            },
-            "2.13": {
-                "add": {
-                    "backward": {"new_backward@torch.float32": "new backward"},
-                },
-                "remove": {
-                    "forward": ["old_forward@torch.float32"],
-                },
-            },
-        }),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(opinfo_adapter_module, "_KNOWN_FAILURES_PATH", str(cache))
-
-    monkeypatch.setattr(opinfo_adapter_module, "_known_failures_mem", None)
-    monkeypatch.setattr(opinfo_adapter_module.torch, "__version__", "2.12.1+cpu")
-    failures = opinfo_adapter_module.load_known_failures()
-
-    assert failures["forward"]["old_forward@torch.float32"] == "old forward"
-    assert failures["forward"]["patch_forward@torch.float32"] == "patch forward"
-    assert failures["forward"]["build_only@torch.float32"] == "build only"
-    assert "old_backward@torch.float32" not in failures.get("backward", {})
-
-    monkeypatch.setattr(opinfo_adapter_module, "_known_failures_mem", None)
-    monkeypatch.setattr(opinfo_adapter_module.torch, "__version__", "2.13.0")
-    failures = opinfo_adapter_module.load_known_failures()
-
-    assert "old_forward@torch.float32" not in failures.get("forward", {})
-    assert failures["forward"]["patch_forward@torch.float32"] == "patch forward"
-    assert "build_only@torch.float32" not in failures.get("forward", {})
-    assert failures["backward"]["new_backward@torch.float32"] == "new backward"
-
-
 def test_matrix_exp_forward_collection_is_clean_only_for_regex_ieee754():
     manifest = {
         "capabilities": {"ieee754": "matrix_exp"},
@@ -534,6 +612,73 @@ def test_opinfo_samples_are_reference_generated_before_backend_transfer(monkeypa
     assert calls == [("cpu", torch.float32, True)]
     assert samples[0].input.device.type == "cpu"
     assert samples[0].input.requires_grad is True
+
+
+def test_opinfo_sample_generation_errors_propagate(monkeypatch):
+    class FakeOpInfo:
+        def sample_inputs(self, device, dtype, requires_grad=False):
+            raise ValueError("broken samples")
+
+    monkeypatch.setitem(opinfo_adapter_module._live_opinfo_cache, "fake.bad_samples", FakeOpInfo())
+
+    with pytest.raises(RuntimeError, match=r"sample_inputs failed for fake\.bad_samples on cpu with torch.float32"):
+        list(get_op_sample_inputs("fake.bad_samples", "cpu", torch.float32))
+
+
+def test_opinfo_error_input_generation_errors_propagate(monkeypatch):
+    class FakeOpInfo:
+        def error_inputs(self, device):
+            raise ValueError("broken errors")
+
+    monkeypatch.setitem(opinfo_adapter_module._live_opinfo_cache, "fake.bad_errors", FakeOpInfo())
+
+    with pytest.raises(RuntimeError, match=r"error_inputs failed for fake\.bad_errors on cpu"):
+        list(opinfo_adapter_module.get_op_error_inputs("fake.bad_errors", "cpu"))
+
+
+def test_opinfo_error_metadata_type_and_regex_are_enforced():
+    err_in = SimpleNamespace(error_type=ValueError, error_regex="expected fragment")
+
+    with pytest.raises(AssertionError, match="raised RuntimeError, expected ValueError"):
+        _assert_expected_error(
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("expected fragment")),
+            None,
+            [],
+            {},
+            err_in,
+            "fake.error",
+        )
+
+    with pytest.raises(AssertionError, match="message did not match"):
+        _assert_expected_error(
+            lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("different")),
+            None,
+            [],
+            {},
+            err_in,
+            "fake.error",
+        )
+
+    with pytest.raises(AssertionError, match="Expected exception ValueError not raised"):
+        _assert_expected_error(lambda *args, **kwargs: None, None, [], {}, err_in, "fake.error")
+
+
+def test_opinfo_error_device_placement_must_match_expected_metadata():
+    err_in = SimpleNamespace(error_type=RuntimeError, error_regex="placement rejected")
+
+    _assert_exception_matches_expected(
+        RuntimeError("placement rejected by backend"),
+        err_in,
+        "fake.error",
+        "device placement",
+    )
+    with pytest.raises(AssertionError, match="message did not match"):
+        _assert_exception_matches_expected(
+            RuntimeError("unsupported dtype"),
+            err_in,
+            "fake.error",
+            "device placement",
+        )
 
 
 def test_opinfo_forward_sample_move_is_recursive():
@@ -797,6 +942,135 @@ def test_runtime_skip_reason_keeps_backend_unavailable_structured():
     )
 
     assert skip_reason == "backend_not_available"
+
+
+def test_runtime_unsupported_pattern_is_classification_only():
+    pattern = harness._hardware_unsupported_pattern_match(
+        "value cannot be converted to type int64_t without overflow"
+    )
+
+    assert pattern == r"value cannot be converted to type .* without overflow"
+
+
+def test_runtime_unsupported_error_is_not_converted_to_skip():
+    class Outcome:
+        def __init__(self):
+            self.excinfo = (
+                RuntimeError,
+                RuntimeError("value cannot be converted to type int64_t without overflow"),
+                None,
+            )
+            self.forced = False
+
+        def force_result(self, value):
+            self.forced = True
+
+    item = SimpleNamespace()
+    outcome = Outcome()
+    hook = harness.pytest_runtest_call(item)
+    next(hook)
+
+    with pytest.raises(StopIteration):
+        hook.send(outcome)
+
+    assert not outcome.forced
+    assert item._runtime_unsupported_error["matched_pattern"] == (
+        r"value cannot be converted to type .* without overflow"
+    )
+    assert "value cannot be converted" in item._runtime_unsupported_error["message"]
+
+
+def test_adversarial_backend_unsupported_error_is_failure():
+    from torchcts.stress.test_adversarial import run_adversarial_op
+
+    calls = {"count": 0}
+
+    def op():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return torch.ones(1)
+        raise RuntimeError("not implemented for backend")
+
+    with pytest.raises(pytest.fail.Exception, match="CPU succeeded, but backend raised RuntimeError"):
+        run_adversarial_op(op, device="cpu")
+
+
+def test_adversarial_backend_unsupported_after_cpu_error_is_failure():
+    from torchcts.stress.test_adversarial import run_adversarial_op
+
+    calls = {"count": 0}
+
+    def op():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("CPU domain error")
+        raise RuntimeError("not supported on backend")
+
+    with pytest.raises(pytest.fail.Exception, match="backend reported unsupported"):
+        run_adversarial_op(op, device="cpu")
+
+
+def test_sparse_backend_unsupported_error_is_failure():
+    from torchcts.operators.test_sparse import check_sparse_op
+
+    calls = {"count": 0}
+
+    def op(x):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return x
+        raise RuntimeError("not implemented for backend")
+
+    with pytest.raises(pytest.fail.Exception, match="CPU succeeded, but backend raised RuntimeError"):
+        check_sparse_op(op, "cpu", torch.ones(1))
+
+
+def test_autocast_declared_but_failing_path_is_not_skipped(monkeypatch):
+    import torchcts.training.test_mixed_precision as mixed_precision_tests
+
+    def broken_autocast(*args, **kwargs):
+        raise RuntimeError("autocast broken")
+
+    monkeypatch.setattr(mixed_precision_tests.torch, "autocast", broken_autocast)
+
+    with pytest.raises(RuntimeError, match="autocast broken"):
+        mixed_precision_tests.test_autocast_precisions(torch.float16, "cpu", {})
+
+
+def _load_release_hygiene_module():
+    repo_root = Path(__file__).resolve().parents[2]
+    return runpy.run_path(str(repo_root / "scripts" / "check_release_hygiene.py"))
+
+
+def test_release_hygiene_rejects_package_known_failure_cache(tmp_path):
+    hygiene = _load_release_hygiene_module()
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cache_path = tmp_path / "torchcts" / "opinfo_cache" / "known_failures.json"
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text("{}\n", encoding="utf-8")
+
+    errors = hygiene["_check_git_paths"](tmp_path)
+
+    assert any("known_failures.json" in error for error in errors)
+
+
+def test_release_hygiene_rejects_tracked_backend_specific_text(tmp_path):
+    hygiene = _load_release_hygiene_module()
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    bad = tmp_path / "bad.txt"
+    bad.write_text("backend name: " + ("metal" "core") + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "bad.txt"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    errors = hygiene["_check_forbidden_text"](tmp_path)
+
+    assert any("forbidden text" in error for error in errors)
+
+
+def test_pyproject_does_not_suppress_backend_fallback_or_pluggy_teardown_warnings():
+    pyproject = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "The operator .* is not currently supported on the MPS backend" not in pyproject
+    assert "PluggyTeardownRaisedWarning" not in pyproject
 
 
 def _minimal_valid_manifest():
@@ -1196,7 +1470,7 @@ def test_collection_dry_run_does_not_call_torch_compile_before_backend_import(mo
 
     monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
-    monkeypatch.setattr(harness, "_DEVICE_NAME", "metalcore")
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "privateuseone")
     monkeypatch.setattr(harness, "_MANIFEST", {
         "capabilities": {"compile": True},
         "supported_dtypes": {},
@@ -2410,7 +2684,7 @@ def test_coverage_materializes_generated_cases(tmp_path, monkeypatch):
     assert coverage_module.generated_entries_for("out_variant") == loaded["cases_by_surface"]["out_variant"]
 
 
-def test_coverage_check_warns_unknowns_but_exits_zero(tmp_path, monkeypatch, capsys):
+def test_coverage_check_rebuilds_and_ignores_stale_audit(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     audit_path = tmp_path / coverage_module.DEFAULT_AUDIT_PATH
     audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2440,16 +2714,37 @@ def test_coverage_check_warns_unknowns_but_exits_zero(tmp_path, monkeypatch, cap
             }
         )
     )
+    fresh_audit = {
+        "metadata": {
+            "pytorch_version": torch.__version__,
+            "generated_at": "2026-06-28T00:00:00Z",
+            "total_aten_overloads": 0,
+            "surface_counts": {},
+            "status_counts": {},
+            "semantic_level_counts": {},
+            "semantic_level_descriptions": {},
+            "semantic_level_status_counts": {},
+            "semantic_level_surface_counts": {},
+            "generated_case_depth": {},
+            "unknown_count": 0,
+        },
+        "entries": [],
+        "coverage_markers": [],
+        "unmapped_tests": [],
+        "errors": [],
+        "warnings": [],
+    }
+    monkeypatch.setattr(coverage_module, "build_audit", lambda root=None: fresh_audit)
 
     assert coverage_module.run_check_command() == 0
 
     captured = capsys.readouterr()
-    assert "unknown tensor-touching ATen surfaces" in captured.out
+    assert "unknown tensor-touching ATen surfaces" not in captured.out
     assert "Coverage audit is internally consistent." in captured.out
 
-    assert coverage_module.run_check_command(strict_unknowns=True) == 1
+    assert coverage_module.run_check_command(strict_unknowns=True) == 0
     captured = capsys.readouterr()
-    assert "strict_unknowns enabled with 1 unknown surfaces" in captured.out
+    assert "strict_unknowns enabled" not in captured.out
 
 
 def test_generated_entries_and_skip_reasons(capsys):

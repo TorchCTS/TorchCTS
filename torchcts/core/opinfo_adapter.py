@@ -31,11 +31,6 @@ from torchcts.core.version_rules import (
     parse_version_rule_key,
 )
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-
 # ---------------------------------------------------------------------------
 # Input Condition Tiers
 # ---------------------------------------------------------------------------
@@ -429,126 +424,6 @@ SKIP_OPS = frozenset({
     "jiterator_2inputs_2outputs",
 })
 
-# ---------------------------------------------------------------------------
-# Adaptive known-failures cache
-# ---------------------------------------------------------------------------
-
-_KNOWN_FAILURES_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "opinfo_cache", "known_failures.json"
-)
-
-_known_failures_mem = None  # in-memory cache, loaded once per process
-
-
-def _known_failure_rule_parts(value):
-    if not isinstance(value, dict):
-        return {}, {}
-    if "add" in value or "remove" in value:
-        add = value.get("add") or {}
-        remove = value.get("remove") or {}
-    else:
-        add = value
-        remove = {}
-    return add if isinstance(add, dict) else {}, remove if isinstance(remove, dict) else {}
-
-
-def _merge_known_failure_rules(all_failures, runtime_version):
-    merged = {}
-    for _, value in iter_version_rule_entries(all_failures, runtime_version):
-        add, remove = _known_failure_rule_parts(value)
-        for phase, entries in add.items():
-            if isinstance(entries, dict):
-                merged.setdefault(phase, {}).update(entries)
-        for phase, entries in remove.items():
-            if phase not in merged:
-                continue
-            if isinstance(entries, dict):
-                keys = entries.keys()
-            else:
-                keys = entries or ()
-            for key in keys:
-                merged[phase].pop(key, None)
-    return merged
-
-
-def load_known_failures():
-    """Load known CPU reference failures for the current PyTorch version."""
-    global _known_failures_mem
-    if _known_failures_mem is not None:
-        return _known_failures_mem
-
-    version = torch.__version__
-    if os.path.exists(_KNOWN_FAILURES_PATH):
-        try:
-            with open(_KNOWN_FAILURES_PATH, "r", encoding="utf-8") as f:
-                all_failures = json.load(f)
-            _known_failures_mem = _merge_known_failure_rules(all_failures, version)
-        except Exception:
-            _known_failures_mem = {}
-    else:
-        _known_failures_mem = {}
-    return _known_failures_mem
-
-
-def record_known_failure(phase, op_name, dtype_str, error_msg):
-    """Record a CPU reference failure. Written to disk immediately.
-    
-    Args:
-        phase: "forward" or "backward"
-        op_name: e.g. "svd_lowrank"
-        dtype_str: e.g. "torch.complex128"
-        error_msg: truncated error string
-    """
-    version = torch.__version__
-    key = f"{op_name}@{dtype_str}"
-    truncated = error_msg[:200]
-    
-    os.makedirs(os.path.dirname(_KNOWN_FAILURES_PATH), exist_ok=True)
-
-    # Read-modify-write with file lock
-    try:
-        with open(_KNOWN_FAILURES_PATH, "r+", encoding="utf-8") as f:
-            if fcntl is not None:
-                fcntl.flock(f, fcntl.LOCK_EX)
-            elif sys.platform == "win32":
-                import msvcrt
-                f.seek(0)
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            try:
-                all_failures = json.load(f)
-            except json.JSONDecodeError:
-                all_failures = {}
-            version_entry = all_failures.setdefault(version, {})
-            if isinstance(version_entry, dict) and ("add" in version_entry or "remove" in version_entry):
-                version_entry.setdefault("add", {}).setdefault(phase, {})
-                version_entry["add"][phase][key] = truncated
-            else:
-                if not isinstance(version_entry, dict):
-                    version_entry = {}
-                    all_failures[version] = version_entry
-                version_entry.setdefault(phase, {})
-                version_entry[phase][key] = truncated
-            f.seek(0)
-            f.truncate()
-            json.dump(all_failures, f, indent=2)
-            if fcntl is not None:
-                fcntl.flock(f, fcntl.LOCK_UN)
-            elif sys.platform == "win32":
-                import msvcrt
-                f.seek(0)
-                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-    except FileNotFoundError:
-        all_failures = {version: {phase: {key: truncated}}}
-        with open(_KNOWN_FAILURES_PATH, "w", encoding="utf-8") as f:
-            json.dump(all_failures, f, indent=2)
-
-    # Update in-memory cache
-    global _known_failures_mem
-    if _known_failures_mem is None:
-        _known_failures_mem = {}
-    _known_failures_mem.setdefault(phase, {})[key] = truncated
-
-
 def is_cpu_reference_failure(exc):
     """Return True if the exception indicates CPU doesn't implement this op/dtype."""
     if isinstance(exc, NotImplementedError):
@@ -648,7 +523,7 @@ def _ieee754_enabled_for_op(op_name, ieee754_cap):
 
 
 def get_forward_op_tests(manifest):
-    """Build forward test list from op_db metadata + known failures.
+    """Build forward test list from op_db metadata.
     
     Returns list of (op_name, dtype_str, input_condition) triples.
     For float/complex dtypes with ieee754 enabled: emits clean + has_nan + has_inf.
@@ -660,7 +535,6 @@ def get_forward_op_tests(manifest):
     skip_ops = set(manifest.get("skip_ops", [])) | SKIP_OPS
     capabilities = manifest.get("capabilities", {})
     ieee754_cap = capabilities.get("ieee754", True)
-    known = load_known_failures().get("forward", {})
     tests = []
 
     seen = set()
@@ -678,10 +552,6 @@ def get_forward_op_tests(manifest):
         for d in sorted(op.dtypes, key=lambda x: str(x)):
             dt_str = dtype_to_str(d)
 
-            # Skip previously-discovered CPU failures
-            if f"{op.name}@{dt_str}" in known:
-                continue
-
             if _dtype_matches_manifest(d, dt_str, supported_dtypes, op.name):
                 tests.append((op.name, dt_str, InputCondition.CLEAN))
                 # Add IEEE 754 tiers for float/complex dtypes
@@ -693,20 +563,18 @@ def get_forward_op_tests(manifest):
 
 
 def get_backward_op_tests(manifest):
-    """Build backward test list from op_db metadata + known failures.
+    """Build backward test list from op_db metadata.
     
     Static rules applied:
       1. Filter to differentiable dtypes (float/complex)
       2. Skip if supports_autograd == False
       3. Skip jiterator_* (in SKIP_OPS)
-      4. Skip previously-discovered CPU failures
     """
     import torch.testing._internal.common_methods_invocations as cmi
 
     supported_dtypes = manifest.get("supported_dtypes", {})
     skip_ops = set(manifest.get("skip_ops", [])) | SKIP_OPS
     capabilities = manifest.get("capabilities", {})
-    known = load_known_failures().get("backward", {})
     tests = []
 
     seen = set()
@@ -732,10 +600,6 @@ def get_backward_op_tests(manifest):
                 continue
 
             dt_str = dtype_to_str(d)
-
-            # Rule 4: skip previously-discovered CPU failures
-            if f"{op.name}@{dt_str}" in known:
-                continue
 
             if _dtype_matches_manifest(d, dt_str, supported_dtypes, op.name):
                 tests.append((op.name, dt_str))
@@ -916,6 +780,32 @@ def get_error_op_tests(manifest):
 
     skip_ops = set(manifest.get("skip_ops", [])) | SKIP_OPS
     ops = []
+    failures = []
+
+    def _move_to_cpu(obj):
+        if isinstance(obj, torch.Tensor):
+            return obj.to("cpu")
+        if isinstance(obj, list):
+            return [_move_to_cpu(item) for item in obj]
+        if isinstance(obj, tuple):
+            return tuple(_move_to_cpu(item) for item in obj)
+        if isinstance(obj, dict):
+            return {key: _move_to_cpu(value) for key, value in obj.items()}
+        return obj
+
+    def _still_errors_on_cpu(op, err):
+        sample = err.sample_input
+        try:
+            cpu_input = _move_to_cpu(sample.input)
+            cpu_args = _move_to_cpu(sample.args)
+            cpu_kwargs = _move_to_cpu(sample.kwargs)
+        except Exception:
+            return True
+        try:
+            op.op(cpu_input, *cpu_args, **cpu_kwargs)
+        except Exception:
+            return True
+        return False
 
     seen = set()
     for op in cmi.op_db:
@@ -927,10 +817,15 @@ def get_error_op_tests(manifest):
             continue
         try:
             errs = list(op.error_inputs("cpu"))
-            if errs:
+            if any(_still_errors_on_cpu(op, err) for err in errs):
                 ops.append(op.name)
-        except Exception:
-            pass
+        except Exception as exc:
+            failures.append(f"{op.name}: {type(exc).__name__}: {exc}")
+
+    if failures:
+        sample = "; ".join(failures[:5])
+        extra = "" if len(failures) <= 5 else f"; ... {len(failures) - 5} more"
+        raise RuntimeError(f"OpInfo error_inputs failed during collection: {sample}{extra}")
 
     return ops
 
@@ -978,27 +873,21 @@ def get_op_sample_inputs(op_name, device, dtype, requires_grad=False):
         samples = op.sample_inputs(generation_device, dtype, requires_grad=requires_grad)
         for sample in samples:
             yield sample
-    except Exception as e:
-        # Check if this is a hardware/framework unsupported exception
-        import re
-        import torchcts.conftest as conftest
-        patterns = getattr(conftest, "_HARDWARE_UNSUPPORTED_PATTERNS", [])
-        msg = str(e)
-        if any(re.search(pat, msg) for pat in patterns):
-            raise e
-        # Log non-hardware sample generation failures so they're visible for debugging
-        print(f"Warning: sample_inputs for {op_name}({dtype}) failed: {type(e).__name__}: {e}", file=sys.stderr)
+    except Exception as exc:
+        raise RuntimeError(
+            f"sample_inputs failed for {op_name} on {generation_device} with {dtype}"
+        ) from exc
 
 
 def get_op_error_inputs(op_name, device):
     op = get_live_opinfo(op_name)
     if op is None:
         return
-        
+
     try:
         # error_inputs accepts device as positional argument
         errors = op.error_inputs(device)
         for err in errors:
             yield err
-    except Exception as e:
-        pass
+    except Exception as exc:
+        raise RuntimeError(f"error_inputs failed for {op_name} on {device}") from exc

@@ -35,6 +35,14 @@ DENIED_FILENAMES = {
     "pypi-token.txt",
 }
 
+DENIED_PACKAGE_PATHS = {
+    ("torchcts", "opinfo_cache", "known_failures.json"),
+}
+
+FORBIDDEN_TEXT_TOKENS = {
+    "metal" "core",
+}
+
 
 def _run_git(args: list[str], repo: Path) -> list[str]:
     result = subprocess.run(
@@ -79,6 +87,9 @@ def _is_denied_path(path: str, *, artifact: bool = False) -> str | None:
 
     if pure.name in DENIED_FILENAMES:
         return f"denied filename {pure.name!r}"
+    for denied_parts in DENIED_PACKAGE_PATHS:
+        if len(parts) >= len(denied_parts) and tuple(parts[-len(denied_parts):]) == denied_parts:
+            return "runtime known-failure cache must not be shipped"
     if lower_name.startswith(".env"):
         return "environment file"
     if lower_name.endswith((".pem", ".key")):
@@ -92,6 +103,10 @@ def _is_denied_path(path: str, *, artifact: bool = False) -> str | None:
 
 def _check_git_paths(repo: Path) -> list[str]:
     errors: list[str] = []
+    denied_cache = repo / "torchcts" / "opinfo_cache" / "known_failures.json"
+    if denied_cache.exists():
+        errors.append("denied package file exists: torchcts/opinfo_cache/known_failures.json")
+
     ignored_tracked = _run_git(["ls-files", "-ci", "--exclude-standard"], repo)
     for path in ignored_tracked:
         errors.append(f"tracked ignored file: {path}")
@@ -103,6 +118,32 @@ def _check_git_paths(repo: Path) -> list[str]:
             reason = _is_denied_path(path)
             if reason:
                 errors.append(f"{label} denied path: {path} ({reason})")
+    return errors
+
+
+def _is_text_bytes(data: bytes) -> bool:
+    return b"\0" not in data
+
+
+def _check_forbidden_text(repo: Path) -> list[str]:
+    errors: list[str] = []
+    tracked = _run_git(["ls-files"], repo)
+    lowered_tokens = [token.encode("utf-8").lower() for token in FORBIDDEN_TEXT_TOKENS]
+    for rel in tracked:
+        path = repo / rel
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            errors.append(f"could not scan tracked file {rel}: {type(exc).__name__}: {exc}")
+            continue
+        if not _is_text_bytes(data):
+            continue
+        lowered = data.lower()
+        for token in lowered_tokens:
+            if token in lowered:
+                errors.append(f"tracked file contains forbidden text {token.decode('utf-8')!r}: {rel}")
     return errors
 
 
@@ -142,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         repo = _repo_root()
         errors = _check_git_paths(repo)
+        errors.extend(_check_forbidden_text(repo))
         errors.extend(_check_artifacts(args.artifacts))
     except Exception as exc:
         print(f"release hygiene check failed: {type(exc).__name__}: {exc}", file=sys.stderr)

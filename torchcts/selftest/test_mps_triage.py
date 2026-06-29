@@ -53,6 +53,78 @@ def _adaptive_result_payload(results, *, device="mps", hardware="hw", version="2
     }
 
 
+def _known_segfault_entry(**overrides):
+    entry = {
+        "id": "mps-example",
+        "backend": "mps",
+        "match": "nodeid",
+        "nodeid": "torchcts/example.py::test_crash",
+        "dispatcher": "aten::example.default",
+        "evidence_scope": "exact_node",
+        "classification": "confirmed_mps_crash",
+        "expected_signal": "SIGSEGV",
+        "repro": {"script": "repro.py", "case": "case0"},
+        "reason": "standalone repro crashes",
+        "owner": "torchcts",
+        "pytorch_min": "2.12.0",
+        "pytorch_max": None,
+        "hardware": "any",
+        "review_after": "2026-09-30",
+    }
+    for key, value in overrides.items():
+        if value is None:
+            entry.pop(key, None)
+        else:
+            entry[key] = value
+    return entry
+
+
+def _generated_item(nodeid, entry):
+    return SimpleNamespace(
+        nodeid=nodeid,
+        fspath="torchcts/generated/test_out_variants.py",
+        name=nodeid.rsplit("::", 1)[-1],
+        callspec=SimpleNamespace(params={"entry": entry}),
+        iter_markers=lambda name=None: iter(()),
+    )
+
+
+def _reflection_pad3d_out_entry():
+    return {
+        "name": "aten::reflection_pad3d.out",
+        "schema": "aten::reflection_pad3d.out(Tensor self, SymInt[6] padding, *, Tensor(a!) out) -> Tensor(a!)",
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "out_variant",
+        "variant_kind": "out_variant",
+        "semantic_level": 3,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_padding",
+                "family": "reflection_pad3d",
+            }
+        },
+    }
+
+
+def _unfold_view_alias_entry():
+    return {
+        "name": "aten::unfold",
+        "schema": "aten::unfold(Tensor(a) self, int dimension, int size, int step) -> Tensor(a)",
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "view_or_alias",
+        "variant_kind": "view",
+        "semantic_level": 3,
+        "generated": {
+            "strategy": {
+                "strategy": "opinfo_view_alias",
+                "opinfo_name": "unfold",
+            }
+        },
+    }
+
+
 def test_mps_triage_queue_loads_failures_and_crashers(tmp_path):
     runlog = tmp_path / "Apple_M3_Max_128gb_runlog.txt"
     runlog.write_text(
@@ -540,24 +612,7 @@ def test_mps_triage_timeout_records_inconclusive(monkeypatch):
 def test_known_segfault_schema_accepts_and_matches_entry():
     payload = {
         "version": 1,
-        "known_segfaults": [
-            {
-                "id": "mps-example",
-                "backend": "mps",
-                "match": "nodeid",
-                "nodeid": "torchcts/example.py::test_crash",
-                "dispatcher": "aten::example.default",
-                "classification": "confirmed_mps_crash",
-                "expected_signal": "SIGSEGV",
-                "repro": {"script": "repro.py", "case": "case0"},
-                "reason": "standalone repro crashes",
-                "owner": "torchcts",
-                "pytorch_min": "2.12.0",
-                "pytorch_max": None,
-                "hardware": "any",
-                "review_after": "2026-09-30",
-            }
-        ],
+        "known_segfaults": [_known_segfault_entry()],
     }
 
     entries = known_segfaults.validate_known_segfaults([payload])
@@ -576,22 +631,12 @@ def test_known_segfault_matching_canonicalizes_installed_package_nodeids():
     payload = {
         "version": 1,
         "known_segfaults": [
-            {
-                "id": "mps-installed-nodeid",
-                "backend": "mps",
-                "match": "nodeid",
-                "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[range.out_[L2]]",
-                "dispatcher": "aten::range.out_",
-                "classification": "confirmed_mps_crash",
-                "expected_signal": "SIGSEGV",
-                "repro": {"script": "repro.py", "case": "range_out_"},
-                "reason": "standalone repro crashes",
-                "owner": "torchcts",
-                "pytorch_min": "2.12.0",
-                "pytorch_max": None,
-                "hardware": "any",
-                "review_after": "2026-09-30",
-            }
+            _known_segfault_entry(
+                id="mps-installed-nodeid",
+                nodeid="torchcts/generated/test_out_variants.py::test_generated_out_variant[range.out_[L2]]",
+                dispatcher="aten::range.out_",
+                repro={"script": "repro.py", "case": "range_out_"},
+            )
         ],
     }
 
@@ -624,33 +669,208 @@ def test_packaged_known_segfaults_cover_generated_grid_sampler_crash_nodes():
 
     expected = {
         "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback[L3]]":
-            "mps-grid-sampler-2d-cpu-fallback-generated-functional-pytorch-2-12",
+            ("mps-grid-sampler-2d-cpu-fallback-default-pytorch-2-12", "aten::_grid_sampler_2d_cpu_fallback"),
         "torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out[L3]]":
-            "mps-grid-sampler-2d-cpu-fallback-generated-out-pytorch-2-12",
+            ("mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12", "aten::_grid_sampler_2d_cpu_fallback.out"),
     }
-    for nodeid, expected_id in expected.items():
-        match = known_segfaults.match_known_segfault(SimpleNamespace(nodeid=nodeid), active)
+    for nodeid, (expected_id, dispatcher_name) in expected.items():
+        match = known_segfaults.match_known_segfault(
+            SimpleNamespace(
+                nodeid=nodeid,
+                metadata={"dispatcher_name": dispatcher_name, "coverage_id": dispatcher_name},
+            ),
+            active,
+        )
         assert match is not None
         assert match["id"] == expected_id
 
 
-def test_known_segfault_schema_rejects_duplicate_ids():
-    entry = {
-        "id": "dup",
-        "backend": "mps",
-        "match": "nodeid",
-        "nodeid": "torchcts/example.py::test_crash",
-        "dispatcher": "aten::example.default",
-        "classification": "confirmed_mps_crash",
-        "expected_signal": "SIGSEGV",
-        "repro": {"script": "repro.py", "case": "case0"},
-        "reason": "standalone repro crashes",
-        "owner": "torchcts",
-        "pytorch_min": "2.12.0",
-        "pytorch_max": None,
-        "hardware": "any",
-        "review_after": "2026-09-30",
+def test_packaged_known_segfaults_cover_generated_reflection_pad3d_out_node():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    nodeid = "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]"
+    item = _generated_item(nodeid, _reflection_pad3d_out_entry())
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-reflection-pad3d-out-pytorch-2-12"
+    assert match["matched_by"] == "dispatcher"
+    assert match["evidence_scope"] == "dispatcher_surface"
+
+
+def test_packaged_known_segfaults_cover_generated_unfold_view_alias_node():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    nodeid = "torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]]"
+    item = _generated_item(nodeid, _unfold_view_alias_entry())
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-generated-unfold-view-copy-pytorch-2-12"
+    assert match["matched_by"] == "dispatcher"
+    assert match["evidence_scope"] == "dispatcher_surface"
+
+
+def test_known_segfault_schema_accepts_dispatcher_and_coverage_id_entries():
+    payload = {
+        "version": 1,
+        "known_segfaults": [
+            _known_segfault_entry(
+                id="mps-dispatcher",
+                match="dispatcher",
+                nodeid=None,
+                dispatcher="aten::dispatcher.default",
+                evidence_scope="dispatcher_surface",
+            ),
+            _known_segfault_entry(
+                id="mps-coverage",
+                match="coverage_id",
+                nodeid=None,
+                dispatcher="aten::coverage.default",
+                coverage_id="aten::coverage.default",
+                evidence_scope="constrained_metadata",
+                constraints={"suite": ["generated"]},
+            ),
+        ],
     }
+
+    entries = known_segfaults.validate_known_segfaults([payload])
+
+    assert [entry["match"] for entry in entries] == ["dispatcher", "coverage_id"]
+
+
+def test_known_segfault_schema_rejects_nonsensical_metadata_rules():
+    bad_dispatcher = _known_segfault_entry(
+        match="dispatcher",
+        nodeid=None,
+        evidence_scope="constrained_metadata",
+    )
+    bad_scope = _known_segfault_entry(
+        match="dispatcher",
+        nodeid=None,
+        evidence_scope="exact_node",
+    )
+
+    with pytest.raises(known_segfaults.KnownSegfaultError, match="non-empty constraints"):
+        known_segfaults.validate_known_segfaults([
+            {"version": 1, "known_segfaults": [bad_dispatcher]}
+        ])
+    with pytest.raises(known_segfaults.KnownSegfaultError, match="requires match=nodeid"):
+        known_segfaults.validate_known_segfaults([
+            {"version": 1, "known_segfaults": [bad_scope]}
+        ])
+
+
+def test_known_segfault_schema_rejects_bad_constraints():
+    cases = [
+        (_known_segfault_entry(constraints={"nope": ["generated"]}), "unknown"),
+        (_known_segfault_entry(constraints={"suite": []}), "must not be empty"),
+        (_known_segfault_entry(constraints={"semantic_level": [9]}), "semantic levels"),
+    ]
+
+    for entry, pattern in cases:
+        with pytest.raises(known_segfaults.KnownSegfaultError, match=pattern):
+            known_segfaults.validate_known_segfaults([
+                {"version": 1, "known_segfaults": [entry]}
+            ])
+
+
+def test_known_segfault_dispatcher_match_uses_metadata_and_constraints():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::reflection_pad3d.out",
+                    evidence_scope="constrained_metadata",
+                    constraints={
+                        "suite": ["generated"],
+                        "variant_kind": ["out_variant"],
+                        "strategy_family": ["reflection_pad3d"],
+                    },
+                )
+            ],
+        }
+    ])[0]
+    nodeid = "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]"
+    metadata = harness._extract_result_metadata(_generated_item(nodeid, _reflection_pad3d_out_entry()))
+    other_metadata = dict(metadata, strategy_family="reflection_pad2d")
+
+    assert known_segfaults.entry_matches(entry, nodeid, metadata)
+    assert not known_segfaults.entry_matches(entry, nodeid, other_metadata)
+
+
+def test_known_segfault_nodeid_wins_over_dispatcher():
+    exact = _known_segfault_entry(id="exact")
+    dispatcher = _known_segfault_entry(
+        id="dispatcher",
+        match="dispatcher",
+        nodeid=None,
+        dispatcher="aten::example.default",
+        evidence_scope="dispatcher_surface",
+    )
+    entries = known_segfaults.validate_known_segfaults([
+        {"version": 1, "known_segfaults": [dispatcher, exact]}
+    ])
+
+    match = known_segfaults.match_known_segfault(
+        SimpleNamespace(
+            nodeid="torchcts/example.py::test_crash",
+            metadata={"dispatcher_name": "aten::example.default"},
+        ),
+        entries,
+    )
+
+    assert match["id"] == "exact"
+
+
+def test_known_segfault_equal_specificity_ambiguity_fails():
+    first = _known_segfault_entry(
+        id="first",
+        match="dispatcher",
+        nodeid=None,
+        dispatcher="aten::example.default",
+        evidence_scope="dispatcher_surface",
+    )
+    second = dict(first, id="second")
+    entries = known_segfaults.validate_known_segfaults([
+        {"version": 1, "known_segfaults": [first, second]}
+    ])
+
+    with pytest.raises(known_segfaults.KnownSegfaultError, match="ambiguous"):
+        known_segfaults.match_known_segfault(
+            SimpleNamespace(
+                nodeid="torchcts/example.py::test_case",
+                metadata={"dispatcher_name": "aten::example.default"},
+            ),
+            entries,
+        )
+
+
+def test_known_segfault_schema_rejects_duplicate_ids():
+    entry = _known_segfault_entry(id="dup")
 
     with pytest.raises(known_segfaults.KnownSegfaultError, match="duplicate"):
         known_segfaults.validate_known_segfaults([
@@ -661,7 +881,13 @@ def test_known_segfault_schema_rejects_duplicate_ids():
 def test_harness_known_segfault_fields_preserve_failure_semantics():
     match = {
         "id": "mps-example",
+        "match": "dispatcher",
+        "matched_by": "dispatcher",
         "dispatcher": "aten::example.default",
+        "evidence_scope": "dispatcher_surface",
+        "constraints": {"suite": ["generated"]},
+        "matched_nodeid": "torchcts/example.py::test_crash",
+        "matched_metadata": {"dispatcher_name": "aten::example.default", "suite": "generated"},
         "reason": "standalone repro crashes",
         "expected_signal": "SIGSEGV",
         "repro": {"script": "repro.py", "case": "case0"},
@@ -672,7 +898,117 @@ def test_harness_known_segfault_fields_preserve_failure_semantics():
     assert fields["known_segfault_id"] == "mps-example"
     assert fields["known_segfault_expected_signal"] == "SIGSEGV"
     assert fields["known_segfault_unexpected_signal"] == "SIGABRT"
+    assert fields["known_segfault_match"] == "dispatcher"
+    assert fields["known_segfault_evidence_scope"] == "dispatcher_surface"
+    assert fields["known_segfault_constraints"] == {"suite": ["generated"]}
+    assert fields["known_segfault_matched_nodeid"] == "torchcts/example.py::test_crash"
+    assert fields["known_segfault_matched_metadata"]["dispatcher_name"] == "aten::example.default"
     assert "status" not in fields
+
+
+def test_harness_known_segfault_validation_accepts_matching_dispatcher_rule(monkeypatch):
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::reflection_pad3d.out",
+                    evidence_scope="constrained_metadata",
+                    constraints={"suite": ["generated"], "strategy_family": ["reflection_pad3d"]},
+                )
+            ],
+        }
+    ])[0]
+    item = _generated_item(
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
+        _reflection_pad3d_out_entry(),
+    )
+    config = SimpleNamespace(args=["torchcts/generated"], getoption=lambda name: None)
+
+    descriptors = harness._validate_known_segfault_collection(config, [entry], [item])
+
+    assert descriptors[0]["metadata"]["dispatcher_name"] == "aten::reflection_pad3d.out"
+
+
+def test_harness_known_segfault_validation_rejects_stale_in_scope_rule():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::missing.out",
+                    evidence_scope="constrained_metadata",
+                    constraints={"suite": ["generated"]},
+                )
+            ],
+        }
+    ])[0]
+    item = _generated_item(
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
+        _reflection_pad3d_out_entry(),
+    )
+    config = SimpleNamespace(args=["torchcts/generated"], getoption=lambda name: "generated")
+
+    with pytest.raises(pytest.exit.Exception, match="stale in-scope rule"):
+        harness._validate_known_segfault_collection(config, [entry], [item])
+
+
+def test_harness_known_segfault_validation_ignores_unrelated_targeted_node():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::reflection_pad3d.out",
+                    evidence_scope="constrained_metadata",
+                    constraints={"suite": ["generated"], "strategy_family": ["reflection_pad3d"]},
+                )
+            ],
+        }
+    ])[0]
+    config = SimpleNamespace(
+        args=["torchcts/selftest/test_mps_triage.py::test_mps_triage_timeout_records_inconclusive"],
+        getoption=lambda name: None,
+    )
+    item = SimpleNamespace(
+        nodeid="torchcts/selftest/test_mps_triage.py::test_mps_triage_timeout_records_inconclusive",
+        fspath="torchcts/selftest/test_mps_triage.py",
+        name="test_mps_triage_timeout_records_inconclusive",
+        iter_markers=lambda name=None: iter(()),
+    )
+
+    descriptors = harness._validate_known_segfault_collection(config, [entry], [item])
+
+    assert descriptors[0]["metadata"]["suite"] == "selftest"
+
+
+def test_harness_known_segfault_audit_prints_rule_counts(capsys):
+    entry = _known_segfault_entry(
+        match="dispatcher",
+        nodeid=None,
+        dispatcher="aten::reflection_pad3d.out",
+        evidence_scope="constrained_metadata",
+        constraints={"suite": ["generated"], "strategy_family": ["reflection_pad3d"]},
+    )
+    item = _generated_item(
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
+        _reflection_pad3d_out_entry(),
+    )
+    descriptor = harness._known_segfault_descriptor_for_item(item)
+    config = SimpleNamespace(option=SimpleNamespace(verbose=1))
+
+    harness._print_known_segfault_audit(config, [entry], [descriptor])
+
+    out = capsys.readouterr().out
+    assert "Known segfault audit: 1 active rule(s)" in out
+    assert "matched=1" in out
+    assert "reflection_pad3d.out" in out
 
 
 def test_harness_adaptive_match_canonicalizes_nodeids(monkeypatch):

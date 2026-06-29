@@ -29,7 +29,7 @@ def compare_dense(cpu_t, dev_t_cpu):
     assert cpu_t.dtype == dev_t_cpu.dtype, f"Dtype mismatch: {cpu_t.dtype} vs {dev_t_cpu.dtype}"
     assert torch.allclose(cpu_t, dev_t_cpu, rtol=1e-4, atol=1e-4), "Value mismatch"
 
-# Helper to run a sparse operation on CPU vs Device, catching NotImplementedError and RuntimeError skips
+# Helper to run a sparse operation on CPU vs Device.
 def check_sparse_op(op_fn, device, *args, **kwargs):
     # Prepare arguments for CPU
     cpu_args = [x.to("cpu") if isinstance(x, torch.Tensor) else x for x in args]
@@ -51,8 +51,10 @@ def check_sparse_op(op_fn, device, *args, **kwargs):
             synchronize(device)
         except (NotImplementedError, RuntimeError) as dev_e:
             err_msg = str(dev_e).lower()
-            if any(term in err_msg for term in ["not implemented", "not supported", "support", "requires compiling", "without mkl"]):
-                pytest.skip(f"Operation not implemented/supported on CPU reference: {dev_e}")
+            if any(term in err_msg for term in ["not implemented", "not supported", "requires compiling", "without mkl"]):
+                pytest.fail(
+                    f"CPU raised {type(cpu_exception).__name__}, but backend reported unsupported: {dev_e}"
+                )
             return
         except Exception:
             return
@@ -61,11 +63,8 @@ def check_sparse_op(op_fn, device, *args, **kwargs):
         try:
             dev_out = op_fn(*dev_args, **dev_kwargs)
             synchronize(device)
-        except (NotImplementedError, RuntimeError) as dev_e:
-            err_msg = str(dev_e).lower()
-            if any(term in err_msg for term in ["not implemented", "not supported", "support", "requires compiling", "without mkl"]):
-                pytest.skip(f"Operation/format not implemented on backend: {dev_e}")
-            raise
+        except Exception as dev_e:
+            pytest.fail(f"CPU succeeded, but backend raised {type(dev_e).__name__}: {dev_e}")
             
         # Compare outputs
         if isinstance(cpu_out, torch.Tensor):
@@ -417,11 +416,8 @@ def test_sparse_bsc_conversions(device, dtype, bsc_data):
 def _backend_sparse_call(fn, opname):
     try:
         return fn()
-    except (NotImplementedError, RuntimeError) as exc:
-        err_msg = str(exc).lower()
-        if any(term in err_msg for term in ["not implemented", "not supported", "support", "requires compiling"]):
-            pytest.skip(f"{opname} is not implemented on this backend: {exc}")
-        raise
+    except Exception as exc:
+        pytest.fail(f"{opname} failed on backend: {type(exc).__name__}: {exc}")
 
 
 def _assert_copy_accessor(op, sparse_cpu, sparse_dev, device, compare):

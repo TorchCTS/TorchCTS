@@ -25,7 +25,7 @@ from torchcts.core.device import synchronize
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Scale modes — matches metalcore ScaleMode enum
+# Scale modes — matches custom backend ScaleMode enum
 # ═══════════════════════════════════════════════════════════════════
 class ScaleMode:
     NONE = 0

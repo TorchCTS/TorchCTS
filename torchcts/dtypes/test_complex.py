@@ -33,11 +33,6 @@ COMPLEX_DTYPES = [torch.complex64, torch.complex128]
 @pytest.mark.parametrize("dtype", COMPLEX_DTYPES)
 @pytest.mark.parametrize("op_name", ["view_as_real", "resolve_conj", "abs", "angle"])
 def test_complex_operations(dtype, op_name, device, compare):
-    try:
-        torch.empty(1, dtype=dtype, device=device)
-    except Exception:
-        pytest.skip(f"Dtype {dtype} not supported on device {device}")
-
     # Create complex tensor on CPU
     x_cpu = torch.randn(8, 8, dtype=dtype)
     x_dev = x_cpu.to(device)
@@ -78,11 +73,6 @@ def test_complex_operations(dtype, op_name, device, compare):
 @pytest.mark.parametrize("dtype", [torch.complex64])
 def test_complex_gather_scatter(dtype, device, compare):
     """Gather, take_along_dim, index_select, and scatter must preserve imaginary parts."""
-    try:
-        torch.empty(1, dtype=dtype, device=device)
-    except Exception:
-        pytest.skip(f"Dtype {dtype} not supported on device {device}")
-
     torch.manual_seed(42)
     x = torch.randn(8, 16, dtype=dtype, device=device)
 

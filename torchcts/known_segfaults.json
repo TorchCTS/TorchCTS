@@ -4,16 +4,16 @@
     {
       "id": "mps-grid-sampler-2d-cpu-fallback-default-pytorch-2-12",
       "backend": "mps",
-      "match": "nodeid",
-      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_default]",
+      "match": "dispatcher",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
+      "evidence_scope": "dispatcher_surface",
       "classification": "confirmed_mps_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
         "case": "grid2_cpu_fallback_default"
       },
-      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler path.",
+      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler path. Generated functional coverage reaches the same dispatcher surface and has also crashed during full MPS runs.",
       "owner": "torchcts",
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
@@ -23,54 +23,16 @@
     {
       "id": "mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12",
       "backend": "mps",
-      "match": "nodeid",
-      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_out]",
+      "match": "dispatcher",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
+      "evidence_scope": "dispatcher_surface",
       "classification": "confirmed_mps_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
         "case": "grid2_cpu_fallback_out"
       },
-      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler out variant.",
-      "owner": "torchcts",
-      "pytorch_min": "2.12.0",
-      "pytorch_max": null,
-      "hardware": "any",
-      "review_after": "2026-09-30"
-    },
-    {
-      "id": "mps-grid-sampler-2d-cpu-fallback-generated-functional-pytorch-2-12",
-      "backend": "mps",
-      "match": "nodeid",
-      "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback[L3]]",
-      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
-      "classification": "confirmed_mps_crash",
-      "expected_signal": "SIGSEGV",
-      "repro": {
-        "script": "mps_grid_segment_dense_split_repro.py",
-        "case": "grid2_cpu_fallback_default"
-      },
-      "reason": "Full generated MPS run on 2026-06-28 segfaulted in PyTorch/MPS while copying the aten::_grid_sampler_2d_cpu_fallback result to CPU for comparison; C stack was in MPSStream::copy_and_sync and AGX blit dispatch. The standalone grid sampler repro covers the same dispatcher path.",
-      "owner": "torchcts",
-      "pytorch_min": "2.12.0",
-      "pytorch_max": null,
-      "hardware": "any",
-      "review_after": "2026-09-30"
-    },
-    {
-      "id": "mps-grid-sampler-2d-cpu-fallback-generated-out-pytorch-2-12",
-      "backend": "mps",
-      "match": "nodeid",
-      "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out[L3]]",
-      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
-      "classification": "confirmed_mps_crash",
-      "expected_signal": "SIGSEGV",
-      "repro": {
-        "script": "mps_grid_segment_dense_split_repro.py",
-        "case": "grid2_cpu_fallback_out"
-      },
-      "reason": "Generated out-variant coverage exercises the same aten::_grid_sampler_2d_cpu_fallback.out dispatcher path as the standalone MPS repro and the internal dispatcher surface known segfault.",
+      "reason": "Standalone repro crashes in PyTorch/MPS while executing the internal CPU fallback grid sampler out variant. Generated out-variant coverage reaches the same dispatcher surface and has also crashed during full MPS runs.",
       "owner": "torchcts",
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
@@ -83,13 +45,14 @@
       "match": "nodeid",
       "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_backward]",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback_backward.default",
+      "evidence_scope": "exact_node",
       "classification": "confirmed_mps_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
         "script": "mps_grid_segment_dense_split_repro.py",
         "case": "grid2_cpu_fallback_backward"
       },
-      "reason": "Standalone repro reports a wrong-value mismatch for the internal CPU fallback grid sampler backward path and the child process exits with SIGSEGV after the mismatch is reported.",
+      "reason": "Standalone repro reports a wrong-value mismatch for the internal CPU fallback grid sampler backward path and the child process exits with SIGSEGV after the mismatch is reported; keep this exact until the broader dispatcher behavior is source-proven.",
       "owner": "torchcts",
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
@@ -102,6 +65,7 @@
       "match": "nodeid",
       "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[range.out_[L2]]",
       "dispatcher": "aten::range.out_",
+      "evidence_scope": "exact_node",
       "classification": "confirmed_mps_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
@@ -109,6 +73,46 @@
         "case": "range_out_"
       },
       "reason": "Standalone repro shows aten::range.out_ returns an MPS out tensor for a legal CPU-validated sample, then segfaults during CPU copy or normal MPS resource cleanup. The sibling aten::range.out overload succeeds with the same dtype and values.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-reflection-pad3d-out-pytorch-2-12",
+      "backend": "mps",
+      "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
+      "dispatcher": "aten::reflection_pad3d.out",
+      "evidence_scope": "dispatcher_surface",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m pytest torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]] --device mps --level-exact 3 --known-segfault-policy off",
+        "case": "generated_reflection_pad3d_out_l3"
+      },
+      "reason": "Full MPS run on 2026-06-28 segfaulted in PyTorch/MPS while running the CPU-valid generated out-variant reflection_pad3d sample. Python stack was in run_manual_padding_strategy; C stack was in structured_reflection_pad3d_out_mps and pad_out_template.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-generated-unfold-view-copy-pytorch-2-12",
+      "backend": "mps",
+      "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]]",
+      "dispatcher": "aten::unfold",
+      "evidence_scope": "dispatcher_surface",
+      "classification": "confirmed_mps_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "python -m pytest torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]] --device mps --level-exact 3 --known-segfault-policy off",
+        "case": "generated_unfold_view_alias_l3"
+      },
+      "reason": "Full MPS run on 2026-06-28 segfaulted while comparing the CPU-valid generated unfold view-alias sample. Python stack was in prepare_compare_tensor during CPU copy; C stack was in MPS gatherViewTensor and mps_copy_.",
       "owner": "torchcts",
       "pytorch_min": "2.12.0",
       "pytorch_max": null,

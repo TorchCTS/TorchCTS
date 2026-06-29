@@ -22,6 +22,7 @@ import os
 import sys
 import site
 import subprocess
+from dataclasses import dataclass
 import torch
 import importlib
 import importlib.util
@@ -42,6 +43,42 @@ _SCAN_SKIP_DIRS = frozenset({
     'filelock', 'typing_extensions', 'psutil', 'distutils', 'wheel',
     'pkg_resources', '__pycache__', 'torchcts',
 })
+
+
+@dataclass(frozen=True)
+class CapabilityProbeResult:
+    device_name: str
+    capability: str
+    supported: bool
+    returncode: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    stdout: str = ""
+    stderr: str = ""
+    timed_out: bool = False
+    command_args: tuple[str, ...] = ()
+
+    def __bool__(self):
+        return self.supported
+
+    def to_dict(self):
+        return {
+            "device_name": self.device_name,
+            "capability": self.capability,
+            "supported": self.supported,
+            "returncode": self.returncode,
+            "error_type": self.error_type,
+            "error_message": self.error_message,
+            "stdout_tail": _probe_text_tail(self.stdout),
+            "stderr_tail": _probe_text_tail(self.stderr),
+            "timed_out": self.timed_out,
+            "command_args": list(self.command_args),
+        }
+
+
+def _probe_text_tail(value, limit=2000):
+    text = "" if value is None else str(value)
+    return text if len(text) <= limit else text[-limit:]
 
 
 def _build_scan_paths():
@@ -601,79 +638,112 @@ def get_device_total_memory(device_name, device_idx=0):
                 return props.total_memory
     return None
 
-def probe_capability(device_name, capability, timeout=10):
-    """Probe if the backend supports a capability by testing in a subprocess."""
-    import subprocess
-    import sys
-    
+def _capability_probe_script(device_name, capability):
     if capability == "pinned_memory":
-        script = (
+        return (
             "import torch\n"
-            "try:\n"
-            f"    x = torch.randn(2, 2)\n"
-            f"    p = x.pin_memory(device='{device_name}')\n"
-            f"    assert p.is_pinned()\n"
-            "    print('SUCCESS')\n"
-            "except Exception:\n"
-            "    pass\n"
+            f"x = torch.randn(2, 2)\n"
+            f"p = x.pin_memory(device='{device_name}')\n"
+            f"assert p.is_pinned()\n"
+            "print('SUCCESS')\n"
         )
-    elif capability == "sparse":
-        script = (
+    if capability == "sparse":
+        return (
             "import torch\n"
-            "try:\n"
-            "    i = torch.tensor([[0, 1, 1], [2, 0, 2]])\n"
-            "    v = torch.tensor([3, 4, 5], dtype=torch.float32)\n"
-            f"    s = torch.sparse_coo_tensor(i, v, (2, 3), device='{device_name}')\n"
-            "    dense = s.to_dense()\n"
-            "    print('SUCCESS')\n"
-            "except Exception:\n"
-            "    pass\n"
+            "i = torch.tensor([[0, 1, 1], [2, 0, 2]])\n"
+            "v = torch.tensor([3, 4, 5], dtype=torch.float32)\n"
+            f"s = torch.sparse_coo_tensor(i, v, (2, 3), device='{device_name}')\n"
+            "dense = s.to_dense()\n"
+            "print('SUCCESS')\n"
         )
-    elif capability == "nested":
-        script = (
+    if capability == "nested":
+        return (
             "import torch\n"
-            "try:\n"
-            f"    a = torch.randn(2, 3, device='{device_name}')\n"
-            f"    b = torch.randn(1, 3, device='{device_name}')\n"
-            f"    nt = torch.nested.nested_tensor([a, b], device='{device_name}')\n"
-            "    padded = nt.to_padded_tensor(padding=0.0)\n"
-            f"    assert nt.is_nested and padded.device.type == '{device_name}'\n"
-            "    print('SUCCESS')\n"
-            "except Exception:\n"
-            "    pass\n"
+            f"a = torch.randn(2, 3, device='{device_name}')\n"
+            f"b = torch.randn(1, 3, device='{device_name}')\n"
+            f"nt = torch.nested.nested_tensor([a, b], device='{device_name}')\n"
+            "padded = nt.to_padded_tensor(padding=0.0)\n"
+            f"assert nt.is_nested and padded.device.type == '{device_name}'\n"
+            "print('SUCCESS')\n"
         )
-    elif capability == "named_tensor":
-        script = (
+    if capability == "named_tensor":
+        return (
             "import torch\n"
-            "try:\n"
-            f"    x = torch.empty((2, 3), device='{device_name}', names=('rows', 'cols'))\n"
-            "    y = x.align_to('cols', 'rows')\n"
-            f"    assert y.names == ('cols', 'rows') and y.device.type == '{device_name}'\n"
-            "    print('SUCCESS')\n"
-            "except Exception:\n"
-            "    pass\n"
+            f"x = torch.empty((2, 3), device='{device_name}', names=('rows', 'cols'))\n"
+            "y = x.align_to('cols', 'rows')\n"
+            f"assert y.names == ('cols', 'rows') and y.device.type == '{device_name}'\n"
+            "print('SUCCESS')\n"
         )
-    elif capability == "fp8":
-        script = (
+    if capability == "fp8":
+        return (
             "import torch\n"
-            "try:\n"
-            f"    x = torch.zeros(4, dtype=torch.float8_e4m3fn, device='{device_name}')\n"
-            f"    y = torch.ones(4, dtype=torch.float32, device='{device_name}').to(torch.float8_e5m2)\n"
-            f"    assert x.device.type == '{device_name}' and y.device.type == '{device_name}'\n"
-            "    print('SUCCESS')\n"
-            "except Exception:\n"
-            "    pass\n"
+            f"x = torch.zeros(4, dtype=torch.float8_e4m3fn, device='{device_name}')\n"
+            f"y = torch.ones(4, dtype=torch.float32, device='{device_name}').to(torch.float8_e5m2)\n"
+            f"assert x.device.type == '{device_name}' and y.device.type == '{device_name}'\n"
+            "print('SUCCESS')\n"
         )
-    else:
-        return False
-        
+    return None
+
+
+def probe_capability_result(device_name, capability, timeout=10):
+    """Probe a declared capability and preserve subprocess failure evidence."""
+
+    script = _capability_probe_script(device_name, capability)
+    if script is None:
+        return CapabilityProbeResult(
+            device_name=device_name,
+            capability=capability,
+            supported=False,
+            error_type="UnknownCapability",
+            error_message=f"no probe is defined for capability {capability!r}",
+        )
+
+    cmd = [sys.executable, "-c", script]
     try:
         result = subprocess.run(
-            [sys.executable, '-c', script],
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
-        return result.returncode == 0 and "SUCCESS" in result.stdout
-    except Exception:
-        return False
+    except subprocess.TimeoutExpired as exc:
+        return CapabilityProbeResult(
+            device_name=device_name,
+            capability=capability,
+            supported=False,
+            error_type="TimeoutExpired",
+            error_message=f"probe exceeded {timeout:g} seconds",
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
+            timed_out=True,
+            command_args=tuple(cmd),
+        )
+    except Exception as exc:
+        return CapabilityProbeResult(
+            device_name=device_name,
+            capability=capability,
+            supported=False,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+            command_args=tuple(cmd),
+        )
+
+    stdout = getattr(result, "stdout", "") or ""
+    stderr = getattr(result, "stderr", "") or ""
+    supported = result.returncode == 0 and "SUCCESS" in stdout
+    return CapabilityProbeResult(
+        device_name=device_name,
+        capability=capability,
+        supported=supported,
+        returncode=result.returncode,
+        error_type=None if supported else "CapabilityProbeFailed",
+        error_message=None if supported else _probe_text_tail(stderr or stdout),
+        stdout=stdout,
+        stderr=stderr,
+        command_args=tuple(cmd),
+    )
+
+
+def probe_capability(device_name, capability, timeout=10):
+    """Return True if the backend supports a capability."""
+    return probe_capability_result(device_name, capability, timeout=timeout).supported

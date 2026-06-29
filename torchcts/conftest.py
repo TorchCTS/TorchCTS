@@ -113,6 +113,7 @@ _SUBPROCESS_MODE = False
 _KNOWN_SEGFAULT_POLICY = "isolate"
 _KNOWN_SEGFAULTS_ACTIVE = []
 _KNOWN_SEGFAULT_WARNINGS = []
+_KNOWN_SEGFAULT_AUDIT = False
 _ADAPTIVE_ISOLATION_MODE = "auto"
 _ADAPTIVE_ISOLATION_LOAD = None
 _ADAPTIVE_ISOLATION_ACTIVE = {}
@@ -260,10 +261,17 @@ def _known_segfault_match_for_item(item):
     if _KNOWN_SEGFAULT_POLICY != "isolate" or not _KNOWN_SEGFAULTS_ACTIVE:
         return None
     try:
-        from torchcts.core.known_segfaults import match_known_segfault
+        from torchcts.core.known_segfaults import KnownSegfaultError, match_known_segfault
 
-        return match_known_segfault(item, _KNOWN_SEGFAULTS_ACTIVE)
-    except Exception:
+        return match_known_segfault(
+            item,
+            _KNOWN_SEGFAULTS_ACTIVE,
+            metadata=_extract_result_metadata(item),
+        )
+    except KnownSegfaultError as exc:
+        pytest.exit(f"Invalid known segfault match: {exc}", returncode=1)
+    except Exception as exc:
+        pytest.exit(f"Failed to match known segfault policy for {item.nodeid}: {exc}", returncode=1)
         return None
 
 
@@ -277,6 +285,11 @@ def _known_segfault_result_fields(match, *, resolved=False, actual_signal=None):
         "known_segfault_reason": match["reason"],
         "known_segfault_expected_signal": match["expected_signal"],
         "known_segfault_repro": dict(match["repro"]),
+        "known_segfault_match": match.get("matched_by") or match.get("match"),
+        "known_segfault_evidence_scope": match.get("evidence_scope"),
+        "known_segfault_constraints": dict(match.get("constraints") or {}),
+        "known_segfault_matched_nodeid": match.get("matched_nodeid"),
+        "known_segfault_matched_metadata": dict(match.get("matched_metadata") or {}),
     }
     if resolved:
         fields["known_segfault_resolved"] = True
@@ -298,15 +311,143 @@ def _known_segfault_process_classification(match, stdout="", stderr=""):
     return "confirmed_mps_crash"
 
 
-def _should_validate_known_segfault_nodeid(config, entry, collected_files):
+def _canonical_collection_path(value):
     from torchcts.core.known_segfaults import canonicalize_nodeid
 
-    entry_nodeid = canonicalize_nodeid(entry["nodeid"])
-    selected_node_args = [str(arg) for arg in getattr(config, "args", []) if "::" in str(arg)]
-    if selected_node_args:
-        return any(entry_nodeid.startswith(canonicalize_nodeid(arg)) for arg in selected_node_args)
-    entry_file = entry_nodeid.split("::", 1)[0]
-    return entry_file in collected_files
+    text = canonicalize_nodeid(str(value).split("::", 1)[0]).rstrip("/")
+    return text or "."
+
+
+def _path_selects_file(selected_path, candidate_file):
+    selected = _canonical_collection_path(selected_path)
+    candidate = _canonical_collection_path(candidate_file)
+    if selected in {".", "torchcts"}:
+        return True
+    return candidate == selected or candidate.startswith(f"{selected}/")
+
+
+def _known_segfault_descriptor_for_item(item):
+    from torchcts.core.known_segfaults import canonicalize_nodeid
+
+    canonical_nodeid = canonicalize_nodeid(item.nodeid)
+    return {
+        "nodeid": item.nodeid,
+        "canonical_nodeid": canonical_nodeid,
+        "file": canonical_nodeid.split("::", 1)[0],
+        "metadata": _extract_result_metadata(item),
+    }
+
+
+def _selected_collection_args(config):
+    return [str(arg) for arg in getattr(config, "args", []) if str(arg) and not str(arg).startswith("-")]
+
+
+def _known_segfault_entry_in_scope(config, entry, descriptors):
+    from torchcts.core.known_segfaults import canonicalize_nodeid, entry_matches
+
+    if any(
+        entry_matches(entry, descriptor["canonical_nodeid"], descriptor["metadata"], include_constraints=False)
+        for descriptor in descriptors
+    ):
+        return True
+
+    suite_option = config.getoption("--suite") if hasattr(config, "getoption") else None
+    suite_constraints = (entry.get("constraints") or {}).get("suite") or []
+    if suite_option and suite_option in suite_constraints:
+        return True
+
+    selected_args = _selected_collection_args(config)
+    selected_nodes = [arg for arg in selected_args if "::" in arg]
+    if selected_nodes:
+        entry_nodeid = entry.get("nodeid")
+        if not entry_nodeid:
+            return False
+        canonical_entry = canonicalize_nodeid(entry_nodeid)
+        return any(canonical_entry.startswith(canonicalize_nodeid(arg)) for arg in selected_nodes)
+
+    selected_paths = [_canonical_collection_path(arg) for arg in selected_args]
+    if not selected_paths:
+        return True
+    if suite_option is None and (len(selected_paths) >= 8 or any(path in {".", "torchcts"} for path in selected_paths)):
+        return True
+
+    if entry.get("nodeid"):
+        entry_file = canonicalize_nodeid(entry["nodeid"]).split("::", 1)[0]
+        if any(_path_selects_file(path, entry_file) for path in selected_paths):
+            return True
+
+    if suite_constraints:
+        for suite in suite_constraints:
+            suite_path = f"torchcts/{suite}"
+            if any(_path_selects_file(path, suite_path) or _path_selects_file(suite_path, path) for path in selected_paths):
+                return True
+    return False
+
+
+def _validate_known_segfault_collection(config, entries, items):
+    from torchcts.core.known_segfaults import (
+        KnownSegfaultError,
+        best_known_segfault_match,
+        entry_matches,
+    )
+
+    descriptors = [_known_segfault_descriptor_for_item(item) for item in items]
+    errors = []
+    for descriptor in descriptors:
+        try:
+            best_known_segfault_match(
+                descriptor["canonical_nodeid"],
+                entries,
+                metadata=descriptor["metadata"],
+            )
+        except KnownSegfaultError as exc:
+            errors.append(str(exc))
+
+    stale_entries = []
+    for entry in entries:
+        if not _known_segfault_entry_in_scope(config, entry, descriptors):
+            continue
+        if not any(entry_matches(entry, d["canonical_nodeid"], d["metadata"]) for d in descriptors):
+            stale_entries.append(entry)
+
+    if stale_entries:
+        errors.append(
+            "Known segfault ledger contains stale in-scope rule(s):\n"
+            + "\n".join(
+                "  - {id}: match={match} dispatcher={dispatcher} evidence_scope={scope} constraints={constraints}".format(
+                    id=entry["id"],
+                    match=entry["match"],
+                    dispatcher=entry["dispatcher"],
+                    scope=entry["evidence_scope"],
+                    constraints=entry.get("constraints") or {},
+                )
+                for entry in stale_entries
+            )
+        )
+
+    if errors:
+        pytest.exit("\n".join(errors), returncode=1)
+    return descriptors
+
+
+def _print_known_segfault_audit(config, entries, descriptors):
+    from torchcts.core.known_segfaults import entry_matches
+
+    verbose = getattr(getattr(config, "option", None), "verbose", 0) or 0
+    print(f"\nKnown segfault audit: {len(entries)} active rule(s)")
+    for entry in entries:
+        matches = [
+            descriptor
+            for descriptor in descriptors
+            if entry_matches(entry, descriptor["canonical_nodeid"], descriptor["metadata"])
+        ]
+        print(
+            f"  - {entry['id']}: match={entry['match']} "
+            f"evidence_scope={entry['evidence_scope']} matched={len(matches)}"
+        )
+        if verbose:
+            for descriptor in matches:
+                print(f"      {descriptor['canonical_nodeid']}")
 
 
 def _adaptive_isolation_match_for_item(item):
@@ -443,6 +584,80 @@ def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
     return "runtime_skip"
 
 
+def _hardware_unsupported_pattern_match(message: str) -> str | None:
+    import re
+
+    for pattern in _HARDWARE_UNSUPPORTED_PATTERNS:
+        if re.search(pattern, message or ""):
+            return pattern
+    return None
+
+
+def _probe_failure_tail(text, limit=1200):
+    text = "" if text is None else str(text)
+    return text if len(text) <= limit else text[-limit:]
+
+
+def _manifest_probe_failure_message(kind, name, detail):
+    return (
+        f"Manifest overclaim: {kind} {name!r} is declared supported, "
+        f"but its runtime probe failed.\n{detail}\n"
+        "Fix the backend or narrow the manifest."
+    )
+
+
+def _apply_declared_dtype_probes(supported_dtypes, device_name):
+    failures = []
+    for dt, val in list(supported_dtypes.items()):
+        if not val:
+            continue
+        probe_dtype = dt if isinstance(dt, torch.dtype) else str_to_dtype(str(dt))
+        dtype_name = dtype_to_str(probe_dtype) if probe_dtype is not None else str(dt)
+        if probe_dtype is None:
+            failures.append(
+                _manifest_probe_failure_message(
+                    "dtype",
+                    dtype_name,
+                    f"Could not resolve manifest dtype key {dt!r}.",
+                )
+            )
+            continue
+        try:
+            torch.zeros(1, dtype=probe_dtype, device=device_name)
+        except Exception as exc:
+            failures.append(
+                _manifest_probe_failure_message(
+                    "dtype",
+                    dtype_name,
+                    f"{type(exc).__name__}: {_probe_failure_tail(exc)}",
+                )
+            )
+    return failures
+
+
+def _apply_declared_capability_probes(caps, device_name, probe_func=None):
+    if probe_func is None:
+        from torchcts.core.device import probe_capability_result
+
+        probe_func = probe_capability_result
+    failures = []
+    for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
+        if not caps.get(cap, False):
+            continue
+        probe = probe_func(device_name, cap)
+        if probe.supported:
+            continue
+        evidence = probe.to_dict()
+        detail = (
+            f"{evidence.get('error_type')}: {evidence.get('error_message')}\n"
+            f"returncode={evidence.get('returncode')} timed_out={evidence.get('timed_out')}\n"
+            f"stderr_tail:\n{evidence.get('stderr_tail')}\n"
+            f"stdout_tail:\n{evidence.get('stdout_tail')}"
+        )
+        failures.append(_manifest_probe_failure_message("capability", cap, detail))
+    return failures
+
+
 def _extract_result_metadata(item):
     metadata = {
         "suite": _canonical_suite_for_item(item),
@@ -540,6 +755,8 @@ def _extract_result_metadata(item):
 
     metadata["covers"] = sorted(set(covers))
     metadata["covers_categories"] = sorted(set(categories))
+    if not metadata.get("dispatcher_name") and len(metadata["covers"]) == 1:
+        metadata["dispatcher_name"] = metadata["covers"][0]
     if metadata["test_kind"] == "opinfo":
         metadata["coverage_kind"] = "opinfo"
     elif metadata["suite"] == "generated":
@@ -603,6 +820,11 @@ def pytest_addoption(parser):
         choices=["isolate", "off"],
         default=None,
         help="Isolate known backend segfault tests without skipping them; defaults to isolate",
+    )
+    group.addoption(
+        "--known-segfault-audit",
+        action="store_true",
+        help="Collect tests, validate active known-segfault rules, print rule matches, and exit",
     )
     group.addoption(
         "--adaptive-isolation",
@@ -715,6 +937,7 @@ def pytest_configure(config):
     global _SUBPROCESS_MODE, _MEMORY_MODE, _CLEANUP_THRESHOLD, _MAX_DEVICE_MEM, _MAX_TENSOR_SIZE, _BASELINE_RESULTS
     global _COLLECT_ONLY, _ARTIFACT_WRITES_ENABLED, _ACTUAL_DEVICE_COUNT, _REQUESTED_SEMANTIC_LEVEL, _SEMANTIC_LEVEL_SELECTION
     global _KNOWN_SEGFAULT_POLICY, _KNOWN_SEGFAULTS_ACTIVE, _KNOWN_SEGFAULT_WARNINGS
+    global _KNOWN_SEGFAULT_AUDIT
     global _ADAPTIVE_ISOLATION_MODE, _ADAPTIVE_ISOLATION_LOAD, _ADAPTIVE_ISOLATION_ACTIVE
     global _ADAPTIVE_ISOLATION_REJECTED, _ADAPTIVE_ISOLATION_WARNINGS, _SESSION_COMPLETED
 
@@ -883,27 +1106,23 @@ def pytest_configure(config):
     if not is_validation and not _COLLECT_ONLY:
         # Dynamic Dtype Probing — in-process torch.zeros, safe for all processes
         supported_dtypes = _MANIFEST.setdefault("supported_dtypes", {})
-        probed_supported = {}
-        for dt, val in list(supported_dtypes.items()):
-            if val:
-                try:
-                    torch.zeros(1, dtype=dt, device=_DEVICE_NAME)
-                    probed_supported[dt] = val
-                except Exception:
-                    pass
-        supported_dtypes.clear()
-        supported_dtypes.update(probed_supported)
+        dtype_probe_failures = _apply_declared_dtype_probes(
+            supported_dtypes,
+            _DEVICE_NAME,
+        )
+        if dtype_probe_failures:
+            pytest.exit("\n\n".join(dtype_probe_failures), returncode=1)
 
         # Dynamic Capability Probing — subprocess-based.
         # Skip in xdist workers: concurrent subprocess probes cause hangs.
         if not _IS_XDIST_WORKER:
-            from torchcts.core.device import probe_capability
             caps = _MANIFEST.setdefault("capabilities", {})
-            for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
-                if caps.get(cap, False):
-                    if not probe_capability(_DEVICE_NAME, cap):
-                        caps[cap] = False
-                        print(f"Probe: {cap} -> disabled (subprocess probe failed)")
+            capability_probe_failures = _apply_declared_capability_probes(
+                caps,
+                _DEVICE_NAME,
+            )
+            if capability_probe_failures:
+                pytest.exit("\n\n".join(capability_probe_failures), returncode=1)
 
             # Hard prerequisite: inference must be True
             if not caps.get("inference", True):
@@ -922,7 +1141,11 @@ def pytest_configure(config):
 
     _HARDWARE_KEY = get_hardware_key(_DEVICE_NAME, _MANIFEST)
     _RESULTS_DIR = config.getoption("--results-dir")
-    
+    os.environ["TORCHCTS_RESULTS_DIR"] = str(_RESULTS_DIR)
+    os.environ["TORCHCTS_HARDWARE_KEY"] = str(_HARDWARE_KEY)
+    os.environ["TORCHCTS_DEVICE_NAME"] = str(_DEVICE_NAME)
+    os.environ["TORCHCTS_PYTORCH_VERSION"] = str(torch.__version__)
+
     _SHOW_SKIPS = config.getoption("--show-skips")
     _REPORT_SKIPS = config.getoption("--report-skips")
     _SUBPROCESS_MODE = config.getoption("--subprocess-per-test")
@@ -934,6 +1157,7 @@ def pytest_configure(config):
     _SESSION_COMPLETED = False
     policy_option = config.getoption("--known-segfault-policy")
     _KNOWN_SEGFAULT_POLICY = policy_option or "isolate"
+    _KNOWN_SEGFAULT_AUDIT = bool(config.getoption("--known-segfault-audit"))
     _KNOWN_SEGFAULTS_ACTIVE = []
     _KNOWN_SEGFAULT_WARNINGS = []
     if _KNOWN_SEGFAULT_POLICY == "isolate":
@@ -957,7 +1181,7 @@ def pytest_configure(config):
                     print(f"Warning: {warning}", file=sys.stderr)
         except Exception as exc:
             pytest.exit(f"Invalid known segfault ledger: {exc}", returncode=1)
-    _ARTIFACT_WRITES_ENABLED = not (_COLLECT_ONLY or _SHOW_SKIPS)
+    _ARTIFACT_WRITES_ENABLED = not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT)
     if _ARTIFACT_WRITES_ENABLED:
         os.makedirs(_RESULTS_DIR, exist_ok=True)
     
@@ -1127,8 +1351,15 @@ def pytest_collection_modifyitems(session, config, items):
                 def _dummy_fn(x):
                     return x + 1.0
                 _dummy_fn(torch.ones(1, device=_DEVICE_NAME))
-        except Exception:
-            caps["compile"] = False
+        except Exception as exc:
+            pytest.exit(
+                _manifest_probe_failure_message(
+                    "capability",
+                    "compile",
+                    f"{type(exc).__name__}: {_probe_failure_tail(exc)}",
+                ),
+                returncode=1,
+            )
             
     # Optional CLI dtype filter
     cli_dtypes = config.getoption("--dtype")
@@ -1316,26 +1547,19 @@ def pytest_collection_modifyitems(session, config, items):
         else:
             keep_items.append(item)
 
+    known_segfault_descriptors = []
     if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:
-        from torchcts.core.known_segfaults import canonicalize_nodeid
-
-        collected_nodeids = {canonicalize_nodeid(item.nodeid) for item in keep_items}
-        collected_files = {canonicalize_nodeid(item.nodeid).split("::", 1)[0] for item in keep_items}
-        stale_entries = [
-            entry
-            for entry in _KNOWN_SEGFAULTS_ACTIVE
-            if canonicalize_nodeid(entry["nodeid"]) not in collected_nodeids
-            and _should_validate_known_segfault_nodeid(config, entry, collected_files)
-        ]
-        if stale_entries:
-            detail = "\n".join(
-                f"  - {entry['id']}: {entry['nodeid']}" for entry in stale_entries
-            )
-            pytest.exit(
-                "Known segfault ledger contains stale in-scope node id(s):\n"
-                f"{detail}",
-                returncode=1,
-            )
+        known_segfault_descriptors = _validate_known_segfault_collection(
+            config,
+            _KNOWN_SEGFAULTS_ACTIVE,
+            keep_items,
+        )
+        if _KNOWN_SEGFAULT_AUDIT:
+            _print_known_segfault_audit(config, _KNOWN_SEGFAULTS_ACTIVE, known_segfault_descriptors)
+            pytest.exit("Known segfault audit complete", returncode=0)
+    elif _KNOWN_SEGFAULT_AUDIT:
+        print("\nKnown segfault audit: 0 active rule(s)")
+        pytest.exit("Known segfault audit complete", returncode=0)
 
     _finalize_adaptive_isolation_for_collection(config, keep_items)
 
@@ -1660,6 +1884,12 @@ def pytest_runtest_makereport(item, call):
         
         if hasattr(item, "bench_stats"):
             record["bench_stats"] = item.bench_stats
+        runtime_unsupported = getattr(item, "_runtime_unsupported_error", None)
+        if runtime_unsupported:
+            record["runtime_unsupported_matched_pattern"] = runtime_unsupported["matched_pattern"]
+            record["runtime_unsupported_error"] = runtime_unsupported["message"]
+            if status in ("FAIL", "ERROR"):
+                record["classification"] = "backend_runtime_unsupported"
             
         _SESSION_RESULTS[item.nodeid] = record
         
@@ -1904,7 +2134,7 @@ def pytest_runtest_protocol(item, nextitem):
                     if child_record.get("status") == "PASS":
                         print(
                             f"Warning: known segfault {known_segfault_match['id']} passed; "
-                            "ledger may be stale.",
+                            "rule may be stale, intentionally broad, or order-dependent.",
                             file=sys.stderr,
                         )
                 if adaptive_isolation_match:
@@ -1945,7 +2175,7 @@ def pytest_runtest_protocol(item, nextitem):
                     )
                     print(
                         f"Warning: known segfault {known_segfault_match['id']} passed; "
-                        "ledger may be stale.",
+                        "rule may be stale, intentionally broad, or order-dependent.",
                         file=sys.stderr,
                     )
                 if adaptive_isolation_match:
@@ -2163,16 +2393,11 @@ def pytest_runtest_call(item):
         exc_type, exc_val, exc_tb = outcome.excinfo
         if exc_type.__name__ in ("Skipped", "Failed", "OutcomeException"):
             return
-        import re
         msg = str(exc_val)
-        matched = False
-        for pattern in _HARDWARE_UNSUPPORTED_PATTERNS:
-            if re.search(pattern, msg):
-                matched = True
-                break
-        if matched:
-            # Mark this item as a hardware unsupported skip
-            item._hardware_unsupported_reason = f"Hardware/Framework unsupported: {msg}"
-            # Clear the failed outcome before raising skip to avoid PluggyTeardownRaisedWarning
-            outcome.force_result(None)
-            pytest.skip(item._hardware_unsupported_reason)
+        matched_pattern = _hardware_unsupported_pattern_match(msg)
+        if matched_pattern:
+            item._runtime_unsupported_error = {
+                "matched_pattern": matched_pattern,
+                "message": msg,
+            }
+            return

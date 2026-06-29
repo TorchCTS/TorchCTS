@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import datetime as _datetime
+import fnmatch
 import json
 from pathlib import Path
 from typing import Iterable
@@ -28,15 +29,42 @@ PACKAGED_KNOWN_SEGFAULTS = Path(__file__).resolve().parents[1] / "known_segfault
 PROJECT_KNOWN_SEGFAULTS = "known_segfaults.json"
 
 VALID_SIGNALS = {"SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL"}
-VALID_MATCHES = {"nodeid"}
+VALID_MATCHES = {"nodeid", "dispatcher", "coverage_id"}
+VALID_EVIDENCE_SCOPES = {"exact_node", "constrained_metadata", "dispatcher_surface"}
 VALID_CLASSIFICATIONS = {"confirmed_mps_crash"}
+EXACT_CONSTRAINT_KEYS = {
+    "suite",
+    "test_kind",
+    "coverage_kind",
+    "surface_kind",
+    "variant_kind",
+    "coverage_status",
+    "strategy",
+    "strategy_family",
+}
+GLOB_CONSTRAINT_KEYS = {"nodeid_glob", "coverage_id_glob"}
+SEMANTIC_CONSTRAINT_KEYS = {"semantic_level"}
+VALID_CONSTRAINT_KEYS = EXACT_CONSTRAINT_KEYS | GLOB_CONSTRAINT_KEYS | SEMANTIC_CONSTRAINT_KEYS
+MATCH_METADATA_KEYS = (
+    "dispatcher_name",
+    "coverage_id",
+    "suite",
+    "test_kind",
+    "coverage_kind",
+    "surface_kind",
+    "variant_kind",
+    "coverage_status",
+    "strategy",
+    "strategy_family",
+    "semantic_level",
+)
 
 REQUIRED_ENTRY_KEYS = {
     "id",
     "backend",
     "match",
-    "nodeid",
     "dispatcher",
+    "evidence_scope",
     "classification",
     "expected_signal",
     "repro",
@@ -48,7 +76,7 @@ REQUIRED_ENTRY_KEYS = {
     "review_after",
 }
 
-ALLOWED_ENTRY_KEYS = set(REQUIRED_ENTRY_KEYS)
+ALLOWED_ENTRY_KEYS = set(REQUIRED_ENTRY_KEYS) | {"nodeid", "coverage_id", "constraints"}
 REQUIRED_REPRO_KEYS = {"script", "case"}
 ALLOWED_REPRO_KEYS = set(REQUIRED_REPRO_KEYS)
 
@@ -64,6 +92,55 @@ def _parse_date(value: str, path: str, entry_id: str) -> _datetime.date:
         return _datetime.date.fromisoformat(value)
     except ValueError as exc:
         raise KnownSegfaultError(f"{path}: entry {entry_id} review_after must be YYYY-MM-DD") from exc
+
+
+def _canonical_dispatcher_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text.endswith(".default"):
+        return text[: -len(".default")]
+    return text
+
+
+def _dispatcher_matches(expected: str | None, actual: str | None) -> bool:
+    return _canonical_dispatcher_name(expected) == _canonical_dispatcher_name(actual)
+
+
+def _normalize_constraints(value, path: str, entry_id: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise KnownSegfaultError(f"{path}: entry {entry_id} constraints must be an object")
+    unknown = sorted(set(value) - VALID_CONSTRAINT_KEYS)
+    if unknown:
+        raise KnownSegfaultError(
+            f"{path}: entry {entry_id} constraints has unknown field(s): {', '.join(unknown)}"
+        )
+
+    normalized = {}
+    for key, raw in value.items():
+        raw_values = raw if isinstance(raw, list) else [raw]
+        if not raw_values:
+            raise KnownSegfaultError(f"{path}: entry {entry_id} constraints.{key} must not be empty")
+
+        values = []
+        if key in SEMANTIC_CONSTRAINT_KEYS:
+            for item in raw_values:
+                if not isinstance(item, int) or isinstance(item, bool) or not 1 <= item <= 8:
+                    raise KnownSegfaultError(
+                        f"{path}: entry {entry_id} constraints.{key} must contain semantic levels 1..8"
+                    )
+                values.append(item)
+        else:
+            for item in raw_values:
+                if not isinstance(item, str) or not item.strip():
+                    raise KnownSegfaultError(
+                        f"{path}: entry {entry_id} constraints.{key} must contain non-empty strings"
+                    )
+                values.append(item.strip())
+        normalized[key] = values
+    return normalized
 
 
 def _normalize_payload_item(payload_item) -> tuple[str, dict]:
@@ -92,12 +169,19 @@ def _validate_entry(entry: dict, path: str, seen_ids: set[str]) -> dict:
         raise KnownSegfaultError(f"{path}: duplicate known segfault id {entry['id']!r}")
     seen_ids.add(entry["id"])
 
-    for key in ("backend", "nodeid", "dispatcher", "reason", "owner", "hardware"):
+    for key in ("backend", "dispatcher", "reason", "owner", "hardware"):
         if not isinstance(entry[key], str) or not entry[key].strip():
+            raise KnownSegfaultError(f"{path}: entry {entry['id']} field {key} must be a non-empty string")
+    for key in ("nodeid", "coverage_id"):
+        if key in entry and (not isinstance(entry[key], str) or not entry[key].strip()):
             raise KnownSegfaultError(f"{path}: entry {entry['id']} field {key} must be a non-empty string")
 
     if entry["match"] not in VALID_MATCHES:
         raise KnownSegfaultError(f"{path}: entry {entry['id']} match must be one of {sorted(VALID_MATCHES)}")
+    if entry["evidence_scope"] not in VALID_EVIDENCE_SCOPES:
+        raise KnownSegfaultError(
+            f"{path}: entry {entry['id']} evidence_scope must be one of {sorted(VALID_EVIDENCE_SCOPES)}"
+        )
     if entry["classification"] not in VALID_CLASSIFICATIONS:
         raise KnownSegfaultError(
             f"{path}: entry {entry['id']} classification must be confirmed_mps_crash"
@@ -129,7 +213,37 @@ def _validate_entry(entry: dict, path: str, seen_ids: set[str]) -> dict:
         if not isinstance(repro[key], str) or not repro[key].strip():
             raise KnownSegfaultError(f"{path}: entry {entry['id']} repro.{key} must be a non-empty string")
 
+    constraints = _normalize_constraints(entry.get("constraints"), path, entry["id"])
+    match_mode = entry["match"]
+    evidence_scope = entry["evidence_scope"]
+    if match_mode == "nodeid":
+        if "nodeid" not in entry:
+            raise KnownSegfaultError(f"{path}: entry {entry['id']} match=nodeid requires nodeid")
+        if evidence_scope != "exact_node":
+            raise KnownSegfaultError(f"{path}: entry {entry['id']} match=nodeid requires evidence_scope=exact_node")
+    elif evidence_scope == "exact_node":
+        raise KnownSegfaultError(f"{path}: entry {entry['id']} evidence_scope=exact_node requires match=nodeid")
+
+    if match_mode == "dispatcher" and evidence_scope == "constrained_metadata" and not constraints:
+        raise KnownSegfaultError(
+            f"{path}: entry {entry['id']} constrained dispatcher rules require non-empty constraints"
+        )
+    if match_mode == "coverage_id":
+        has_coverage_id_glob = bool(constraints.get("coverage_id_glob"))
+        if "coverage_id" not in entry and not has_coverage_id_glob:
+            raise KnownSegfaultError(
+                f"{path}: entry {entry['id']} match=coverage_id requires coverage_id or constraints.coverage_id_glob"
+            )
+        if evidence_scope == "constrained_metadata" and not constraints:
+            raise KnownSegfaultError(
+                f"{path}: entry {entry['id']} constrained coverage_id rules require non-empty constraints"
+            )
+
     normalized = dict(entry)
+    if constraints:
+        normalized["constraints"] = constraints
+    else:
+        normalized.pop("constraints", None)
     normalized["source_path"] = path
     return normalized
 
@@ -205,12 +319,129 @@ def canonicalize_nodeid(nodeid: str) -> str:
     return f"{path}{sep}{suffix}"
 
 
-def match_known_segfault(item, active_entries: Iterable[dict]) -> dict | None:
+def _matched_metadata(metadata: dict | None) -> dict:
+    metadata = metadata or {}
+    return {key: metadata.get(key) for key in MATCH_METADATA_KEYS if metadata.get(key) is not None}
+
+
+def _constraint_value(metadata: dict | None, key: str, nodeid: str):
+    metadata = metadata or {}
+    if key == "nodeid_glob":
+        return nodeid
+    if key == "coverage_id_glob":
+        return metadata.get("coverage_id")
+    return metadata.get(key)
+
+
+def constraints_match(entry: dict, nodeid: str, metadata: dict | None = None) -> bool:
+    canonical_nodeid = canonicalize_nodeid(nodeid)
+    for key, expected_values in (entry.get("constraints") or {}).items():
+        actual = _constraint_value(metadata, key, canonical_nodeid)
+        if actual is None:
+            return False
+        if key in GLOB_CONSTRAINT_KEYS:
+            if not any(fnmatch.fnmatch(str(actual), pattern) for pattern in expected_values):
+                return False
+        elif key in SEMANTIC_CONSTRAINT_KEYS:
+            if actual not in expected_values:
+                return False
+        elif str(actual) not in expected_values:
+            return False
+    return True
+
+
+def entry_matches(
+    entry: dict,
+    nodeid: str,
+    metadata: dict | None = None,
+    *,
+    include_constraints: bool = True,
+) -> bool:
+    canonical_nodeid = canonicalize_nodeid(nodeid)
+    metadata = metadata or {}
+    match_mode = entry.get("match")
+    if match_mode == "nodeid":
+        primary = canonicalize_nodeid(entry.get("nodeid", "")) == canonical_nodeid
+    elif match_mode == "dispatcher":
+        primary = _dispatcher_matches(entry.get("dispatcher"), metadata.get("dispatcher_name"))
+    elif match_mode == "coverage_id":
+        coverage_id = metadata.get("coverage_id")
+        primary = bool(entry.get("coverage_id") and coverage_id == entry.get("coverage_id"))
+        if not primary:
+            primary = any(
+                fnmatch.fnmatch(str(coverage_id or ""), pattern)
+                for pattern in (entry.get("constraints") or {}).get("coverage_id_glob", [])
+            )
+    else:
+        primary = False
+    if not primary:
+        return False
+    if include_constraints and not constraints_match(entry, canonical_nodeid, metadata):
+        return False
+    return True
+
+
+def match_specificity(entry: dict) -> tuple[int, int, int, int]:
+    constraints = entry.get("constraints") or {}
+    base = {"nodeid": 300, "dispatcher": 200, "coverage_id": 100}.get(entry.get("match"), 0)
+    exact_count = sum(1 for key in constraints if key not in GLOB_CONSTRAINT_KEYS)
+    glob_count = sum(1 for key in constraints if key in GLOB_CONSTRAINT_KEYS)
+    return (base, len(constraints), exact_count, -glob_count)
+
+
+def _match_sort_key(entry: dict) -> tuple[int, int, int, int, str]:
+    return (*match_specificity(entry), entry.get("id", ""))
+
+
+def annotate_match(entry: dict, nodeid: str, metadata: dict | None = None) -> dict:
+    annotated = dict(entry)
+    annotated["matched_by"] = entry["match"]
+    annotated["matched_nodeid"] = canonicalize_nodeid(nodeid)
+    annotated["matched_metadata"] = _matched_metadata(metadata)
+    annotated["constraints"] = dict(entry.get("constraints") or {})
+    annotated["evidence_scope"] = entry["evidence_scope"]
+    return annotated
+
+
+def matching_known_segfaults(
+    nodeid: str,
+    active_entries: Iterable[dict],
+    *,
+    metadata: dict | None = None,
+) -> list[dict]:
+    matches = [
+        annotate_match(entry, nodeid, metadata)
+        for entry in active_entries
+        if entry_matches(entry, nodeid, metadata)
+    ]
+    return sorted(matches, key=_match_sort_key, reverse=True)
+
+
+def best_known_segfault_match(
+    nodeid: str,
+    active_entries: Iterable[dict],
+    *,
+    metadata: dict | None = None,
+) -> dict | None:
+    matches = matching_known_segfaults(nodeid, active_entries, metadata=metadata)
+    if not matches:
+        return None
+    top = matches[0]
+    top_score = match_specificity(top)
+    tied = [match for match in matches if match_specificity(match) == top_score]
+    if len(tied) > 1:
+        ids = ", ".join(match["id"] for match in tied)
+        raise KnownSegfaultError(
+            f"ambiguous known segfault match for {canonicalize_nodeid(nodeid)}: {ids}"
+        )
+    return top
+
+
+def match_known_segfault(item, active_entries: Iterable[dict], metadata: dict | None = None) -> dict | None:
     nodeid = canonicalize_nodeid(getattr(item, "nodeid", str(item)))
-    for entry in active_entries:
-        if entry.get("match") == "nodeid" and canonicalize_nodeid(entry.get("nodeid", "")) == nodeid:
-            return dict(entry)
-    return None
+    if metadata is None:
+        metadata = getattr(item, "metadata", None)
+    return best_known_segfault_match(nodeid, active_entries, metadata=metadata)
 
 
 def expired_known_segfault_warnings(

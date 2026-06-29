@@ -30,10 +30,10 @@ from torchcts.core.opinfo_adapter import (
     get_op_sample_inputs,
     is_cpu_reference_failure,
     prepare_sample,
-    record_known_failure,
     str_to_dtype,
 )
 from torchcts.core.reference_oracles import matmul_family_reference
+from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 from torchcts.sample_generation import (
     bitwise_args_and_template as sample_bitwise_args_and_template,
     bitwise_dtype_supported as sample_bitwise_dtype_supported,
@@ -337,6 +337,7 @@ def _run_opinfo_out_sample(
     device: str,
     compare,
     category: str,
+    sample_index: int | None = None,
 ) -> bool:
     cpu_input = _move_to_device(sample.input, "cpu")
     cpu_args = _move_to_device(sample.args, "cpu")
@@ -347,7 +348,15 @@ def _run_opinfo_out_sample(
     except Exception as exc:
         if is_cpu_reference_failure(exc):
             opinfo_name = entry["generated"]["strategy"]["opinfo_name"]
-            record_known_failure("forward", opinfo_name, dtype_str, f"{type(exc).__name__}: {exc}")
+            record_opinfo_oracle_failure(
+                "generated_out",
+                opinfo_name,
+                dtype_str,
+                "cpu_reference",
+                exc,
+                input_condition=input_condition,
+                sample_index=sample_index,
+            )
         return False
 
     if not isinstance(expected, torch.Tensor):
@@ -436,11 +445,14 @@ def run_opinfo_out_strategy(entry: dict | None, device: str, compare, manifest: 
                 device=device,
                 compare=compare,
                 category="elementwise",
+                sample_index=sample_index,
             ):
                 tested_any = True
                 passed_count += 1
 
     if not tested_any:
+        if entry.get("status") == "covered_generated":
+            pytest.fail(f"All generated out= samples failed before comparison for {entry['name']}")
         pytest.skip(f"coverage_strategy_pending: all generated out= samples skipped for {op_name}")
 
 
@@ -568,6 +580,7 @@ def _run_opinfo_view_alias_sample(
     device: str,
     compare,
     category: str,
+    sample_index: int | None = None,
 ) -> bool:
     cpu_input = _move_to_device(sample.input, "cpu")
     if not isinstance(cpu_input, torch.Tensor):
@@ -580,7 +593,15 @@ def _run_opinfo_view_alias_sample(
     except Exception as exc:
         if is_cpu_reference_failure(exc):
             opinfo_name = entry["generated"]["strategy"]["opinfo_name"]
-            record_known_failure("forward", opinfo_name, dtype_str, f"{type(exc).__name__}: {exc}")
+            record_opinfo_oracle_failure(
+                "generated_view_alias",
+                opinfo_name,
+                dtype_str,
+                "cpu_reference",
+                exc,
+                input_condition=input_condition,
+                sample_index=sample_index,
+            )
         return False
 
     if not isinstance(expected, torch.Tensor):
@@ -682,11 +703,14 @@ def run_opinfo_view_alias_strategy(entry: dict | None, device: str, compare, man
                 device=device,
                 compare=compare,
                 category="copy",
+                sample_index=sample_index,
             ):
                 tested_any = True
                 passed_count += 1
 
     if not tested_any:
+        if entry.get("status") == "covered_generated":
+            pytest.fail(f"All generated view/alias samples failed before comparison for {entry['name']}")
         pytest.skip(f"coverage_strategy_pending: all generated view/alias samples skipped for {op_name}")
 
 

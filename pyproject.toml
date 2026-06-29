@@ -30,7 +30,7 @@ where = ["."]
 include = ["torchcts*"]
 
 [tool.setuptools.package-data]
-torchcts = ["templates/*.py", "opinfo_cache/*.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json"]
+torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]
@@ -52,14 +52,10 @@ filterwarnings = [
     "ignore:Using a target size.*that is different to the input size:UserWarning",
     # PyTorch internal output resize deprecation (FFT, gather, cat, etc.)
     "ignore:An output with one or more elements was resized:UserWarning",
-    # MPS backend fallback to CPU
-    "ignore:The operator .* is not currently supported on the MPS backend:UserWarning",
     # Sparse CSR beta warning
     "ignore:Sparse CSR tensor support is in beta:UserWarning",
     # STFT rectangular window warning
     "ignore:A window was not provided:UserWarning",
-    # Pluggy teardown warning from our hardware-unsupported skip hookwrapper
-    "ignore::pluggy.PluggyTeardownRaisedWarning",
     # torch.jit.script_method deprecation on Python 3.14+
     "ignore:`torch\\.jit\\.script_method` is not supported:DeprecationWarning",
 ]

@@ -116,16 +116,7 @@ def test_autocast_precisions(autocast_dtype, device, manifest):
     # We run autocast context for the device type
     # For MPS, device_type is 'mps'
     device_type = "cuda" if device == "cuda" else ("mps" if device == "mps" else "cpu")
-    if device_type not in ("cuda", "cpu"):
-        # PyTorch autocast supports 'cuda' and 'cpu' natively.
-        # MPS autocast support might be limited/not register under torch.autocast.
-        # We can check if it runs without errors.
-        try:
-            with torch.autocast(device_type=device_type, dtype=autocast_dtype):
-                pass
-        except Exception:
-            pytest.skip(f"autocast not supported for device type: {device_type}")
-            
+
     x = torch.randn(4, 4, device=device)
     y = torch.randn(4, 4, device=device)
     

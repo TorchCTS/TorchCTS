@@ -26,13 +26,13 @@ from torchcts.core.opinfo_adapter import (
     get_live_opinfo,
     get_op_sample_inputs,
     str_to_dtype,
-    record_known_failure,
     is_cpu_reference_failure,
     InputCondition,
     prepare_sample,
 )
 from torchcts.core.comparer import compare_nan_propagation, compare_inf_propagation
 from torchcts.core.device import synchronize
+from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 
 pytestmark = pytest.mark.covers_category("opinfo_forward")
 
@@ -119,10 +119,7 @@ def get_op_category(op_name):
 # Build test list from op_db metadata + known failures (no probing)
 # ---------------------------------------------------------------------------
 
-try:
-    op_tests = get_forward_op_tests(conftest._MANIFEST)
-except Exception:
-    op_tests = []
+op_tests = get_forward_op_tests(conftest._MANIFEST)
 
 if not op_tests:
     # Dummy parameter to avoid pytest collection errors
@@ -335,6 +332,15 @@ def _override_dropout(sample, op_name):
     return sample
 
 
+def _failure_summary(failures):
+    if not failures:
+        return "no CPU failure details recorded"
+    shown = "; ".join(failures[:3])
+    if len(failures) > 3:
+        shown += f"; ... {len(failures) - 3} more"
+    return shown
+
+
 # ---------------------------------------------------------------------------
 # NaN/Inf tier comparison helpers
 # ---------------------------------------------------------------------------
@@ -382,7 +388,7 @@ def _compare_special_tier(actual, expected, condition):
 @pytest.mark.opinfo
 @pytest.mark.parametrize("op_name, dtype_str, input_condition", op_tests,
                          ids=[f"{c}-{op}-{dt}" for op, dt, c in op_tests])
-def test_op_forward(op_name, dtype_str, input_condition, device, compare):
+def test_op_forward(op_name, dtype_str, input_condition, device, compare, request):
     if op_name == "dummy":
         pytest.skip("No OpInfo tests matched the manifest filters.")
 
@@ -408,6 +414,7 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
     passed_count = 0
     stable_sort_samples = []  # Collect passing samples for stable sort retest
     has_any_samples = False
+    cpu_failures = []
 
     for i, raw_sample in enumerate(get_op_sample_inputs(op_name, device, dtype)):
         has_any_samples = True
@@ -437,7 +444,8 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
 
                 actual = op_fn(dev_input, *dev_args, **dev_kwargs)
                 synchronize(device)
-            except Exception:
+            except Exception as exc:
+                cpu_failures.append(f"sample {i}: {type(exc).__name__}: {exc}")
                 continue
             tested_any = True
             passed_count += 1
@@ -450,12 +458,33 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
             expected = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
         except Exception as e:
             if is_cpu_reference_failure(e):
-                record_known_failure("forward", op_name, dtype_str, f"{type(e).__name__}: {e}")
+                record_opinfo_oracle_failure(
+                    "forward",
+                    op_name,
+                    dtype_str,
+                    "cpu_reference",
+                    e,
+                    input_condition=input_condition,
+                    sample_index=i,
+                    nodeid=request.node.nodeid,
+                )
+                cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
                 continue
             if input_condition != InputCondition.CLEAN:
                 cpu_error = e  # For NaN/Inf tiers, capture error for comparison
             else:
-                continue  # Clean tier: skip sample on CPU error
+                record_opinfo_oracle_failure(
+                    "forward",
+                    op_name,
+                    dtype_str,
+                    "cpu_clean_reference",
+                    e,
+                    input_condition=input_condition,
+                    sample_index=i,
+                    nodeid=request.node.nodeid,
+                )
+                cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
+                continue
 
         # Run target device op
         dev_error = None
@@ -513,10 +542,13 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare):
             stable_sort_samples.append(sample)
 
     if not has_any_samples:
-        pytest.skip(f"No sample inputs generated for {op_name} with {dtype_str}")
+        pytest.fail(f"No sample inputs generated for {op_name} with {dtype_str}")
 
     if not tested_any:
-        pytest.skip(f"All sample inputs for {op_name} were skipped or failed on CPU reference")
+        pytest.fail(
+            f"All sample inputs for {op_name} failed before comparison. "
+            f"CPU/reference failures: {_failure_summary(cpu_failures)}"
+        )
 
     # For sort ops on clean tier, also run stable=True variant
     if (input_condition == InputCondition.CLEAN

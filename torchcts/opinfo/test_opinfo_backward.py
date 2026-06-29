@@ -26,12 +26,12 @@ from torchcts.core.opinfo_adapter import (
     get_live_opinfo,
     get_op_sample_inputs,
     str_to_dtype,
-    record_known_failure,
     is_cpu_reference_failure,
     classify_sample,
     InputCondition,
 )
 from torchcts.core.device import synchronize
+from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 
 pytestmark = pytest.mark.covers_category("opinfo_backward")
 
@@ -62,11 +62,8 @@ def _override_dropout(sample, op_name):
     return sample
 
 
-# Build backward test list from op_db metadata + known failures (no probing)
-try:
-    op_tests = get_backward_op_tests(conftest._MANIFEST)
-except Exception:
-    op_tests = []
+# Build backward test list from op_db metadata (no probing)
+op_tests = get_backward_op_tests(conftest._MANIFEST)
 
 if not op_tests:
     op_tests = [("dummy", "dummy")]
@@ -74,7 +71,7 @@ if not op_tests:
 @pytest.mark.opinfo
 @pytest.mark.parametrize("op_name, dtype_str", op_tests)
 @pytest.mark.requires("training")
-def test_op_backward(op_name, dtype_str, device, compare):
+def test_op_backward(op_name, dtype_str, device, compare, request):
     if op_name == "dummy":
         pytest.skip("No OpInfo autograd tests matched the manifest filters.")
         
@@ -93,12 +90,21 @@ def test_op_backward(op_name, dtype_str, device, compare):
 
     samples = [s for s in all_samples if classify_sample(s) == InputCondition.CLEAN]
     if not samples:
-        pytest.skip(f"No clean (NaN/Inf-free) samples for backward test of {op_name} with {dtype_str}")
+        pytest.fail(f"No clean (NaN/Inf-free) samples for backward test of {op_name} with {dtype_str}")
 
     op_fn = op_info.op
     category = "matmul_backward" if "mm" in op_name or "matmul" in op_name else "backward"
 
     tested_any = False
+    cpu_failures = []
+
+    def failure_summary():
+        if not cpu_failures:
+            return "no CPU failure details recorded"
+        shown = "; ".join(cpu_failures[:3])
+        if len(cpu_failures) > 3:
+            shown += f"; ... {len(cpu_failures) - 3} more"
+        return shown
 
     def check_requires_grad(out):
         if isinstance(out, torch.Tensor):
@@ -218,7 +224,8 @@ def test_op_backward(op_name, dtype_str, device, compare):
 
                 actual_out = op_fn(dev_input, *dev_args, **dev_kwargs)
                 synchronize(device)
-            except Exception:
+            except Exception as exc:
+                cpu_failures.append(f"cpu validation forward: {type(exc).__name__}: {exc}")
                 continue
 
             if not isinstance(actual_out, (torch.Tensor, list, tuple)):
@@ -230,7 +237,8 @@ def test_op_backward(op_name, dtype_str, device, compare):
             try:
                 run_backward(actual_out)
                 synchronize(device)
-            except Exception:
+            except Exception as exc:
+                cpu_failures.append(f"cpu validation backward: {type(exc).__name__}: {exc}")
                 continue
 
             tested_any = True
@@ -246,7 +254,16 @@ def test_op_backward(op_name, dtype_str, device, compare):
             expected_out = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
         except Exception as e:
             if is_cpu_reference_failure(e):
-                record_known_failure("backward", op_name, dtype_str, f"fwd {type(e).__name__}: {e}")
+                record_opinfo_oracle_failure(
+                    "backward",
+                    op_name,
+                    dtype_str,
+                    "cpu_forward",
+                    e,
+                    input_condition=InputCondition.CLEAN,
+                    nodeid=request.node.nodeid,
+                )
+            cpu_failures.append(f"cpu forward: {type(e).__name__}: {e}")
             continue
 
         # Backward test only applies if forward output is a single tensor or list of tensors
@@ -272,8 +289,16 @@ def test_op_backward(op_name, dtype_str, device, compare):
             run_backward(expected_out)
         except Exception as e:
             if is_cpu_reference_failure(e):
-                record_known_failure("backward", op_name, dtype_str, f"bwd {type(e).__name__}: {e}")
-            # CPU backward failed — skip this sample
+                record_opinfo_oracle_failure(
+                    "backward",
+                    op_name,
+                    dtype_str,
+                    "cpu_backward",
+                    e,
+                    input_condition=InputCondition.CLEAN,
+                    nodeid=request.node.nodeid,
+                )
+            cpu_failures.append(f"cpu backward: {type(e).__name__}: {e}")
             continue
 
         # Device backward
@@ -290,4 +315,7 @@ def test_op_backward(op_name, dtype_str, device, compare):
         compare_gradients(dev_kwargs, cpu_kwargs, "kwargs")
 
     if not tested_any:
-        pytest.skip(f"No backward gradients could be computed or compared for {op_name}")
+        pytest.fail(
+            f"No backward gradients could be computed or compared for {op_name}. "
+            f"CPU/reference failures: {failure_summary()}"
+        )

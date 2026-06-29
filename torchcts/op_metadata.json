@@ -43179,6 +43179,6 @@
     }
   },
   "pytorch_version": "2.12",
-  "source": "generic_pytorch_fields_extracted_from_metalcore_docs_ops_json",
+  "source": "generic_pytorch_fields_extracted_from_backend_ops_metadata",
   "version": 1
 }
