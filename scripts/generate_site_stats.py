@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import datetime as _datetime
+import importlib.metadata
 import json
+import os
 import platform
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +33,8 @@ from torchcts.core.coverage import (
 
 
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "site-stats.md"
+SITE_STATS_COLLECTION_ENV = "TORCHCTS_SITE_STATS_COLLECTION_JSON"
+SEMANTIC_LEVELS = tuple(str(level) for level in range(1, 9))
 
 
 def _pct(numerator: int, denominator: int) -> str:
@@ -49,7 +54,7 @@ def _table(headers: list[str], rows: list[list[object]]) -> list[str]:
 
 
 def _counter_rows(counter: Counter, *, limit: int | None = None) -> list[list[object]]:
-    items = counter.most_common()
+    items = sorted(counter.items(), key=lambda item: (-item[1], str(item[0])))
     if limit is not None:
         items = items[:limit]
     return [[key, value] for key, value in items]
@@ -70,6 +75,37 @@ def _sorted_mapping_rows(mapping: dict, *, numeric_keys: bool = False) -> list[l
 
 def _repo_relative(path: str) -> str:
     return path.replace("\\", "/")
+
+
+def _pyproject_version() -> str:
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+    return match.group(1) if match else "unknown"
+
+
+def _installed_version() -> str:
+    try:
+        return importlib.metadata.version("torchcts")
+    except importlib.metadata.PackageNotFoundError:
+        return "not installed"
+
+
+def _version_provenance() -> dict:
+    module_version = getattr(torchcts, "__version__", "missing")
+    installed_version = _installed_version()
+    pyproject_version = _pyproject_version()
+    versions_agree = (
+        module_version != "missing"
+        and module_version == installed_version
+        and module_version == pyproject_version
+    )
+    return {
+        "module_version": module_version,
+        "installed_version": installed_version,
+        "pyproject_version": pyproject_version,
+        "import_path": str(Path(getattr(torchcts, "__file__", "") or "namespace package")),
+        "versions_agree": versions_agree,
+    }
 
 
 def _suite_from_nodeid(nodeid: str) -> str:
@@ -99,7 +135,22 @@ def _test_kind_from_suite(suite: str) -> str:
     return "handwritten"
 
 
+def _has_level_override(extra_pytest_args: list[str]) -> bool:
+    return any(
+        arg == "--level"
+        or arg == "--level-exact"
+        or arg == "--level-range"
+        or arg.startswith("--level=")
+        or arg.startswith("--level-exact=")
+        or arg.startswith("--level-range=")
+        for arg in extra_pytest_args
+    )
+
+
 def _collect_pytest_nodes(extra_pytest_args: list[str]) -> dict:
+    effective_extra_args = list(extra_pytest_args)
+    if not _has_level_override(effective_extra_args):
+        effective_extra_args.extend(["--level", "8"])
     command = [
         sys.executable,
         "-m",
@@ -108,7 +159,7 @@ def _collect_pytest_nodes(extra_pytest_args: list[str]) -> dict:
         "-q",
         "torchcts",
         "--validation",
-        *extra_pytest_args,
+        *effective_extra_args,
     ]
     command_display = [
         "python",
@@ -118,16 +169,24 @@ def _collect_pytest_nodes(extra_pytest_args: list[str]) -> dict:
         "-q",
         "torchcts",
         "--validation",
-        *extra_pytest_args,
+        *effective_extra_args,
     ]
-    result = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="torchcts-site-stats-") as tmpdir:
+        metadata_path = Path(tmpdir) / "collection.json"
+        env = dict(os.environ)
+        env[SITE_STATS_COLLECTION_ENV] = str(metadata_path)
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            env=env,
+        )
+        structured_collection = None
+        if metadata_path.exists():
+            structured_collection = json.loads(metadata_path.read_text(encoding="utf-8"))
     output = result.stdout + result.stderr
     nodes = [
         line.strip()
@@ -150,27 +209,118 @@ def _collect_pytest_nodes(extra_pytest_args: list[str]) -> dict:
         "nodes": nodes,
         "node_count": len(nodes),
         "collected_from_summary": collected_from_summary,
+        "structured_collection": structured_collection,
     }
 
 
-def _collection_stats(nodes: list[str]) -> dict:
+def _fallback_records_from_nodes(nodes: list[str]) -> list[dict]:
+    records = []
+    for nodeid in nodes:
+        level_match = re.search(r"\[L([1-8])\]", nodeid)
+        records.append({
+            "nodeid": nodeid,
+            "file": _file_from_nodeid(nodeid),
+            "suite": _suite_from_nodeid(nodeid),
+            "test_kind": _test_kind_from_suite(_suite_from_nodeid(nodeid)),
+            "function": _function_from_nodeid(nodeid),
+            "semantic_level": int(level_match.group(1)) if level_match else None,
+            "capability": None,
+            "dtype": None,
+            "dtype_fields": {},
+            "dispatcher_name": None,
+            "coverage_id": None,
+            "coverage_kind": None,
+            "surface_kind": None,
+            "variant_kind": None,
+            "strategy": None,
+            "strategy_family": None,
+            "decision": "executable",
+            "skip_reason": None,
+            "skip_detail": None,
+        })
+    return records
+
+
+def _structured_records(collection: dict | None, nodes: list[str]) -> list[dict]:
+    if collection:
+        records = collection.get("records")
+        if isinstance(records, list):
+            return [record for record in records if isinstance(record, dict)]
+    return _fallback_records_from_nodes(nodes)
+
+
+def _level_key(value) -> str:
+    if value is None:
+        return "unknown"
+    try:
+        return str(int(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _field_presence(value) -> str:
+    return "present" if value else "missing"
+
+
+def _collection_stats(nodes: list[str], structured_collection: dict | None = None) -> dict:
+    records = _structured_records(structured_collection, nodes)
     suites = Counter()
     kinds = Counter()
     files = Counter()
     functions = Counter()
     suite_function_pairs = Counter()
+    decisions = Counter()
+    skip_reasons = Counter()
+    capabilities = Counter()
+    dtype_values = Counter()
+    dtype_field_values = Counter()
+    semantic_levels = Counter()
+    semantic_decisions = {level: Counter() for level in SEMANTIC_LEVELS}
+    generated_strategy_counts = Counter()
+    generated_family_counts = Counter()
+    coverage_kind_counts = Counter()
+    surface_kind_counts = Counter()
+    variant_kind_counts = Counter()
+    dispatcher_presence_counts = Counter()
+    coverage_id_presence_counts = Counter()
     parameterized = 0
     visible_dtype_tokens = Counter()
     visible_level_tokens = Counter()
 
-    for nodeid in nodes:
-        suite = _suite_from_nodeid(nodeid)
-        function = _function_from_nodeid(nodeid)
+    for record in records:
+        nodeid = str(record.get("nodeid") or "")
+        suite = record.get("suite") or _suite_from_nodeid(nodeid)
+        function = record.get("function") or _function_from_nodeid(nodeid)
+        decision = record.get("decision") or "unknown"
+        level = _level_key(record.get("semantic_level"))
         suites[suite] += 1
-        kinds[_test_kind_from_suite(suite)] += 1
-        files[_file_from_nodeid(nodeid)] += 1
+        kinds[record.get("test_kind") or _test_kind_from_suite(suite)] += 1
+        files[record.get("file") or _file_from_nodeid(nodeid)] += 1
         functions[function] += 1
         suite_function_pairs[f"{suite}::{function}"] += 1
+        decisions[decision] += 1
+        if record.get("skip_reason"):
+            skip_reasons[str(record["skip_reason"])] += 1
+        capabilities[record.get("capability") or "none"] += 1
+        semantic_levels[level] += 1
+        if level in semantic_decisions:
+            semantic_decisions[level][decision] += 1
+        dtype_value = record.get("dtype")
+        if dtype_value:
+            dtype_values[str(dtype_value)] += 1
+        for field_name, value in (record.get("dtype_fields") or {}).items():
+            if value:
+                dtype_field_values[f"{field_name}:{value}"] += 1
+                dtype_values[str(value)] += 1
+        if record.get("strategy"):
+            generated_strategy_counts[str(record["strategy"])] += 1
+        if record.get("strategy_family"):
+            generated_family_counts[str(record["strategy_family"])] += 1
+        coverage_kind_counts[record.get("coverage_kind") or "none"] += 1
+        surface_kind_counts[record.get("surface_kind") or "none"] += 1
+        variant_kind_counts[record.get("variant_kind") or "none"] += 1
+        dispatcher_presence_counts[_field_presence(record.get("dispatcher_name"))] += 1
+        coverage_id_presence_counts[_field_presence(record.get("coverage_id"))] += 1
         if "[" in nodeid and nodeid.endswith("]"):
             parameterized += 1
         for token in re.findall(r"torch\.[A-Za-z0-9_]+", nodeid):
@@ -179,14 +329,30 @@ def _collection_stats(nodes: list[str]) -> dict:
             visible_level_tokens[f"L{token}"] += 1
 
     return {
-        "total": len(nodes),
+        "total": len(records),
+        "stdout_node_count": len(nodes),
+        "structured_metadata": structured_collection is not None,
         "parameterized": parameterized,
-        "unparameterized": len(nodes) - parameterized,
+        "unparameterized": len(records) - parameterized,
         "suites": suites,
         "kinds": kinds,
         "files": files,
         "functions": functions,
         "suite_function_pairs": suite_function_pairs,
+        "decisions": decisions,
+        "skip_reasons": skip_reasons,
+        "capabilities": capabilities,
+        "dtype_values": dtype_values,
+        "dtype_field_values": dtype_field_values,
+        "semantic_levels": semantic_levels,
+        "semantic_decisions": semantic_decisions,
+        "generated_strategy_counts": generated_strategy_counts,
+        "generated_family_counts": generated_family_counts,
+        "coverage_kind_counts": coverage_kind_counts,
+        "surface_kind_counts": surface_kind_counts,
+        "variant_kind_counts": variant_kind_counts,
+        "dispatcher_presence_counts": dispatcher_presence_counts,
+        "coverage_id_presence_counts": coverage_id_presence_counts,
         "visible_dtype_tokens": visible_dtype_tokens,
         "visible_level_tokens": visible_level_tokens,
     }
@@ -202,6 +368,14 @@ def _coverage_stats(audit: dict) -> dict:
     covered = sum(status_counts.get(status, 0) for status in COVERED_STATUSES)
     pending = sum(status_counts.get(status, 0) for status in PENDING_STATUSES)
     excluded = sum(status_counts.get(status, 0) for status in EXCLUDED_STATUSES)
+    unknown = int(metadata.get("unknown_count", status_counts.get("unknown", 0)))
+    status_family_counts = Counter({
+        "covered": covered,
+        "pending": pending,
+        "excluded": excluded,
+        "unknown": unknown,
+        "not_backend_relevant": not_backend_relevant,
+    })
 
     variant_counts = Counter()
     tensor_io_counts = Counter()
@@ -284,8 +458,9 @@ def _coverage_stats(audit: dict) -> dict:
         "covered": covered,
         "pending": pending,
         "excluded": excluded,
-        "unknown": int(metadata.get("unknown_count", status_counts.get("unknown", 0))),
+        "unknown": unknown,
         "coverage_pct": _pct(covered, backend_relevant),
+        "status_family_counts": status_family_counts,
         "status_counts": status_counts,
         "surface_counts": Counter(metadata.get("surface_counts", {})),
         "coverage_kind_counts": Counter(metadata.get("coverage_kind_counts", {})),
@@ -415,11 +590,38 @@ def _append_mapping_section(lines: list[str], title: str, mapping: dict, *, nume
     lines.append("")
 
 
+def _append_semantic_level_count_table(lines: list[str], title: str, counts: dict | Counter) -> None:
+    lines.append(f"## {title}")
+    lines.append("")
+    lines.extend(_table(
+        ["Level", "Count"],
+        [[level, counts.get(level, counts.get(int(level), 0))] for level in SEMANTIC_LEVELS],
+    ))
+    lines.append("")
+
+
+def _append_semantic_level_counter_sections(lines: list[str], title: str, counters: dict) -> None:
+    lines.append(f"## {title}")
+    lines.append("")
+    for level in SEMANTIC_LEVELS:
+        lines.append(f"### Level {level}")
+        lines.append("")
+        counts = counters.get(level) or counters.get(int(level)) or {}
+        if counts:
+            lines.extend(_table(["Name", "Count"], _sorted_mapping_rows(counts)))
+        else:
+            lines.append("No entries.")
+        lines.append("")
+
+
 def render_markdown(*, audit: dict, collection: dict | None, include_collect: bool) -> str:
     coverage = _coverage_stats(audit)
     known_crashes = _known_crash_stats()
     dtype_contracts = _dtype_contract_stats()
-    collection_stats = _collection_stats(collection["nodes"]) if collection else None
+    collection_stats = (
+        _collection_stats(collection["nodes"], collection.get("structured_collection")) if collection else None
+    )
+    version_info = _version_provenance()
     generated_depth = coverage["generated_case_depth"]
     now = _datetime.datetime.now(_datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -433,7 +635,11 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ["Field", "Value"],
         [
             ["Generated at", now],
-            ["TorchCTS version", torchcts.__version__],
+            ["TorchCTS version", version_info["module_version"]],
+            ["Installed TorchCTS metadata version", version_info["installed_version"]],
+            ["pyproject.toml version", version_info["pyproject_version"]],
+            ["TorchCTS versions agree", version_info["versions_agree"]],
+            ["TorchCTS import path", version_info["import_path"]],
             ["PyTorch version", torch.__version__],
             ["Python version", platform.python_version()],
             ["Platform", platform.platform()],
@@ -442,9 +648,15 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ],
     ))
     lines.append("")
+    if not version_info["versions_agree"]:
+        lines.append("> Warning: TorchCTS version sources disagree. Reinstall the editable package or check import precedence before publishing version-sensitive site copy.")
+        lines.append("")
 
     headline_rows = [
         ["Pytest nodes collected", collection_stats["total"] if collection_stats else "not collected"],
+        ["Pytest executable nodes", collection_stats["decisions"].get("executable", 0) if collection_stats else "not collected"],
+        ["Pytest skip-marked nodes", collection_stats["decisions"].get("pytest_skip_marked", 0) if collection_stats else "not collected"],
+        ["Structured deselected nodes", collection_stats["decisions"].get("structured_deselected", 0) if collection_stats else "not collected"],
         ["ATen overloads inventoried", coverage["total"]],
         ["Backend-relevant overloads", coverage["backend_relevant"]],
         ["Covered backend-relevant overloads", coverage["covered"]],
@@ -470,13 +682,17 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         summary_count = collection.get("collected_from_summary")
         rows = [
             ["Collection command", f"`{command}`"],
-            ["Node IDs parsed", collection_stats["total"]],
+            ["Structured collection metadata", "yes" if collection_stats["structured_metadata"] else "no"],
+            ["Structured records parsed", collection_stats["total"]],
+            ["Node IDs parsed from stdout", collection_stats["stdout_node_count"]],
             ["Pytest summary count", summary_count if summary_count is not None else "not found"],
             ["Parameterized node IDs", collection_stats["parameterized"]],
             ["Unparameterized node IDs", collection_stats["unparameterized"]],
         ]
         lines.extend(_table(["Metric", "Value"], rows))
         lines.append("")
+        _append_counter_section(lines, "Pytest Collection Decisions", collection_stats["decisions"])
+        _append_counter_section(lines, "Pytest Collection Skip Reasons", collection_stats["skip_reasons"])
         _append_counter_section(lines, "Pytest Nodes By Suite", collection_stats["suites"])
         _append_counter_section(lines, "Pytest Nodes By Test Kind", collection_stats["kinds"])
         _append_counter_section(lines, "Pytest Nodes By File", collection_stats["files"])
@@ -484,6 +700,18 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         _append_counter_section(lines, "Top Suite And Function Pairs", collection_stats["suite_function_pairs"], limit=75)
         _append_counter_section(lines, "Visible Dtype Tokens In Node IDs", collection_stats["visible_dtype_tokens"])
         _append_counter_section(lines, "Visible Generated Level Tokens In Node IDs", collection_stats["visible_level_tokens"])
+        _append_counter_section(lines, "Collection Nodes By Capability", collection_stats["capabilities"])
+        _append_counter_section(lines, "Collection Nodes By Dtype", collection_stats["dtype_values"])
+        _append_counter_section(lines, "Collection Dtype Field Counts", collection_stats["dtype_field_values"])
+        _append_counter_section(lines, "Collection Nodes By Coverage Kind", collection_stats["coverage_kind_counts"])
+        _append_counter_section(lines, "Collection Nodes By Surface Kind", collection_stats["surface_kind_counts"])
+        _append_counter_section(lines, "Collection Nodes By Variant Kind", collection_stats["variant_kind_counts"])
+        _append_counter_section(lines, "Collection Generated Nodes By Strategy", collection_stats["generated_strategy_counts"])
+        _append_counter_section(lines, "Collection Generated Nodes By Strategy Family", collection_stats["generated_family_counts"])
+        _append_counter_section(lines, "Collection Dispatcher Name Presence", collection_stats["dispatcher_presence_counts"])
+        _append_counter_section(lines, "Collection Coverage ID Presence", collection_stats["coverage_id_presence_counts"])
+        _append_semantic_level_count_table(lines, "Pytest Nodes By Semantic Level", collection_stats["semantic_levels"])
+        _append_semantic_level_counter_sections(lines, "Pytest Collection Decisions By Semantic Level", collection_stats["semantic_decisions"])
     else:
         lines.append("## Pytest Collection Summary")
         lines.append("")
@@ -507,6 +735,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     lines.append("")
 
     _append_counter_section(lines, "Coverage Status Counts", coverage["status_counts"])
+    _append_counter_section(lines, "Coverage Status Family Counts", coverage["status_family_counts"])
     _append_counter_section(lines, "Coverage Kind Counts", coverage["coverage_kind_counts"])
     _append_counter_section(lines, "Surface Kind Counts", coverage["surface_counts"])
     _append_counter_section(lines, "Variant Kind Counts", coverage["variant_counts"])
@@ -514,30 +743,20 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     _append_counter_section(lines, "Dispatch Key Availability Counts", coverage["dispatch_counts"])
     _append_counter_section(lines, "Coverage Source Combination Counts", coverage["source_combo_counts"])
 
-    _append_mapping_section(lines, "Semantic Level Counts", coverage["semantic_level_counts"], numeric_keys=True)
+    _append_semantic_level_count_table(lines, "Coverage Surfaces By Semantic Level", coverage["semantic_level_counts"])
     lines.append("## Semantic Level Descriptions")
     lines.append("")
     lines.extend(_table(
         ["Level", "Description"],
-        _sorted_mapping_rows(coverage["semantic_level_descriptions"], numeric_keys=True),
+        [
+            [level, coverage["semantic_level_descriptions"].get(level, "")]
+            for level in SEMANTIC_LEVELS
+        ],
     ))
     lines.append("")
 
-    lines.append("## Semantic Level By Status")
-    lines.append("")
-    for level, counts in sorted(coverage["semantic_level_status_counts"].items(), key=lambda item: int(item[0])):
-        lines.append(f"### Level {level}")
-        lines.append("")
-        lines.extend(_table(["Status", "Count"], _sorted_mapping_rows(counts)))
-        lines.append("")
-
-    lines.append("## Semantic Level By Surface Kind")
-    lines.append("")
-    for level, counts in sorted(coverage["semantic_level_surface_counts"].items(), key=lambda item: int(item[0])):
-        lines.append(f"### Level {level}")
-        lines.append("")
-        lines.extend(_table(["Surface kind", "Count"], _sorted_mapping_rows(counts)))
-        lines.append("")
+    _append_semantic_level_counter_sections(lines, "Coverage Surfaces By Semantic Level And Status", coverage["semantic_level_status_counts"])
+    _append_semantic_level_counter_sections(lines, "Coverage Surfaces By Semantic Level And Surface Kind", coverage["semantic_level_surface_counts"])
 
     lines.append("## Generated Coverage Depth")
     lines.append("")
@@ -552,7 +771,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     ))
     lines.append("")
     _append_mapping_section(lines, "Generated Semantic Cases By Strategy", generated_depth.get("by_strategy", {}))
-    _append_mapping_section(lines, "Generated Semantic Cases By Semantic Level", generated_depth.get("by_semantic_level", {}), numeric_keys=True)
+    _append_semantic_level_count_table(lines, "Generated Semantic Cases By Semantic Level", generated_depth.get("by_semantic_level", {}))
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy", coverage["generated_strategy_counts"])
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy Family", coverage["generated_family_counts"])
 
@@ -630,9 +849,11 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     _append_counter_section(lines, "Known Crash Rules By Expected Signal", known_crashes["signal_counts"])
     _append_counter_section(lines, "Known Crash Constraint Key Counts", known_crashes["constraint_key_counts"])
 
-    lines.append("## Notes For Website Use")
+    lines.append("## Website Interpretation Notes")
     lines.append("")
     lines.append("- Use coverage and collection numbers as current-checkout statistics, not universal PyTorch promises.")
+    lines.append("- Pytest collection stats describe TorchCTS test inventory and selection, not backend pass/fail results.")
+    lines.append("- `executable`, `pytest_skip_marked`, and `structured_deselected` are distinct collection decisions.")
     lines.append("- `unknown=0` means TorchCTS has an explicit disposition for every tensor-touching backend-relevant ATen surface in this audit.")
     lines.append("- Pending backend-pack counts are intentional hardware/build gates, not claimed coverage.")
     lines.append("- Known crash rules are subprocess isolation policy only; they do not skip, xfail, or downgrade failures.")

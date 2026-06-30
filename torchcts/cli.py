@@ -277,7 +277,12 @@ def run_triage_command(args):
 
 
 def _print_banner():
-    from torchcts import __version__
+    try:
+        from torchcts import __version__
+    except ImportError:
+        from importlib.metadata import version as _pkg_version
+
+        __version__ = _pkg_version("torchcts")
     print(f"\n  TorchCTS v{__version__}")
     print("  PyTorch backend validation harness with explicit capability reporting\n")
 

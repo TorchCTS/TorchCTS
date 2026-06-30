@@ -300,6 +300,11 @@ _MAX_TENSOR_SIZE = None
 _COLLECT_ONLY = False
 _ARTIFACT_WRITES_ENABLED = True
 _ACTUAL_DEVICE_COUNT = 1
+_SITE_STATS_COLLECTION_ENV = "TORCHCTS_SITE_STATS_COLLECTION_JSON"
+
+
+def _site_stats_collection_enabled():
+    return bool(os.environ.get(_SITE_STATS_COLLECTION_ENV))
 
 
 def _is_child_process():
@@ -1000,6 +1005,73 @@ def _skip_record_for_item(item, skip_reason, detail, extra=None):
     if extra:
         record.update(extra)
     return record
+
+
+def _site_stats_dtype_fields_for_item(item):
+    if not hasattr(item, "callspec"):
+        return {}
+    fields = {}
+    for name in ("dtype", "dtype_str", "src_dtype", "dst_dtype", "autocast_dtype"):
+        if name not in item.callspec.params:
+            continue
+        value = item.callspec.params[name]
+        if isinstance(value, torch.dtype):
+            fields[name] = dtype_to_str(value)
+        else:
+            fields[name] = str(value)
+    return fields
+
+
+def _site_stats_collection_record(item, decision, *, skip_reason=None, skip_detail=None):
+    metadata = _extract_result_metadata(item)
+    node_path, _, _tail = item.nodeid.partition("::")
+    dtype_fields = _site_stats_dtype_fields_for_item(item)
+    suite = metadata["suite"]
+    test_kind = metadata["test_kind"]
+    if suite == "generated":
+        test_kind = "generated"
+    elif suite == "selftest":
+        test_kind = "selftest"
+    return {
+        "nodeid": item.nodeid,
+        "file": node_path,
+        "suite": suite,
+        "test_kind": test_kind,
+        "function": (getattr(item, "originalname", None) or item.name.split("[", 1)[0]),
+        "semantic_level": metadata["semantic_level"],
+        "capability": metadata["capability"],
+        "dtype": metadata["dtype"],
+        "dtype_fields": dtype_fields,
+        "dispatcher_name": metadata["dispatcher_name"],
+        "coverage_id": metadata["coverage_id"],
+        "coverage_kind": metadata["coverage_kind"],
+        "surface_kind": metadata["surface_kind"],
+        "variant_kind": metadata["variant_kind"],
+        "strategy": metadata["strategy"],
+        "strategy_family": metadata["strategy_family"],
+        "decision": decision,
+        "skip_reason": skip_reason,
+        "skip_detail": skip_detail,
+    }
+
+
+def _write_site_stats_collection_records(config, records):
+    path = os.environ.get(_SITE_STATS_COLLECTION_ENV)
+    if not path:
+        return
+    payload = {
+        "metadata": {
+            "schema_version": 1,
+            "device_name": _DEVICE_NAME,
+            "pytorch_version": torch.__version__,
+            "requested_level": _REQUESTED_SEMANTIC_LEVEL,
+            "semantic_level_selection": _SEMANTIC_LEVEL_SELECTION.to_metadata(),
+            "dtype_filter": list(_MANIFEST.get("dtype_filter") or []),
+            "collection_args": [str(arg) for arg in getattr(config, "args", [])],
+        },
+        "records": records,
+    }
+    _atomic_json_dump(path, payload)
 
 
 def _merge_pending_manifest_skips(*, include_opinfo):
@@ -1748,6 +1820,8 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(session, config, items):
     global _MANIFEST, _DEVICE_NAME, _SESSION_SKIPS, _SHOW_SKIPS
     is_validation = config.getoption("--validation")
+    site_stats_records = []
+    site_stats_enabled = _site_stats_collection_enabled()
     
     # Optional CLI suite filter
     suite = config.getoption("--suite")
@@ -1804,6 +1878,13 @@ def pytest_collection_modifyitems(session, config, items):
                 filtered_items.append(item)
             else:
                 deselected_items.append(item)
+                if site_stats_enabled:
+                    site_stats_records.append(_site_stats_collection_record(
+                        item,
+                        "structured_deselected",
+                        skip_reason="suite_filter",
+                        skip_detail=f"excluded by --suite {suite}",
+                    ))
         
         config.hook.pytest_deselected(items=deselected_items)
         items[:] = filtered_items
@@ -2056,18 +2137,43 @@ def pytest_collection_modifyitems(session, config, items):
             _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail, skip_record_extra)
             if dtype_manifest_skip:
                 dtype_deselected_items.append(item)
+                if site_stats_enabled:
+                    site_stats_records.append(_site_stats_collection_record(
+                        item,
+                        "structured_deselected",
+                        skip_reason=skip_reason,
+                        skip_detail=detail,
+                    ))
             elif skip_reason in _SEMANTIC_SELECTION_SKIP_REASONS:
                 selection_deselected_items.append(item)
+                if site_stats_enabled:
+                    site_stats_records.append(_site_stats_collection_record(
+                        item,
+                        "structured_deselected",
+                        skip_reason=skip_reason,
+                        skip_detail=detail,
+                    ))
             else:
                 item.add_marker(pytest.mark.skip(reason=detail))
                 keep_items.append(item)
+                if site_stats_enabled:
+                    site_stats_records.append(_site_stats_collection_record(
+                        item,
+                        "pytest_skip_marked",
+                        skip_reason=skip_reason,
+                        skip_detail=detail,
+                    ))
         else:
             keep_items.append(item)
+            if site_stats_enabled:
+                site_stats_records.append(_site_stats_collection_record(item, "executable"))
 
     _merge_pending_manifest_skips(include_opinfo=config.getoption("--suite") in (None, "opinfo"))
     deselected_items = dtype_deselected_items + selection_deselected_items
     if deselected_items:
         config.hook.pytest_deselected(items=deselected_items)
+    if site_stats_enabled:
+        _write_site_stats_collection_records(config, site_stats_records)
 
     known_segfault_descriptors = []
     if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:
