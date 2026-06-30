@@ -5,19 +5,19 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-30T04:15:51.876265Z |
+| Generated at | 2026-06-30T04:58:01.658360Z |
 | TorchCTS version | 0.3.0 |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-30T04:15:30.533835Z |
+| Coverage audit timestamp | 2026-06-30T04:57:39.195351Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 18867 |
+| Pytest nodes collected | 18868 |
 | ATen overloads inventoried | 3225 |
 | Backend-relevant overloads | 3214 |
 | Covered backend-relevant overloads | 2938 |
@@ -36,10 +36,10 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Metric | Value |
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation` |
-| Node IDs parsed | 18867 |
-| Pytest summary count | 18867 |
+| Node IDs parsed | 18868 |
+| Pytest summary count | 18868 |
 | Parameterized node IDs | 18433 |
-| Unparameterized node IDs | 434 |
+| Unparameterized node IDs | 435 |
 
 ## Pytest Nodes By Suite
 
@@ -48,7 +48,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | opinfo | 13098 |
 | generated | 4258 |
 | operators | 434 |
-| selftest | 353 |
+| selftest | 354 |
 | compiler | 144 |
 | dtypes | 135 |
 | workloads | 120 |
@@ -70,7 +70,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | opinfo | 13098 |
 | generated | 4258 |
 | handwritten | 1158 |
-| selftest | 353 |
+| selftest | 354 |
 
 ## Pytest Nodes By File
 
@@ -83,7 +83,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | torchcts/generated/test_functional_variants.py | 578 |
 | torchcts/generated/test_inplace_variants.py | 346 |
 | torchcts/generated/test_oracle_surfaces.py | 273 |
-| torchcts/selftest/test_harness_reporting.py | 213 |
+| torchcts/selftest/test_harness_reporting.py | 214 |
 | torchcts/opinfo/test_opinfo_errors.py | 202 |
 | torchcts/selftest/test_mps_triage.py | 109 |
 | torchcts/generated/test_view_aliases.py | 100 |
