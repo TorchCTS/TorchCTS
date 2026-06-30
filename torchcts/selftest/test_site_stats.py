@@ -195,9 +195,12 @@ def test_site_stats_structured_collection_decisions_and_level_eight_render():
     assert "| executable | 1 |" in text
     assert "| structured_deselected | 1 |" in text
     assert "| pytest_skip_marked | 1 |" in text
+    assert "## Semantic Level Overview" in text
+    assert "| 8 | 1 | 1 | 0 | 0 | 0 | 0 | level 8 |" in text
     assert "## Pytest Nodes By Semantic Level" in text
     assert "| 8 | 1 |" in text
     assert "## Coverage Surfaces By Semantic Level" in text
     assert "| 8 | 0 |" in text
+    assert "## Generated Dispatcher Cases By Semantic Level" in text
     assert "## Semantic Level Descriptions" in text
     assert "level 8" in text

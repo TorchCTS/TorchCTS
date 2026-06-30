@@ -614,6 +614,27 @@ def _append_semantic_level_counter_sections(lines: list[str], title: str, counte
         lines.append("")
 
 
+def _semantic_level_overview_rows(collection_stats: dict | None, coverage: dict, generated_depth: dict) -> list[list[object]]:
+    coverage_counts = coverage["semantic_level_counts"]
+    generated_counts = generated_depth.get("by_semantic_level", {})
+    descriptions = coverage["semantic_level_descriptions"]
+    rows = []
+    for level in SEMANTIC_LEVELS:
+        decisions = (collection_stats or {}).get("semantic_decisions", {}).get(level, Counter())
+        pytest_nodes = (collection_stats or {}).get("semantic_levels", {}).get(level, "not collected")
+        rows.append([
+            level,
+            pytest_nodes,
+            decisions.get("executable", "not collected" if collection_stats is None else 0),
+            decisions.get("pytest_skip_marked", "not collected" if collection_stats is None else 0),
+            decisions.get("structured_deselected", "not collected" if collection_stats is None else 0),
+            coverage_counts.get(level, coverage_counts.get(int(level), 0)),
+            generated_counts.get(level, generated_counts.get(int(level), 0)),
+            descriptions.get(level, ""),
+        ])
+    return rows
+
+
 def render_markdown(*, audit: dict, collection: dict | None, include_collect: bool) -> str:
     coverage = _coverage_stats(audit)
     known_crashes = _known_crash_stats()
@@ -665,14 +686,33 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ["Pending surfaces", coverage["pending"]],
         ["Excluded surfaces", coverage["excluded"]],
         ["Generated coverage surfaces", coverage["coverage_kind_counts"].get("generated", 0)],
-        ["Generated semantic cases", generated_depth.get("generated_semantic_cases", 0)],
-        ["Required generated semantic cases", generated_depth.get("required_generated_semantic_cases", 0)],
+        ["Generated dispatcher semantic cases", generated_depth.get("generated_semantic_cases", 0)],
+        ["Required generated dispatcher semantic cases", generated_depth.get("required_generated_semantic_cases", 0)],
         ["Known crash isolation rules", known_crashes["count"]],
         ["CPU dtype contract records", dtype_contracts.get("contract_count", "not found")],
     ]
     lines.append("## Headline Stats")
     lines.append("")
     lines.extend(_table(["Metric", "Value"], headline_rows))
+    lines.append("")
+
+    lines.append("## Semantic Level Overview")
+    lines.append("")
+    lines.append("This table combines pytest collection inventory with dispatcher coverage inventory. Level 7 and 8 currently live primarily in handwritten workload, multi-device, and stress tests, so generated-dispatcher counts can be zero while pytest nodes are nonzero.")
+    lines.append("")
+    lines.extend(_table(
+        [
+            "Level",
+            "Pytest nodes",
+            "Executable nodes",
+            "Pytest skip-marked nodes",
+            "Structured deselected nodes",
+            "Coverage surfaces",
+            "Generated dispatcher cases",
+            "Description",
+        ],
+        _semantic_level_overview_rows(collection_stats, coverage, generated_depth),
+    ))
     lines.append("")
 
     if collection_stats:
@@ -770,8 +810,8 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ],
     ))
     lines.append("")
-    _append_mapping_section(lines, "Generated Semantic Cases By Strategy", generated_depth.get("by_strategy", {}))
-    _append_semantic_level_count_table(lines, "Generated Semantic Cases By Semantic Level", generated_depth.get("by_semantic_level", {}))
+    _append_mapping_section(lines, "Generated Dispatcher Cases By Strategy", generated_depth.get("by_strategy", {}))
+    _append_semantic_level_count_table(lines, "Generated Dispatcher Cases By Semantic Level", generated_depth.get("by_semantic_level", {}))
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy", coverage["generated_strategy_counts"])
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy Family", coverage["generated_family_counts"])
 

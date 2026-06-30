@@ -5,7 +5,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-30T05:51:46.279711Z |
+| Generated at | 2026-06-30T05:57:07.972675Z |
 | TorchCTS version | 0.3.3 |
 | Installed TorchCTS metadata version | 0.3.3 |
 | pyproject.toml version | 0.3.3 |
@@ -14,7 +14,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-30T05:51:24.262341Z |
+| Coverage audit timestamp | 2026-06-30T05:56:46.373076Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
@@ -33,10 +33,25 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Pending surfaces | 192 |
 | Excluded surfaces | 56 |
 | Generated coverage surfaces | 1910 |
-| Generated semantic cases | 1921 |
-| Required generated semantic cases | 1921 |
+| Generated dispatcher semantic cases | 1921 |
+| Required generated dispatcher semantic cases | 1921 |
 | Known crash isolation rules | 10 |
 | CPU dtype contract records | 3053 |
+
+## Semantic Level Overview
+
+This table combines pytest collection inventory with dispatcher coverage inventory. Level 7 and 8 currently live primarily in handwritten workload, multi-device, and stress tests, so generated-dispatcher counts can be zero while pytest nodes are nonzero.
+
+| Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 778 | 778 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 2 | 13773 | 13759 | 14 | 0 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
+| 3 | 1084 | 1081 | 3 | 0 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
+| 4 | 2405 | 2380 | 25 | 0 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
+| 5 | 478 | 478 | 0 | 0 | 380 | 347 | Advanced numeric, layout, storage, sparse, nested, and stride-sensitive behavior. |
+| 6 | 199 | 181 | 18 | 0 | 19 | 19 | Specialized backend integration such as compiler, device API, allocator, quantization-adjacent, and low-level implementation surfaces. |
+| 7 | 123 | 99 | 24 | 0 | 6 | 0 | Heavy integration and workload coverage that validates realistic model or multi-device behavior. |
+| 8 | 30 | 30 | 0 | 0 | 0 | 0 | Release-depth stress and adversarial coverage intended for exhaustive validation passes. |
 
 ## Pytest Collection Summary
 
@@ -1620,7 +1635,7 @@ No entries.
 | Required generated semantic cases | 1921 |
 | Optional generated semantic cases | 0 |
 
-## Generated Semantic Cases By Strategy
+## Generated Dispatcher Cases By Strategy
 
 | Name | Count |
 | --- | --- |
@@ -1651,7 +1666,7 @@ No entries.
 | opinfo_out | 31 |
 | opinfo_view_alias | 17 |
 
-## Generated Semantic Cases By Semantic Level
+## Generated Dispatcher Cases By Semantic Level
 
 | Level | Count |
 | --- | --- |
