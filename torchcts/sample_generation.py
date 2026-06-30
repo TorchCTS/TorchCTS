@@ -38,6 +38,7 @@ from torchcts.core.opinfo_adapter import (
     prepare_sample,
     str_to_dtype,
 )
+from torchcts.core.dtype_contracts import contract_disposition
 from torchcts.core.semantic_levels import (
     case_level_for_entry,
     validate_semantic_level,
@@ -446,6 +447,17 @@ def manifest_dtype_items(manifest: dict) -> list[tuple[torch.dtype, str]]:
         if dtype is not None:
             items.append((dtype, dtype_str))
     return sorted(items, key=lambda item: item[1])
+
+
+def contract_dtype_items_for_entry(entry: dict, manifest: dict) -> list[tuple[torch.dtype, str]]:
+    """Return manifest dtypes that are allowed by the CPU dtype contract."""
+
+    items = []
+    for dtype, dtype_str in manifest_dtype_items(manifest):
+        disposition = contract_disposition(entry.get("name"), dtype)
+        if disposition.allowed:
+            items.append((dtype, dtype_str))
+    return items
 
 
 def ieee754_enabled(manifest: dict | None, op_name: str) -> bool:
@@ -6097,7 +6109,7 @@ def iter_samples_for_entry(
     """Yield generated samples for an entry across dtypes and input tiers."""
 
     if dtypes is None:
-        dtypes = [dtype for dtype, _dtype_str in manifest_dtype_items(manifest or {})]
+        dtypes = [dtype for dtype, _dtype_str in contract_dtype_items_for_entry(entry, manifest or {})]
     strategy = (entry.get("generated", {}) or {}).get("strategy") or {}
     for dtype in dtypes:
         for input_condition in input_conditions_for(manifest, entry.get("base_name", entry["name"]), dtype):
@@ -6258,6 +6270,7 @@ __all__ = [
     "make_scalar_tensor",
     "make_tensor_values",
     "make_weight_tensor",
+    "contract_dtype_items_for_entry",
     "manifest_dtype_items",
     "move_to_device",
     "convolution_arg_value",

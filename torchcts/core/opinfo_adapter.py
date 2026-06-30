@@ -31,6 +31,11 @@ from torchcts.core.version_rules import (
     iter_version_rule_entries,
     parse_version_rule_key,
 )
+from torchcts.core.dtype_contracts import (
+    contract_disposition,
+    disposition_from_cpu_probe,
+    is_deterministic_cpu_unsupported,
+)
 
 # ---------------------------------------------------------------------------
 # Input Condition Tiers
@@ -449,6 +454,7 @@ class DTypeDisposition:
 
 
 _PENDING_MANIFEST_SKIPS = {}
+_OPINFO_CPU_CONTRACT_CACHE = {}
 
 
 def _dtype_filter_for_manifest(dt, dt_str, supported_dtypes):
@@ -506,7 +512,7 @@ def consume_pending_manifest_skips():
     return pending
 
 
-def _opinfo_skip_record(op_name, dtype_str, skip_reason, detail, *, phase, input_condition=None):
+def _opinfo_skip_record(op_name, dtype_str, skip_reason, detail, *, phase, input_condition=None, extra=None):
     if phase == "forward":
         nodeid = (
             "torchcts/opinfo/test_opinfo_forward.py::"
@@ -538,6 +544,8 @@ def _opinfo_skip_record(op_name, dtype_str, skip_reason, detail, *, phase, input
     }
     if input_condition is not None:
         record["input_condition"] = input_condition
+    if extra:
+        record.update(extra)
     _PENDING_MANIFEST_SKIPS[nodeid] = record
 
 # ---------------------------------------------------------------------------
@@ -607,6 +615,101 @@ def _ieee754_enabled_for_op(op_name, ieee754_cap):
     return False
 
 # ---------------------------------------------------------------------------
+# CPU dtype contract probing
+# ---------------------------------------------------------------------------
+
+def _contract_skip_extra(disposition):
+    return {
+        "cpu_contract_status": disposition.status,
+        "source_expected": list(disposition.source_expected),
+        "source_probe_mismatches": list(disposition.mismatches),
+    }
+
+
+def _opinfo_source_dtypes(op, phase):
+    dtypes = getattr(op, "backward_dtypes", ()) if phase == "backward" else getattr(op, "dtypes", ())
+    return tuple(sorted(dtypes, key=lambda item: str(item)))
+
+
+def _opinfo_cpu_contract_disposition(op, dtype, *, phase):
+    return contract_disposition(
+        op.name,
+        dtype,
+        input_condition=InputCondition.CLEAN,
+        phase=phase,
+        opinfo_dtypes=_opinfo_source_dtypes(op, phase),
+    )
+
+
+def probe_opinfo_cpu_contract(op, dtype, *, phase):
+    dtype_str = dtype_to_str(dtype)
+    key = (op.name, dtype_str, phase, torch.__version__)
+    cached = _OPINFO_CPU_CONTRACT_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    source_dtypes = _opinfo_source_dtypes(op, phase)
+    explicit = contract_disposition(
+        op.name,
+        dtype,
+        input_condition=InputCondition.CLEAN,
+        phase=phase,
+        opinfo_dtypes=source_dtypes,
+    )
+    if explicit.status in {"cpu_supported", "cpu_unsupported", "cpu_unknown", "oracle_supported"}:
+        _OPINFO_CPU_CONTRACT_CACHE[key] = explicit
+        return explicit
+
+    try:
+        samples = op.sample_inputs("cpu", dtype, requires_grad=(phase == "backward"))
+        raw_sample = next(iter(samples), None)
+    except Exception as exc:
+        supported = False if is_deterministic_cpu_unsupported(exc) or is_cpu_reference_failure(exc) else None
+        disposition = disposition_from_cpu_probe(
+            op.name,
+            dtype,
+            supported=supported,
+            detail=f"sample_inputs CPU probe failed: {type(exc).__name__}: {exc}",
+            phase=phase,
+            opinfo_dtypes=source_dtypes,
+        )
+        _OPINFO_CPU_CONTRACT_CACHE[key] = disposition
+        return disposition
+
+    if raw_sample is None:
+        disposition = disposition_from_cpu_probe(
+            op.name,
+            dtype,
+            supported=None,
+            detail=f"sample_inputs produced no CPU samples for {op.name} with {dtype_str}",
+            phase=phase,
+            opinfo_dtypes=source_dtypes,
+        )
+        _OPINFO_CPU_CONTRACT_CACHE[key] = disposition
+        return disposition
+
+    try:
+        sample = prepare_sample(raw_sample, InputCondition.CLEAN, op_name=op.name)
+        op.op(sample.input, *sample.args, **sample.kwargs)
+    except Exception as exc:
+        supported = False if is_deterministic_cpu_unsupported(exc) or is_cpu_reference_failure(exc) else None
+        disposition = disposition_from_cpu_probe(
+            op.name,
+            dtype,
+            supported=supported,
+            detail=f"clean CPU probe failed: {type(exc).__name__}: {exc}",
+            phase=phase,
+            opinfo_dtypes=source_dtypes,
+        )
+        _OPINFO_CPU_CONTRACT_CACHE[key] = disposition
+        return disposition
+
+    disposition = disposition_from_cpu_probe(op.name, dtype, supported=True, phase=phase, opinfo_dtypes=source_dtypes)
+    _OPINFO_CPU_CONTRACT_CACHE[key] = disposition
+    return disposition
+
+
+# ---------------------------------------------------------------------------
 # Test list builders (replace get_filtered_op_tests + probing)
 # ---------------------------------------------------------------------------
 
@@ -643,6 +746,18 @@ def get_forward_op_tests(manifest):
 
             disposition = dtype_manifest_disposition(d, dt_str, supported_dtypes, op.name)
             if disposition.allowed:
+                contract = probe_opinfo_cpu_contract(op, d, phase="forward")
+                if not contract.allowed:
+                    _opinfo_skip_record(
+                        op.name,
+                        dt_str,
+                        contract.skip_reason or "cpu_contract_unknown",
+                        contract.detail,
+                        phase="forward",
+                        input_condition=InputCondition.CLEAN,
+                        extra=_contract_skip_extra(contract),
+                    )
+                    continue
                 tests.append((op.name, dt_str, InputCondition.CLEAN))
                 # Add IEEE 754 tiers for float/complex dtypes
                 if (d.is_floating_point or d.is_complex) and _ieee754_enabled_for_op(op.name, ieee754_cap):
@@ -706,6 +821,17 @@ def get_backward_op_tests(manifest):
 
             disposition = dtype_manifest_disposition(d, dt_str, supported_dtypes, op.name)
             if disposition.allowed:
+                contract = probe_opinfo_cpu_contract(op, d, phase="backward")
+                if not contract.allowed:
+                    _opinfo_skip_record(
+                        op.name,
+                        dt_str,
+                        contract.skip_reason or "cpu_contract_unknown",
+                        contract.detail,
+                        phase="backward",
+                        extra=_contract_skip_extra(contract),
+                    )
+                    continue
                 tests.append((op.name, dt_str))
             elif disposition.skip_reason in ("dtype_not_supported", "dtype_regex_filtered"):
                 _opinfo_skip_record(

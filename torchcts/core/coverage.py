@@ -42,6 +42,7 @@ from torchcts.core.semantic_levels import (
     suite_for_path,
     validate_semantic_level,
 )
+from torchcts.core.dtype_contracts import mismatch_counts as dtype_contract_mismatch_counts
 from torchcts.core.oracles import oracle_spec_for
 
 
@@ -3465,6 +3466,7 @@ def build_audit(root: str | os.PathLike | None = None) -> dict:
             "pending_blocker_counts": dict(sorted(pending_blocker_counts.items())),
             "pending_backend_gate_counts": dict(sorted(pending_backend_gate_counts.items())),
             "coverage_kind_counts": dict(sorted(coverage_kind_counts.items())),
+            "dtype_contract_mismatch_counts": dtype_contract_mismatch_counts(),
             "default_output_dir": str(DEFAULT_OUTPUT_DIR),
         },
         "entries": audited_entries,
@@ -3686,6 +3688,14 @@ def render_summary_markdown(audit: dict) -> str:
     if pending_gates:
         for gate, count in pending_gates.items():
             lines.append(f"- `{gate}`: {count}")
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "By dtype contract source/probe mismatch:", ""])
+    mismatch_counts = metadata.get("dtype_contract_mismatch_counts", {})
+    if mismatch_counts:
+        for mismatch, count in mismatch_counts.items():
+            lines.append(f"- `{mismatch}`: {count}")
     else:
         lines.append("- none")
 

@@ -34,6 +34,11 @@ from torchcts.core.opinfo_adapter import (
     prepare_sample,
     str_to_dtype,
 )
+from torchcts.core.dtype_contracts import (
+    contract_disposition,
+    disposition_from_cpu_probe,
+    is_deterministic_cpu_unsupported,
+)
 from torchcts.core.reference_oracles import matmul_family_reference
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 from torchcts.sample_generation import (
@@ -65,6 +70,7 @@ from torchcts.sample_generation import (
     rng_uses_target_device_generator as sample_rng_uses_target_device_generator,
     rng_output_shape as sample_rng_output_shape,
     rnn_cell_sample as sample_rnn_cell,
+    sample_for_entry as sample_generated_entry,
     SampleGenerationError,
     sample_case_specs_for_entry,
     shape_sample as sample_shape,
@@ -103,6 +109,7 @@ def manifest_effective_dtype_items(
     manifest: dict,
     *,
     op_name: str | None = None,
+    enforce_cpu_contract: bool = False,
 ) -> list[tuple[torch.dtype, str]]:
     """Return manifest-allowed dtype items from the effective run manifest."""
 
@@ -121,10 +128,141 @@ def manifest_effective_dtype_items(
         if dtype is None or dtype in seen:
             continue
         disposition = dtype_manifest_disposition(dtype, dtype_str, supported_dtypes, op_name)
+        if not disposition.allowed:
+            continue
+        if enforce_cpu_contract and op_name:
+            contract = contract_disposition(op_name, dtype)
+            if not contract.allowed:
+                continue
         if disposition.allowed:
             items.append((dtype, dtype_to_str(dtype)))
             seen.add(dtype)
     return sorted(items, key=lambda item: item[1])
+
+
+def _empty_like_probe_output(value, device: str):
+    if isinstance(value, torch.Tensor):
+        return torch.empty_strided(
+            tuple(value.shape),
+            tuple(value.stride()),
+            dtype=value.dtype,
+            device=device,
+        )
+    if isinstance(value, tuple):
+        return tuple(_empty_like_probe_output(item, device) for item in value)
+    if isinstance(value, list):
+        return [_empty_like_probe_output(item, device) for item in value]
+    raise TypeError(f"Cannot construct out= tensor for {type(value).__name__} result")
+
+
+def _out_kwargs_for_probe(entry: dict, expected, device: str) -> dict:
+    out_args = [arg for arg in entry.get("args", []) if arg.get("is_out")]
+    if not out_args:
+        return {"out": _empty_like_probe_output(expected, device)}
+    if len(out_args) == 1:
+        name = out_args[0].get("name") or "out"
+        return {name: _empty_like_probe_output(expected, device)}
+    expected_items = expected if isinstance(expected, (tuple, list)) else (expected,)
+    if len(expected_items) < len(out_args):
+        raise TypeError(f"Not enough expected outputs to build out= tensors for {entry['name']}")
+    return {
+        (arg.get("name") or f"out{index}"): _empty_like_probe_output(expected_items[index], device)
+        for index, arg in enumerate(out_args)
+    }
+
+
+def _entry_has_out_args(entry: dict) -> bool:
+    return any(arg.get("is_out") for arg in entry.get("args", []))
+
+
+def probe_generated_clean_cpu_contract(
+    entry: dict,
+    dtype: torch.dtype,
+    manifest: dict | None = None,
+    *,
+    enforce_recorded_contract: bool = True,
+) -> dict:
+    manifest = manifest or {}
+    contract = contract_disposition(entry.get("name"), dtype)
+    if enforce_recorded_contract and not contract.allowed and contract.status != "not_recorded":
+        status = "unknown"
+        if contract.status == "cpu_unsupported":
+            status = "unsupported"
+        elif contract.status == "cpu_pending":
+            status = "pending"
+        return {
+            "status": status,
+            "detail": contract.detail,
+            "contract_status": contract.status,
+        }
+
+    strategy = (entry.get("generated", {}) or {}).get("strategy") or {}
+    callable_op = _dispatcher_callable(entry)
+    seed = manifest.get("ieee754_seed", 67)
+    try:
+        if strategy.get("strategy") == "manual_foreach":
+            sample = _manual_foreach_sample(entry, dtype, InputCondition.CLEAN, seed)
+        else:
+            sample = sample_generated_entry(
+                entry,
+                dtype,
+                device="cpu",
+                input_condition=InputCondition.CLEAN,
+                seed=seed,
+                strategy=strategy,
+            )
+        has_out_args = _entry_has_out_args(entry)
+        if strategy.get("strategy") == "manual_foreach" and (
+            entry.get("surface_kind") == "out_variant" or has_out_args
+        ):
+            out = _empty_like_tensor_list(sample.input, "cpu")
+            callable_op(sample.input, *sample.args, **sample.kwargs, out=out)
+        elif strategy.get("strategy") == "manual_foreach" and entry.get("surface_kind") == "mutating_or_inplace":
+            writable = [_clone_writable_input(item) for item in sample.input]
+            callable_op(writable, *sample.args, **sample.kwargs)
+        elif entry.get("surface_kind") == "out_variant" or has_out_args:
+            functional_op = _functional_dispatcher_callable(entry)
+            expected = functional_op(*sample.call_args(), **sample.kwargs)
+            out_kwargs = _out_kwargs_for_probe(entry, expected, "cpu")
+            callable_op(*sample.call_args(), **sample.kwargs, **out_kwargs)
+        elif entry.get("surface_kind") == "mutating_or_inplace":
+            call_args = sample.call_args()
+            if not call_args:
+                raise TypeError(f"{entry['name']} in-place probe has no mutable input")
+            mutable = _clone_writable_input(call_args[0])
+            callable_op(mutable, *call_args[1:], **sample.kwargs)
+        else:
+            callable_op(*sample.call_args(), **sample.kwargs)
+    except SampleGenerationError as exc:
+        message = str(exc).lower()
+        if (
+            ("dtype" in message and ("require" in message or "got torch." in message))
+            or ("got torch." in message and ("require" in message or "expected" in message or "support" in message))
+        ):
+            return {
+                "status": "unsupported",
+                "detail": f"generated clean CPU sample rejected dtype: {type(exc).__name__}: {exc}",
+            }
+        return {
+            "status": "unknown",
+            "detail": f"generated clean CPU sample generation failed: {type(exc).__name__}: {exc}",
+        }
+    except Exception as exc:
+        if is_deterministic_cpu_unsupported(exc):
+            return {
+                "status": "unsupported",
+                "detail": f"generated clean CPU probe failed: {type(exc).__name__}: {exc}",
+            }
+        return {
+            "status": "unknown",
+            "detail": f"generated clean CPU probe failed: {type(exc).__name__}: {exc}",
+        }
+    return {"status": "supported", "detail": "generated clean CPU sample executed"}
+
+
+def _generated_clean_cpu_contract_allows(entry: dict, dtype: torch.dtype, manifest: dict) -> bool:
+    result = probe_generated_clean_cpu_contract(entry, dtype, manifest)
+    return result["status"] == "supported"
 
 
 def generated_foreach_dtype_cases(
@@ -138,8 +276,13 @@ def generated_foreach_dtype_cases(
         dtype_items = manifest_effective_dtype_items(
             manifest,
             op_name=entry.get("name"),
+            enforce_cpu_contract=True,
         )
-        cases.extend((entry, dtype) for dtype, _dtype_str in dtype_items)
+        cases.extend(
+            (entry, dtype)
+            for dtype, _dtype_str in dtype_items
+            if _generated_clean_cpu_contract_allows(entry, dtype, manifest)
+        )
     return cases or [(None, None)]
 
 
@@ -203,15 +346,39 @@ def _forward_cases_for_op(op_name: str, manifest: dict) -> list[tuple[str, str]]
     return _FORWARD_CASE_CACHE[key]
 
 
-def _manifest_dtype_items(manifest: dict) -> list[tuple[torch.dtype, str]]:
-    return sample_manifest_dtype_items(manifest)
+def _contract_dtype_items(entry: dict | None, manifest: dict) -> list[tuple[torch.dtype, str]]:
+    base_items = sample_manifest_dtype_items(manifest)
+    if entry is None:
+        return base_items
+    items = []
+    for dtype, dtype_str in base_items:
+        if _generated_clean_cpu_contract_allows(entry, dtype, manifest):
+            items.append((dtype, dtype_str))
+    if base_items and not items:
+        pytest.skip(
+            "cpu_contract_unsupported: no selected dtype is executable under "
+            f"the PyTorch CPU contract for {entry.get('name')}"
+        )
+    return items
 
 
-def _manifest_dtype_items_or(manifest: dict, fallback: list[torch.dtype]) -> list[tuple[torch.dtype, str]]:
-    items = _manifest_dtype_items(manifest)
+def _contract_dtype_items_or(entry: dict | None, manifest: dict, fallback: list[torch.dtype]) -> list[tuple[torch.dtype, str]]:
+    items = _contract_dtype_items(entry, manifest)
     if items:
         return items
-    return [(dtype, str(dtype)) for dtype in fallback]
+    if entry is None:
+        return [(dtype, str(dtype)) for dtype in fallback]
+    fallback_items = [
+        (dtype, str(dtype))
+        for dtype in fallback
+        if _generated_clean_cpu_contract_allows(entry, dtype, manifest)
+    ]
+    if fallback and not fallback_items:
+        pytest.skip(
+            "cpu_contract_unsupported: no fallback dtype is executable under "
+            f"the PyTorch CPU contract for {entry.get('name')}"
+        )
+    return fallback_items
 
 
 def _move_to_device(obj, device: str):
@@ -777,6 +944,44 @@ def _dispatcher_callable(entry: dict):
 def _functional_dispatcher_callable(entry: dict):
     packet = getattr(torch.ops.aten, entry["base_name"])
     overload = entry.get("overload") or "default"
+    entry_arg_names = [
+        arg.get("name")
+        for arg in entry.get("args", [])
+        if not arg.get("is_out") and arg.get("name")
+    ]
+    best = None
+    best_score = -1
+    try:
+        overload_names = packet.overloads()
+    except Exception:
+        overload_names = ()
+    for candidate in overload_names:
+        if candidate == overload or candidate == "out" or str(candidate).endswith("_out"):
+            continue
+        try:
+            candidate_op = getattr(packet, candidate)
+            candidate_args = list(candidate_op._schema.arguments)
+            candidate_names = [arg.name for arg in candidate_args]
+            candidate_types = {arg.name: str(arg.type) for arg in candidate_args}
+        except Exception:
+            continue
+        if not entry_arg_names:
+            continue
+        if all(name in candidate_names for name in entry_arg_names):
+            score = sum(1 for left, right in zip(entry_arg_names, candidate_names) if left == right)
+            score += len(set(entry_arg_names) & set(candidate_names))
+            for arg in entry.get("args", []):
+                name = arg.get("name")
+                if arg.get("is_out") or not name:
+                    continue
+                if candidate_types.get(name) == arg.get("type"):
+                    score += 3
+            if score > best_score:
+                best = candidate_op
+                best_score = score
+    if best is not None:
+        return best
+
     candidates = []
     if overload.endswith("_out"):
         candidates.append(overload[: -len("_out")])
@@ -887,7 +1092,7 @@ def run_manual_bitwise_strategy(entry: dict | None, device: str, compare, manife
     surface_kind = entry.get("surface_kind")
     tested_any = False
 
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not _bitwise_dtype_supported(family, dtype):
             continue
 
@@ -1101,7 +1306,7 @@ def run_manual_matmul_strategy(entry: dict | None, device: str, compare, manifes
     callable_op = _dispatcher_callable(entry)
     case_specs = sample_case_specs_for_entry(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if dtype == torch.bool:
             continue
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
@@ -1361,7 +1566,7 @@ def run_manual_shape_strategy(entry: dict | None, device: str, compare, manifest
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not _manual_shape_dtype_supported(entry, dtype):
             continue
         for input_condition in _manual_shape_input_conditions(manifest, entry, dtype):
@@ -1601,7 +1806,7 @@ def run_manual_factory_strategy(entry: dict | None, device: str, compare, manife
     args = _factory_args(entry["name"])
     tested_any = False
 
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not _factory_dtype_supported(family, dtype):
             continue
         try:
@@ -1735,7 +1940,7 @@ def run_manual_factory_out_strategy(entry: dict | None, device: str, compare, ma
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if _run_manual_factory_out_case(entry, callable_op, dtype, device, compare):
             tested_any = True
 
@@ -1828,7 +2033,7 @@ def run_manual_fft_strategy(entry: dict | None, device: str, compare, manifest: 
     callable_op = _dispatcher_callable(entry)
     functional_op = _functional_dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items_or(manifest, [torch.float32]):
+    for dtype, _dtype_str in _contract_dtype_items_or(entry, manifest, [torch.float32]):
         if dtype not in {torch.float32, torch.float64}:
             continue
         if _run_manual_fft_case(entry, callable_op, functional_op, dtype, device, compare, manifest):
@@ -2014,7 +2219,7 @@ def run_manual_special_math_strategy(entry: dict | None, device: str, compare, m
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not (dtype.is_floating_point or dtype.is_complex):
             continue
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
@@ -2202,7 +2407,7 @@ def run_manual_elementwise_strategy(entry: dict | None, device: str, compare, ma
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
             if _run_manual_elementwise_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -2355,7 +2560,7 @@ def run_manual_reduction_strategy(entry: dict | None, device: str, compare, mani
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not _manual_reduction_dtype_supported(entry, dtype):
             continue
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
@@ -2471,7 +2676,7 @@ def run_manual_indexing_strategy(entry: dict | None, device: str, compare, manif
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if _run_manual_indexing_case(entry, callable_op, dtype, device, compare, manifest):
             tested_any = True
 
@@ -2742,7 +2947,7 @@ def run_manual_rng_strategy(entry: dict | None, device: str, compare, manifest: 
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if _run_manual_rng_case(entry, callable_op, dtype, device, manifest):
             tested_any = True
 
@@ -2957,7 +3162,7 @@ def run_manual_multi_output_reduction_strategy(entry: dict | None, device: str, 
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _multi_output_input_conditions(manifest, entry, dtype):
             if _run_manual_multi_output_reduction_case(
                 entry,
@@ -3064,7 +3269,7 @@ def run_manual_upsample_strategy(entry: dict | None, device: str, compare, manif
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
             if _run_manual_upsample_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -3139,7 +3344,7 @@ def run_manual_pooling_strategy(entry: dict | None, device: str, compare, manife
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
             if _run_manual_pooling_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -3231,7 +3436,7 @@ def run_manual_convolution_strategy(entry: dict | None, device: str, compare, ma
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
             if _run_manual_convolution_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -3314,7 +3519,7 @@ def run_manual_grid_strategy(entry: dict | None, device: str, compare, manifest:
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if _run_manual_grid_case(entry, callable_op, dtype, device, compare, manifest):
             tested_any = True
 
@@ -3424,7 +3629,7 @@ def run_manual_grid_backward_strategy(entry: dict | None, device: str, compare, 
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if not dtype.is_floating_point:
             continue
         if _run_manual_grid_backward_case(entry, callable_op, dtype, device, compare, manifest):
@@ -3507,7 +3712,7 @@ def run_manual_rnn_cell_strategy(entry: dict | None, device: str, compare, manif
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items_or(manifest, [torch.float32]):
+    for dtype, _dtype_str in _contract_dtype_items_or(entry, manifest, [torch.float32]):
         if _run_manual_rnn_cell_case(entry, callable_op, dtype, device, compare, manifest):
             tested_any = True
 
@@ -3592,7 +3797,7 @@ def run_manual_loss_strategy(entry: dict | None, device: str, compare, manifest:
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         input_conditions = (
             [InputCondition.CLEAN]
             if entry["base_name"] == "ctc_loss"
@@ -3754,7 +3959,7 @@ def run_manual_linalg_strategy(entry: dict | None, device: str, compare, manifes
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_linalg_input_conditions(manifest, entry, dtype):
             if _run_manual_linalg_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -3847,7 +4052,7 @@ def run_manual_metadata_strategy(entry: dict | None, device: str, compare, manif
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         if _run_manual_metadata_case(entry, callable_op, dtype, device, compare, manifest):
             tested_any = True
 
@@ -3932,7 +4137,7 @@ def run_manual_padding_strategy(entry: dict | None, device: str, compare, manife
 
     callable_op = _dispatcher_callable(entry)
     tested_any = False
-    for dtype, _dtype_str in _manifest_dtype_items(manifest):
+    for dtype, _dtype_str in _contract_dtype_items(entry, manifest):
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], dtype):
             if _run_manual_padding_case(entry, callable_op, dtype, input_condition, device, compare, manifest):
                 tested_any = True
@@ -4066,7 +4271,7 @@ def run_manual_foreach_strategy(
     ieee754_seed = manifest.get("ieee754_seed", 67)
     surface_kind = entry.get("surface_kind")
 
-    dtype_items = [(dtype, dtype_to_str(dtype))] if dtype is not None else _manifest_dtype_items(manifest)
+    dtype_items = [(dtype, dtype_to_str(dtype))] if dtype is not None else _contract_dtype_items(entry, manifest)
     for case_dtype, _dtype_str in dtype_items:
         for input_condition in _manual_input_conditions(manifest, entry["base_name"], case_dtype):
             sample = _manual_foreach_sample(entry, case_dtype, input_condition, ieee754_seed)

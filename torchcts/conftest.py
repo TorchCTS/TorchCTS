@@ -91,6 +91,7 @@ from torchcts.core.opinfo_adapter import (
     str_to_dtype,
     dtype_to_str,
 )
+from torchcts.core.dtype_contracts import NOT_RECORDED, contract_disposition, load_dtype_contracts
 from torchcts.core.comparer import clear_metrics, get_metrics
 from torchcts.core.input_gen import refresh_shared_data
 from torchcts.core.runtime_evidence import (
@@ -123,6 +124,113 @@ _DTYPE_MANIFEST_SKIP_REASONS = frozenset({
     "dtype_regex_filtered",
     "dtype_not_listed",
 })
+_DTYPE_CONTRACT_SKIP_REASONS = frozenset({
+    "cpu_contract_unsupported",
+    "cpu_contract_unknown",
+    "cpu_contract_pending",
+})
+_SEMANTIC_SELECTION_SKIP_REASONS = frozenset({
+    "semantic_level_gt_requested",
+    "semantic_level_out_of_range",
+})
+_DTYPE_PARAM_NAMES = ("dtype", "src_dtype", "dst_dtype", "autocast_dtype")
+_HANDWRITTEN_CONTRACT_ALIASES = {
+    # Python API names used by handwritten tests whose dtype contract is stored
+    # under namespaced or overload-specific dispatcher metadata.
+    "add": ("aten::add.Tensor",),
+    "sub": ("aten::sub.Tensor",),
+    "mul": ("aten::mul.Tensor",),
+    "div": ("aten::div.Tensor",),
+    "add_": ("aten::add_.Scalar",),
+    "sub_": ("aten::sub_.Scalar",),
+    "mul_": ("aten::mul_.Scalar",),
+    "div_": ("aten::div_.Scalar",),
+    "relu": ("aten::relu.out",),
+    "gelu": ("aten::gelu.out",),
+    "softmax": ("aten::softmax.int",),
+    "log_softmax": ("aten::log_softmax.int",),
+    "mse_loss": ("aten::mse_loss.out",),
+    "smooth_l1": ("aten::smooth_l1_loss.out",),
+    "smooth_l1_loss": ("aten::smooth_l1_loss.out",),
+    "huber": ("aten::huber_loss.out",),
+    "huber_loss": ("aten::huber_loss.out",),
+    "binary_cross_entropy_with_logits": ("aten::binary_cross_entropy_with_logits.out",),
+    "conv1d": ("aten::nn.functional.conv1d",),
+    "conv2d": ("aten::nn.functional.conv2d",),
+    "conv3d": ("aten::nn.functional.conv3d",),
+    "conv_transpose2d": ("aten::nn.functional.conv_transpose2d",),
+    "layer_norm": ("aten::nn.functional.layer_norm",),
+    "group_norm": ("aten::nn.functional.group_norm",),
+    "batch_norm": ("aten::nn.functional.batch_norm",),
+    "instance_norm": ("aten::nn.functional.instance_norm",),
+    "linear": ("aten::linear.out",),
+    "scaled_dot_product_attention": ("aten::nn.functional.scaled_dot_product_attention",),
+    "fft": ("aten::fft.fft",),
+    "ifft": ("aten::fft.ifft",),
+    "rfft": ("aten::fft.rfft",),
+    "irfft": ("aten::fft.irfft",),
+    "solve": ("aten::linalg.solve",),
+    "inv": ("aten::linalg.inv",),
+    "det": ("aten::linalg.det",),
+    "matmul": ("aten::matmul",),
+    "relu_add": ("aten::add.Tensor", "aten::relu.out"),
+    "gelu_mul": ("aten::mul.Tensor", "aten::gelu.out"),
+    "aten::fft_fft": ("aten::fft.fft",),
+    "aten::fft_ifft": ("aten::fft.ifft",),
+    "aten::fft_rfft": ("aten::fft.rfft",),
+    "aten::fft_irfft": ("aten::fft.irfft",),
+    "aten::linalg_cholesky": ("aten::linalg.cholesky",),
+    "aten::linalg_qr": ("aten::linalg.qr",),
+    "aten::linalg_svd": ("aten::linalg.svd",),
+    "aten::_conj": ("aten::conj",),
+    "aten::_to_copy": ("aten::to.dtype",),
+}
+_HANDWRITTEN_FUNCTION_CONTRACT_ALIASES = {
+    "test_compile_dynamic_batch_linear": ("linear",),
+    "test_compile_matmul": ("mm",),
+    "test_compile_softmax": ("softmax",),
+    "test_compile_layer_norm": ("native_layer_norm",),
+    "test_compile_conv2d": ("conv2d",),
+    "test_compile_chained_ops": ("mm", "relu", "add", "gelu", "sum"),
+    "test_compile_training_optimizer": ("linear",),
+    "test_compile_multi_step_convergence": ("linear", "mse_loss"),
+    "test_allocator_tracking_and_cache": ("randn",),
+    "test_oom_recovery": ("empty", "fill_"),
+    "test_determinism_stale_buffers": ("randn", "mm", "silu", "native_layer_norm", "softmax"),
+    "test_guard_alloc_canary": ("randn", "add"),
+    "test_save_load_roundtrip": ("randn", "to"),
+    "test_scale_mismatch_numerics": ("logsumexp", "cumsum"),
+    "test_dtype_min_max": ("scalar_tensor",),
+    "test_zero_element_and_scalar_tensors": ("empty", "add", "scalar_tensor"),
+    "test_large_allocations": ("empty", "fill_"),
+    "test_checkpoint_roundtrip": ("linear",),
+    "test_dataloader_pin_memory": ("randn", "to"),
+    "test_gradient_accumulation": ("mm", "sum"),
+    "test_lr_schedulers": ("randn",),
+    "test_module_hooks": ("linear", "sum"),
+    "test_gradient_checkpointing": ("linear", "sum"),
+    "test_optimizer_pipelines": ("linear", "sum"),
+    "test_fused_optimizer_pipelines": ("linear", "sum"),
+    "test_autocast_precisions": ("mm",),
+    "test_lora_forward_backward": ("linear", "matmul", "add", "mul", "sum"),
+    "test_gemv_m1_shapes": ("mm",),
+    "test_sdpa_causal": ("scaled_dot_product_attention",),
+    "test_sdpa_nested_forward": ("scaled_dot_product_attention",),
+    "test_sdpa_nested_backward_dtypes": ("scaled_dot_product_attention",),
+}
+_HANDWRITTEN_PARAM_CONTRACT_ALIASES = {
+    ("model_name", "linear"): ("linear",),
+    ("model_name", "mlp"): ("linear", "relu"),
+    ("model_name", "conv"): ("conv2d", "adaptive_avg_pool2d", "linear", "relu"),
+    ("model_name", "norm"): ("native_layer_norm", "linear"),
+    ("model_name", "gpt2"): ("linear", "native_layer_norm", "gelu"),
+    ("model_name", "qwen"): ("linear", "native_layer_norm", "silu"),
+    ("component", "cnn"): ("conv2d", "batch_norm", "relu"),
+    ("component", "vit"): ("conv2d",),
+    ("block_type", "gpt2"): ("linear", "native_layer_norm", "gelu"),
+    ("clipping_method", "norm"): ("norm",),
+    ("clipping_method", "value"): ("clamp",),
+}
 _BASELINE_RESULTS = {}
 _SHOW_SKIPS = False
 _REPORT_SKIPS = False
@@ -829,6 +937,15 @@ def _extract_result_metadata(item):
     metadata["covers_categories"] = sorted(set(categories))
     if not metadata.get("dispatcher_name") and len(metadata["covers"]) == 1:
         metadata["dispatcher_name"] = metadata["covers"][0]
+    contract_surfaces = _contract_surfaces_for_item(item)
+    if not metadata.get("dispatcher_name") and len(contract_surfaces) == 1:
+        metadata["dispatcher_name"] = contract_surfaces[0]
+    metadata["cpu_contract_surfaces"] = contract_surfaces
+    metadata["cpu_contract_exempt_reason"] = _cpu_contract_exempt_reason(item)
+    metadata["cpu_contract_dtype_gates"] = [
+        {"surface": surface, "dtype": dtype_to_str(dtype)}
+        for surface, dtype in _fixed_dtype_contract_gates_for_item(item)
+    ]
     if metadata["test_kind"] == "opinfo":
         metadata["coverage_kind"] = "opinfo"
     elif metadata["suite"] == "generated":
@@ -850,9 +967,9 @@ def _extract_result_metadata(item):
     return metadata
 
 
-def _skip_record_for_item(item, skip_reason, detail):
+def _skip_record_for_item(item, skip_reason, detail, extra=None):
     metadata = _extract_result_metadata(item)
-    return {
+    record = {
         "suite": metadata["suite"],
         "test_kind": metadata["test_kind"],
         "capability": metadata["capability"],
@@ -867,6 +984,9 @@ def _skip_record_for_item(item, skip_reason, detail):
         "variant_kind": metadata["variant_kind"],
         "coverage_id": metadata["coverage_id"],
         "coverage_status": metadata["coverage_status"],
+        "cpu_contract_surfaces": metadata["cpu_contract_surfaces"],
+        "cpu_contract_exempt_reason": metadata["cpu_contract_exempt_reason"],
+        "cpu_contract_dtype_gates": metadata["cpu_contract_dtype_gates"],
         "input_condition": metadata.get("input_condition"),
         "semantic_level": metadata["semantic_level"],
         "requested_level": metadata["requested_level"],
@@ -877,6 +997,9 @@ def _skip_record_for_item(item, skip_reason, detail):
         "skip_reason": skip_reason,
         "detail": detail,
     }
+    if extra:
+        record.update(extra)
+    return record
 
 
 def _merge_pending_manifest_skips(*, include_opinfo):
@@ -989,6 +1112,196 @@ def get_required_capabilities(item):
         for arg in m.args:
             reqs.add(arg)
     return reqs
+
+
+def _marker_string_args(item, marker_name):
+    values = []
+    for marker in item.iter_markers(name=marker_name):
+        for arg in marker.args:
+            if isinstance(arg, str):
+                values.append(arg)
+    return values
+
+
+def _cpu_contract_exempt_reason(item):
+    markers = list(item.iter_markers(name="cpu_contract_exempt"))
+    if not markers:
+        return None
+    marker = markers[0]
+    if marker.args and isinstance(marker.args[0], str):
+        return marker.args[0]
+    reason = marker.kwargs.get("reason")
+    return str(reason) if reason else "handwritten test intentionally has no dispatcher dtype contract"
+
+
+def _contract_surface_exists(surface):
+    if not surface:
+        return False
+    name = str(surface)
+    if not name.startswith("aten::"):
+        name = f"aten::{name}"
+    contracts = load_dtype_contracts().get("contracts", {})
+    return name in contracts
+
+
+def _contract_surface_has_executable_evidence(surface):
+    if not surface:
+        return False
+    name = str(surface)
+    if not name.startswith("aten::"):
+        name = f"aten::{name}"
+    versions = load_dtype_contracts().get("contracts", {}).get(name, {})
+    if not isinstance(versions, dict):
+        return False
+    for version_entry in versions.values():
+        if not isinstance(version_entry, dict):
+            continue
+        if any(
+            version_entry.get(bucket)
+            for bucket in (
+                "cpu_supported",
+                "cpu_unsupported",
+                "cpu_unknown",
+                "cpu_pending",
+                "oracle_supported",
+            )
+        ):
+            return True
+    return False
+
+
+def _candidate_contract_surfaces(surface):
+    if not surface:
+        return ()
+    text = str(surface)
+    alias = _HANDWRITTEN_CONTRACT_ALIASES.get(text)
+    if alias is not None:
+        return alias
+
+    base = text if text.startswith("aten::") else f"aten::{text}"
+    dispatcher_part = base.removeprefix("aten::")
+    overloadless = f"aten::{dispatcher_part.split('.', 1)[0]}" if "." in dispatcher_part else ""
+    candidates = (
+        base,
+        overloadless,
+        f"{base}.Tensor",
+        f"{base}.out",
+        f"{base}.int",
+        f"{base}.dim",
+        f"{base}.Scalar",
+        f"aten::nn.functional.{text}" if not text.startswith("aten::") else "",
+    )
+    for candidate in candidates:
+        if candidate and _contract_surface_has_executable_evidence(candidate):
+            return (candidate,)
+    for candidate in candidates:
+        if candidate and _contract_surface_exists(candidate):
+            return (candidate,)
+    return (base,)
+
+
+def _extend_contract_surfaces(target, surface):
+    for candidate in _candidate_contract_surfaces(surface):
+        if candidate and candidate not in target:
+            target.append(candidate)
+
+
+def _contract_surfaces_for_item(item):
+    surfaces = []
+    function_name = getattr(item, "originalname", None) or item.name.split("[", 1)[0]
+    for surface in _HANDWRITTEN_FUNCTION_CONTRACT_ALIASES.get(function_name, ()):
+        _extend_contract_surfaces(surfaces, surface)
+
+    if hasattr(item, "callspec"):
+        params = item.callspec.params
+        for name, value in params.items():
+            for surface in _HANDWRITTEN_PARAM_CONTRACT_ALIASES.get((name, str(value)), ()):
+                _extend_contract_surfaces(surfaces, surface)
+        if "op" in params:
+            op_param = params["op"]
+            _extend_contract_surfaces(surfaces, getattr(op_param, "name", str(op_param)))
+        elif "op_name" in params:
+            _extend_contract_surfaces(surfaces, params["op_name"])
+        elif "inplace_op" in params:
+            _extend_contract_surfaces(surfaces, params["inplace_op"])
+        elif isinstance(params.get("entry"), dict):
+            _extend_contract_surfaces(surfaces, params["entry"].get("name"))
+
+    for surface in _marker_string_args(item, "cpu_contract"):
+        _extend_contract_surfaces(surfaces, surface)
+    for surface in _marker_string_args(item, "covers"):
+        _extend_contract_surfaces(surfaces, surface)
+    return surfaces
+
+
+def _fixed_dtype_contract_gates_for_item(item):
+    gates = []
+    for marker in item.iter_markers(name="cpu_contract_dtype"):
+        raw_args = list(marker.args)
+        surface = marker.kwargs.get("surface") or marker.kwargs.get("dispatcher_name")
+        if raw_args and isinstance(raw_args[0], str):
+            surface = raw_args.pop(0)
+        raw_dtypes = marker.kwargs.get("dtypes", marker.kwargs.get("dtype", None))
+        if raw_dtypes is None:
+            raw_dtypes = raw_args
+        elif isinstance(raw_dtypes, (str, torch.dtype)):
+            raw_dtypes = [raw_dtypes]
+        for dtype_value in raw_dtypes or ():
+            dtype = dtype_value if isinstance(dtype_value, torch.dtype) else str_to_dtype(str(dtype_value))
+            if dtype is None and not str(dtype_value).startswith("torch."):
+                dtype = str_to_dtype(f"torch.{dtype_value}")
+            if surface and dtype is not None:
+                gates.append((surface, dtype))
+    return gates
+
+
+def _fixed_dtype_contract_skip_for_item(item, supported_dtypes, op_name):
+    for surface, dtype in _fixed_dtype_contract_gates_for_item(item):
+        dtype_str = dtype_to_str(dtype)
+        disposition = dtype_manifest_disposition(
+            dtype,
+            dtype_str,
+            supported_dtypes,
+            op_name or surface,
+            dtype_label=f"{dtype_str} (fixed dtype)",
+        )
+        extra = {
+            "dtype": dtype_str,
+            "cpu_contract_fixed_dtype": True,
+            "cpu_contract_fixed_surface": surface,
+        }
+        if not disposition.allowed:
+            return disposition.skip_reason, disposition.detail, extra
+        contract = contract_disposition(surface, dtype)
+        extra.update(
+            {
+                "cpu_contract_status": contract.status,
+                "source_expected": list(contract.source_expected),
+                "source_probe_mismatches": list(contract.mismatches),
+            }
+        )
+        if not contract.allowed and contract.status != "not_recorded":
+            return contract.skip_reason or "cpu_contract_unknown", contract.detail, extra
+    return None, "", {}
+
+
+def _dtype_contract_skip_for_surfaces(surfaces, dtype, *, input_condition="clean"):
+    for surface in surfaces:
+        contract = contract_disposition(surface, dtype, input_condition=input_condition)
+        if contract.status == NOT_RECORDED:
+            continue
+        if not contract.allowed:
+            return (
+                contract.skip_reason or "cpu_contract_unknown",
+                contract.detail,
+            )
+    return None, ""
+
+
+def _requires_dtype_contract(item):
+    if not hasattr(item, "callspec"):
+        return False
+    return any(name in item.callspec.params for name in _DTYPE_PARAM_NAMES)
 
 
 def _semantic_level_for_item(item):
@@ -1108,6 +1421,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "adversarial: adversarial test suite")
     config.addinivalue_line("markers", "covers(dispatcher_name, surface=None): dispatcher overload covered by this test")
     config.addinivalue_line("markers", "covers_category(category): coverage category covered by this test")
+    config.addinivalue_line("markers", "cpu_contract(dispatcher_name): dispatcher overload whose CPU dtype contract gates this handwritten test")
+    config.addinivalue_line("markers", "cpu_contract_exempt(reason=None): handwritten dtype-parametrized test has no single dispatcher dtype contract")
+    config.addinivalue_line("markers", "cpu_contract_dtype(dispatcher_name, dtype): hardcoded backend dtype contract gate for handwritten tests")
     config.addinivalue_line("markers", "generated: generated coverage tests")
     config.addinivalue_line("markers", "semantic_level(level, reason=None): semantic priority level from 1 to 8")
 
@@ -1431,6 +1747,7 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(session, config, items):
     global _MANIFEST, _DEVICE_NAME, _SESSION_SKIPS, _SHOW_SKIPS
+    is_validation = config.getoption("--validation")
     
     # Optional CLI suite filter
     suite = config.getoption("--suite")
@@ -1499,11 +1816,13 @@ def pytest_collection_modifyitems(session, config, items):
 
     keep_items = []
     dtype_deselected_items = []
+    selection_deselected_items = []
     
     for item in items:
         skip_reason = None
         detail = ""
         dtype_manifest_skip = False
+        skip_record_extra = {}
         
         # Determine ATen op name
         op_name = None
@@ -1513,38 +1832,84 @@ def pytest_collection_modifyitems(session, config, items):
                 op_name = getattr(op_param, "name", str(op_param))
             elif "op_name" in item.callspec.params:
                 op_name = item.callspec.params["op_name"]
+            elif isinstance(item.callspec.params.get("entry"), dict):
+                op_name = item.callspec.params["entry"].get("name")
+        contract_surfaces = _contract_surfaces_for_item(item)
+        if op_name is None and contract_surfaces:
+            op_name = contract_surfaces[0]
+        contract_exempt_reason = _cpu_contract_exempt_reason(item)
 
-        # 1. Capability check
-        req_caps = get_required_capabilities(item)
-        missing_caps = [c for c in req_caps if not caps.get(c, False) and c != "multi_device"]
-        if missing_caps:
-            skip_reason = "capability_not_declared"
-            detail = f"requires capabilities: {', '.join(missing_caps)}"
-        elif "multi_device" in req_caps and device_count < 2:
-            skip_reason = "device_count"
-            declared = _MANIFEST.get("device_count", device_count)
-            detail = (
-                f"requires device_count>=2, runtime exposes {device_count}"
-                if declared == device_count
-                else f"requires device_count>=2, manifest declares {declared} but runtime exposes {device_count}"
+        if (
+            is_validation
+            and _requires_dtype_contract(item)
+            and not contract_surfaces
+            and contract_exempt_reason is None
+            and _canonical_suite_for_item(item) != "selftest"
+        ):
+            pytest.exit(
+                f"{item.nodeid} has dtype-parametrized handwritten coverage but no "
+                "op/op_name/covers/cpu_contract surface or cpu_contract_exempt marker",
+                returncode=1,
             )
-            
-        # 2. Dtype check
-        if not skip_reason and hasattr(item, "callspec") and "dtype" in item.callspec.params:
-            dt = item.callspec.params["dtype"]
-            dt_str = dtype_to_str(dt)
-            disposition = dtype_manifest_disposition(dt, dt_str, supported_dtypes, op_name)
-            if not disposition.allowed:
-                skip_reason = disposition.skip_reason
-                detail = disposition.detail
-                dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
-                    
-        # 3. Op exclusions
-        if not skip_reason and op_name and op_name in skip_ops:
-            skip_reason = "op_excluded"
-            detail = f"{op_name} is in skip_ops list"
 
-        # 4. src_dtype / dst_dtype check (e.g. test_copy_cast)
+        # 1. Dtype check. This is a run filter, so it must happen before
+        # capability skips; --dtype should remove non-selected dtype items even
+        # if another static skip would also apply.
+        if hasattr(item, "callspec"):
+            for dtype_param in ("dtype", "autocast_dtype"):
+                if dtype_param not in item.callspec.params:
+                    continue
+                dt = item.callspec.params[dtype_param]
+                dt_str = dtype_to_str(dt)
+                dtype_label = dt_str if dtype_param == "dtype" else f"{dt_str} ({dtype_param})"
+                disposition = dtype_manifest_disposition(
+                    dt,
+                    dt_str,
+                    supported_dtypes,
+                    op_name,
+                    dtype_label=dtype_label,
+                )
+                if not disposition.allowed:
+                    skip_reason = disposition.skip_reason
+                    detail = disposition.detail
+                    dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
+                elif contract_surfaces:
+                    input_condition = item.callspec.params.get("input_condition", "clean")
+                    generated_entry = item.callspec.params.get("entry")
+                    if isinstance(generated_entry, dict) and contract_surfaces == [generated_entry.get("name")]:
+                        contract = contract_disposition(contract_surfaces[0], dt, input_condition=input_condition)
+                        if not contract.allowed and contract.status == "not_recorded":
+                            from torchcts.generated.coverage_helpers import probe_generated_clean_cpu_contract
+
+                            probe = probe_generated_clean_cpu_contract(
+                                generated_entry,
+                                dt,
+                                _MANIFEST,
+                                enforce_recorded_contract=False,
+                            )
+                            if probe["status"] != "supported":
+                                if probe["status"] == "unsupported":
+                                    skip_reason = "cpu_contract_unsupported"
+                                elif probe["status"] == "pending":
+                                    skip_reason = "cpu_contract_pending"
+                                else:
+                                    skip_reason = "cpu_contract_unknown"
+                                detail = probe["detail"]
+                                dtype_manifest_skip = skip_reason in _DTYPE_CONTRACT_SKIP_REASONS
+                        elif not contract.allowed:
+                            skip_reason = contract.skip_reason
+                            detail = contract.detail
+                            dtype_manifest_skip = skip_reason in _DTYPE_CONTRACT_SKIP_REASONS
+                    else:
+                        skip_reason, detail = _dtype_contract_skip_for_surfaces(
+                            contract_surfaces,
+                            dt,
+                            input_condition=input_condition,
+                        )
+                        dtype_manifest_skip = skip_reason in _DTYPE_CONTRACT_SKIP_REASONS
+                break
+
+        # 2. src_dtype / dst_dtype check (e.g. test_copy_cast)
         if not skip_reason and hasattr(item, "callspec"):
             for dtype_param in ("src_dtype", "dst_dtype"):
                 if dtype_param in item.callspec.params:
@@ -1562,8 +1927,43 @@ def pytest_collection_modifyitems(session, config, items):
                         detail = disposition.detail
                         dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
                         break
+                    elif contract_surfaces:
+                        skip_reason, detail = _dtype_contract_skip_for_surfaces(contract_surfaces, dt)
+                        if skip_reason:
+                            dtype_manifest_skip = skip_reason in _DTYPE_CONTRACT_SKIP_REASONS
+                            break
 
-        # 5. CPU device cannot run cross-device or device-module tests
+        # 3. Fixed hardcoded dtype contract gates
+        if not skip_reason:
+            skip_reason, detail, skip_record_extra = _fixed_dtype_contract_skip_for_item(
+                item,
+                supported_dtypes,
+                op_name,
+            )
+            if skip_reason:
+                dtype_manifest_skip = skip_reason in (_DTYPE_MANIFEST_SKIP_REASONS | _DTYPE_CONTRACT_SKIP_REASONS)
+
+        # 4. Capability check
+        req_caps = get_required_capabilities(item)
+        missing_caps = [c for c in req_caps if not caps.get(c, False) and c != "multi_device"]
+        if not skip_reason and missing_caps:
+            skip_reason = "capability_not_declared"
+            detail = f"requires capabilities: {', '.join(missing_caps)}"
+        elif not skip_reason and "multi_device" in req_caps and device_count < 2:
+            skip_reason = "device_count"
+            declared = _MANIFEST.get("device_count", device_count)
+            detail = (
+                f"requires device_count>=2, runtime exposes {device_count}"
+                if declared == device_count
+                else f"requires device_count>=2, manifest declares {declared} but runtime exposes {device_count}"
+            )
+
+        # 5. Op exclusions
+        if not skip_reason and op_name and op_name in skip_ops:
+            skip_reason = "op_excluded"
+            detail = f"{op_name} is in skip_ops list"
+
+        # 6. CPU device cannot run cross-device or device-module tests
         if not skip_reason and _DEVICE_NAME == "cpu":
             filepath = str(item.fspath)
             test_name = item.name
@@ -1576,7 +1976,7 @@ def pytest_collection_modifyitems(session, config, items):
                 skip_reason = "cpu_not_applicable"
                 detail = "device module tests not applicable on CPU"
 
-        # 6. Device module availability check
+        # 7. Device module availability check
         if not skip_reason and hasattr(item, "callspec"):
             test_name = item.name
             if "test_device_module_methods" in test_name or "test_device_memory_query" in test_name:
@@ -1585,7 +1985,7 @@ def pytest_collection_modifyitems(session, config, items):
                     skip_reason = "no_device_module"
                     detail = f"No custom device module found for torch.{_DEVICE_NAME}"
 
-        # 7. set_device support check
+        # 8. set_device support check
         if not skip_reason:
             test_name = item.name
             if "test_set_device_context" in test_name:
@@ -1594,7 +1994,7 @@ def pytest_collection_modifyitems(session, config, items):
                     skip_reason = "set_device_not_supported"
                     detail = f"Device module for {_DEVICE_NAME} does not support set_device"
 
-        # 8. OOM recovery manifest check
+        # 9. OOM recovery manifest check
         if not skip_reason:
             test_name = item.name
             if "test_oom_recovery" in test_name:
@@ -1603,7 +2003,7 @@ def pytest_collection_modifyitems(session, config, items):
                     skip_reason = "oom_not_recoverable"
                     detail = "OOM recovery not marked as recoverable in manifest"
 
-        # 9. float64 required for gradcheck
+        # 10. float64 required for gradcheck
         if not skip_reason:
             test_name = item.name
             if "test_gradcheck" in test_name:
@@ -1618,14 +2018,18 @@ def pytest_collection_modifyitems(session, config, items):
                     skip_reason = disposition.skip_reason
                     detail = disposition.detail
                     dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
+                elif contract_surfaces:
+                    skip_reason, detail = _dtype_contract_skip_for_surfaces(contract_surfaces, torch.float64)
+                    if skip_reason:
+                        dtype_manifest_skip = skip_reason in _DTYPE_CONTRACT_SKIP_REASONS
 
-        # 10. MPS index_reduce NaN hang workaround
+        # 11. MPS index_reduce NaN hang workaround
         if not skip_reason and _DEVICE_NAME == "mps" and op_name == "index_reduce":
             if hasattr(item, "callspec") and item.callspec.params.get("input_condition") == "has_nan":
                 skip_reason = "framework_bug"
                 detail = "index_reduce hangs infinitely on MPS when input/destination contains NaN (CAS loop GPU thread deadlock)"
 
-        # 11. Semantic test level
+        # 12. Semantic test level
         if not skip_reason:
             try:
                 semantic = _semantic_level_for_item(item)
@@ -1649,9 +2053,11 @@ def pytest_collection_modifyitems(session, config, items):
                     )
 
         if skip_reason:
-            _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail)
+            _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail, skip_record_extra)
             if dtype_manifest_skip:
                 dtype_deselected_items.append(item)
+            elif skip_reason in _SEMANTIC_SELECTION_SKIP_REASONS:
+                selection_deselected_items.append(item)
             else:
                 item.add_marker(pytest.mark.skip(reason=detail))
                 keep_items.append(item)
@@ -1659,8 +2065,9 @@ def pytest_collection_modifyitems(session, config, items):
             keep_items.append(item)
 
     _merge_pending_manifest_skips(include_opinfo=config.getoption("--suite") in (None, "opinfo"))
-    if dtype_deselected_items:
-        config.hook.pytest_deselected(items=dtype_deselected_items)
+    deselected_items = dtype_deselected_items + selection_deselected_items
+    if deselected_items:
+        config.hook.pytest_deselected(items=deselected_items)
 
     known_segfault_descriptors = []
     if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:

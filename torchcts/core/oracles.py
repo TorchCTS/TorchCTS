@@ -1128,6 +1128,116 @@ def _privateuse1_attention_sample(device: str):
     }
 
 
+def _quantized_flash_attention_samples(device: str):
+    import torch.nn.functional as F
+
+    samples = []
+    for dtype in (torch.float16, torch.bfloat16):
+        torch.manual_seed(2026)
+        sdpa_query = torch.randn(1, 2, 8, 64, dtype=dtype)
+        sdpa_key = torch.randn(1, 2, 8, 64, dtype=dtype)
+        sdpa_value = torch.randn(1, 2, 8, 64, dtype=dtype)
+        flash_query = sdpa_query.transpose(1, 2).contiguous()
+        flash_key = sdpa_key.transpose(1, 2).contiguous()
+        flash_value = sdpa_value.transpose(1, 2).contiguous()
+
+        sdpa_expected = F.scaled_dot_product_attention(
+            sdpa_query,
+            sdpa_key,
+            sdpa_value,
+            dropout_p=0.0,
+            is_causal=False,
+        )
+        flash_expected = sdpa_expected.transpose(1, 2).contiguous()
+
+        samples.append({
+            "dtype": dtype,
+            "sdpa_query": sdpa_query.to(device),
+            "sdpa_key": sdpa_key.to(device),
+            "sdpa_value": sdpa_value.to(device),
+            "sdpa_expected": sdpa_expected,
+            "flash_query": flash_query.to(device),
+            "flash_key": flash_key.to(device),
+            "flash_value": flash_value.to(device),
+            "flash_expected": flash_expected,
+            "descale": torch.ones((1,), device=device, dtype=torch.float32),
+        })
+    return samples
+
+
+def _run_quantized_flash_attention(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+
+    def _check_quantized_forward(result, expected, label: str, expected_len: int) -> None:
+        if len(result) != expected_len:
+            raise AssertionError(f"{label} returned {len(result)} values, expected {expected_len}")
+        _assert_close_tensor(result[0], expected, label, rtol=2e-2, atol=2e-2)
+        logsumexp = result[1]
+        if tuple(logsumexp.shape) != (1, 2, 8):
+            raise AssertionError(f"{label} returned malformed logsumexp shape {tuple(logsumexp.shape)}")
+        if logsumexp.dtype != torch.float32:
+            raise AssertionError(f"{label} returned malformed logsumexp dtype {logsumexp.dtype}")
+        if not torch.isfinite(logsumexp.detach().cpu()).all().item():
+            raise AssertionError(f"{label} returned non-finite logsumexp for finite inputs")
+
+    try:
+        for sample in _quantized_flash_attention_samples(device):
+            dtype_label = str(sample["dtype"])
+
+            if spec.surface == "aten::_flash_attention_forward.quantized":
+                for descale_label, q_descale, k_descale, v_descale in (
+                    ("none", None, None, None),
+                    ("ones", sample["descale"], sample["descale"], sample["descale"]),
+                ):
+                    result = torch.ops.aten._flash_attention_forward.quantized(
+                        sample["flash_query"],
+                        sample["flash_key"],
+                        sample["flash_value"],
+                        None,
+                        None,
+                        8,
+                        8,
+                        0.0,
+                        False,
+                        False,
+                        q_descale,
+                        k_descale,
+                        v_descale,
+                    )
+                    label = f"{spec.surface}.{dtype_label}.{descale_label}"
+                    _check_quantized_forward(result, sample["flash_expected"], label, 5)
+                continue
+
+            if spec.surface == "aten::_scaled_dot_product_flash_attention.quantized":
+                for descale_label, q_descale, k_descale, v_descale in (
+                    ("none", None, None, None),
+                    ("ones", sample["descale"], sample["descale"], sample["descale"]),
+                ):
+                    result = torch.ops.aten._scaled_dot_product_flash_attention.quantized(
+                        sample["sdpa_query"],
+                        sample["sdpa_key"],
+                        sample["sdpa_value"],
+                        q_descale,
+                        k_descale,
+                        v_descale,
+                        0.0,
+                        False,
+                        False,
+                    )
+                    label = f"{spec.surface}.{dtype_label}.{descale_label}"
+                    _check_quantized_forward(result, sample["sdpa_expected"], label, 9)
+                continue
+
+            raise AssertionError(f"No quantized flash-attention implementation for {spec.surface}")
+    except Exception as exc:
+        message = str(exc)
+        if isinstance(exc, (NotImplementedError, RuntimeError)) and (
+            "Could not run" in message or "only available for these backends" in message
+        ):
+            raise OracleUnavailable(f"backend_not_available: {spec.surface}: {message.splitlines()[0]}") from exc
+        raise
+
+
 def _run_privateuse1_attention(spec: OracleSpec, device: str) -> None:
     _check_backend_gate(spec, device)
     sample = _privateuse1_attention_sample(device)
@@ -1950,6 +2060,7 @@ _RUNNERS: dict[str, Callable[[OracleSpec, str], None]] = {
     "nested_select_backward": _run_nested_select_backward,
     "sparse_constructor_property": _run_sparse_constructor_property,
     "cpu_flash_attention": _run_cpu_flash_attention,
+    "quantized_flash_attention": _run_quantized_flash_attention,
     "privateuse1_attention": _run_privateuse1_attention,
     "privateuse1_matmul_backward": _run_privateuse1_matmul_backward,
     "privateuse1_resize_output": _run_privateuse1_resize_output,
@@ -2210,6 +2321,21 @@ for _surface in (
         backend_gate="privateuse1",
         semantic_level=5,
         reason="PrivateUse1 attention internals are directly validated against public CPU scaled_dot_product_attention forward values and autograd gradients.",
+    ))
+
+for _surface in (
+    "aten::_flash_attention_forward.quantized",
+    "aten::_scaled_dot_product_flash_attention.quantized",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="quantized_flash_attention_public_sdpa",
+        coverage_status="covered_property",
+        coverage_kind="property",
+        runner="quantized_flash_attention",
+        backend_gate="any",
+        semantic_level=2,
+        reason="Quantized flash-attention dispatcher surfaces are validated against public CPU scaled_dot_product_attention for fp16 and bf16 identity-descale cases on any backend that implements the kernel.",
     ))
 
 _register(OracleSpec(

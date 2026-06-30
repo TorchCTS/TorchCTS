@@ -193,6 +193,8 @@ def test_make_per_channel_quantized_tensor(device):
 @pytest.mark.medium
 @pytest.mark.covers("aten::q_per_channel_scales.out")
 @pytest.mark.covers("aten::q_per_channel_zero_points.out")
+@pytest.mark.cpu_contract_dtype("aten::q_per_channel_scales.out", torch.float64)
+@pytest.mark.cpu_contract_dtype("aten::q_per_channel_zero_points.out", torch.int64)
 def test_quantized_per_channel_qparams_out(device):
     int_data = torch.randint(-128, 127, (4, 6), dtype=torch.int8, device=device)
     scales = torch.tensor([0.05, 0.10, 0.15, 0.20], dtype=torch.float64)
@@ -218,6 +220,8 @@ def test_quantized_per_channel_qparams_out(device):
 @pytest.mark.covers("aten::quantize_per_tensor.tensor_qparams_out")
 @pytest.mark.covers("aten::quantize_per_tensor_dynamic.out")
 @pytest.mark.covers("aten::quantize_per_channel.out")
+@pytest.mark.cpu_contract_dtype("aten::quantize_per_channel.out", torch.float64)
+@pytest.mark.cpu_contract_dtype("aten::quantize_per_channel.out", torch.int64)
 def test_quantize_out_variants(device, compare):
     x = torch.tensor([[-1.0, 0.0, 1.0], [2.0, 3.0, 4.0]], dtype=torch.float32, device=device)
     x_cpu = x.cpu()
@@ -281,6 +285,8 @@ def test_quantize_out_variants(device, compare):
 @pytest.mark.covers("aten::dequantize.self_out")
 @pytest.mark.covers("aten::dequantize.tensors")
 @pytest.mark.covers("aten::dequantize.tensors_out")
+@pytest.mark.cpu_contract_dtype("aten::quantize_per_tensor.tensors", torch.float32)
+@pytest.mark.cpu_contract_dtype("aten::quantize_per_tensor.tensors", torch.int64)
 def test_quantize_tensor_list_and_dequantize_out_variants(device, compare):
     tensors = [
         torch.tensor([[-1.0, 0.0, 1.0], [2.0, 3.0, 4.0]], dtype=torch.float32, device=device),
@@ -339,6 +345,8 @@ def test_quantize_tensor_list_and_dequantize_out_variants(device, compare):
 @pytest.mark.covers("aten::_make_per_channel_quantized_tensor.out")
 @pytest.mark.covers("aten::empty_quantized")
 @pytest.mark.covers("aten::empty_quantized.out")
+@pytest.mark.cpu_contract_dtype("aten::_make_per_channel_quantized_tensor.out", torch.float64)
+@pytest.mark.cpu_contract_dtype("aten::_make_per_channel_quantized_tensor.out", torch.int64)
 def test_make_quantized_out_and_empty_quantized(device):
     int_data = torch.arange(-6, 6, dtype=torch.int8, device=device).reshape(2, 6)
     int_cpu = int_data.cpu()
@@ -530,6 +538,8 @@ def test_fake_quantize_per_channel_affine(device, compare):
 @pytest.mark.covers("aten::_empty_affine_quantized.out")
 @pytest.mark.covers("aten::_empty_per_channel_affine_quantized")
 @pytest.mark.covers("aten::_empty_per_channel_affine_quantized.out")
+@pytest.mark.cpu_contract_dtype("aten::_empty_per_channel_affine_quantized", torch.float64)
+@pytest.mark.cpu_contract_dtype("aten::_empty_per_channel_affine_quantized", torch.int64)
 def test_empty_affine_quantized_dispatcher_variants(device):
     template_cpu = torch.quantize_per_tensor(torch.zeros(2, 3), 1.0, 0, torch.quint8)
     template = torch.quantize_per_tensor(torch.zeros(2, 3, device=device), 1.0, 0, torch.quint8)

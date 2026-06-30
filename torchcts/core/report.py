@@ -113,6 +113,11 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         "backend_not_available",
         "coverage_capability_disabled",
     }
+    contract_skip_reasons = {
+        "cpu_contract_unsupported",
+        "cpu_contract_unknown",
+        "cpu_contract_pending",
+    }
     runtime_skip_reasons = {
         "runtime_skip",
     }
@@ -120,12 +125,16 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         "dtype_not_supported",
         "dtype_regex_filtered",
         "dtype_not_listed",
+        "cpu_contract_unsupported",
+        "cpu_contract_unknown",
+        "cpu_contract_pending",
     }
 
     not_run_bucket_labels = {
         "manifest": "Ops not run (manifest)",
         "selection": "Ops not run (selection)",
         "coverage": "Ops not run (coverage)",
+        "contract": "Ops not run (CPU contract)",
         "runtime": "Ops not run (runtime)",
         "other": "Ops not run (other)",
     }
@@ -137,6 +146,8 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             return "selection"
         if reason in coverage_skip_reasons:
             return "coverage"
+        if reason in contract_skip_reasons:
+            return "contract"
         if reason in runtime_skip_reasons:
             return "runtime"
         return "other"
@@ -433,7 +444,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     summary_lines.append(f"  OpInfo ops discovered:     {total_ops_discovered}")
     summary_lines.append(f"  Ops tested (PASS):         {num_pass:<4} ({pct(num_pass)})")
     summary_lines.append(f"  Ops tested (FAIL):         {num_fail:<4} ({pct(num_fail)})")
-    for bucket in ("manifest", "selection", "coverage", "runtime"):
+    for bucket in ("manifest", "selection", "coverage", "contract", "runtime"):
         count = num_skips_by_bucket[bucket]
         summary_lines.append(f"  {not_run_bucket_labels[bucket]}: {count:<4} ({pct(count)})")
     other_count = num_skips_by_bucket["other"]

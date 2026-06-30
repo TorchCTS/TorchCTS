@@ -30,7 +30,7 @@ where = ["."]
 include = ["torchcts*"]
 
 [tool.setuptools.package-data]
-torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json"]
+torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json", "op_dtype_contracts.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]

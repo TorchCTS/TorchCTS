@@ -34,6 +34,7 @@ import torchcts.cli as cli_module
 import torchcts.core.comparer as comparer_module
 import torchcts.core.coverage as coverage_module
 import torchcts.core.device as device_module
+import torchcts.core.dtype_contracts as dtype_contracts
 import torchcts.core.opinfo_adapter as opinfo_adapter_module
 import torchcts.core.reference_oracles as reference_oracles
 import torchcts.core.runtime_evidence as runtime_evidence
@@ -149,6 +150,33 @@ def test_build_report_counts_opinfo_and_ignores_plumbing():
     assert "Ops skipped (unsupported)" not in scorecard
     assert "inference" in scorecard
     assert "2/3 passed" in scorecard
+
+
+def test_build_report_counts_cpu_contract_not_run_bucket():
+    current_data = {
+        "metadata": {
+            "device_name": "cpu",
+            "hardware_key": "cpu_test_1gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+        },
+        "results": {},
+        "skips": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[fake-torch.complex32-clean]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "skip_reason": "cpu_contract_unsupported",
+                "op": "fake",
+                "dtype": "torch.complex32",
+            },
+        },
+    }
+
+    scorecard, _ = build_report(current_data, include_skips=True)
+
+    assert "Ops not run (CPU contract): 1" in scorecard
 
 
 def test_flush_results_to_disk_is_disabled_for_dry_runs(tmp_path, monkeypatch):
@@ -852,6 +880,7 @@ def test_opinfo_backward_dtype_false_creates_structured_skip(monkeypatch):
 
 def test_opinfo_allowed_dtype_still_creates_executable_test(monkeypatch):
     import torch.testing._internal.common_methods_invocations as cmi
+    from torch.testing._internal.opinfo.core import SampleInput
 
     class FakeOp:
         name = "fake_manifest_allowed_op"
@@ -861,7 +890,14 @@ def test_opinfo_allowed_dtype_still_creates_executable_test(monkeypatch):
         supports_sparse = False
         supports_sparse_csr = False
 
+        def sample_inputs(self, device, dtype, requires_grad=False):
+            yield SampleInput(torch.ones(2, dtype=dtype, device=device))
+
+        def op(self, input):
+            return input + 1
+
     opinfo_adapter_module.clear_pending_manifest_skips()
+    opinfo_adapter_module._OPINFO_CPU_CONTRACT_CACHE.clear()
     monkeypatch.setattr(cmi, "op_db", [FakeOp()])
 
     tests = opinfo_adapter_module.get_forward_op_tests({
@@ -872,6 +908,139 @@ def test_opinfo_allowed_dtype_still_creates_executable_test(monkeypatch):
 
     assert tests == [("fake_manifest_allowed_op", "torch.float32", InputCondition.CLEAN)]
     assert skips == {}
+
+
+def test_opinfo_cpu_probe_records_source_expected_unsupported_mismatch():
+    from torch.testing._internal.opinfo.core import SampleInput
+
+    class FakeOp:
+        name = "fake_cpu_contract_op"
+        dtypes = (torch.complex32,)
+        backward_dtypes = ()
+        supports_autograd = False
+        supports_sparse = False
+        supports_sparse_csr = False
+
+        def sample_inputs(self, device, dtype, requires_grad=False):
+            yield SampleInput(torch.ones(2, dtype=dtype, device=device))
+
+        def op(self, input):
+            raise RuntimeError("not implemented for 'ComplexHalf'")
+
+    opinfo_adapter_module._OPINFO_CPU_CONTRACT_CACHE.clear()
+
+    disposition = opinfo_adapter_module.probe_opinfo_cpu_contract(FakeOp(), torch.complex32, phase="forward")
+
+    assert not disposition.allowed
+    assert disposition.status == dtype_contracts.CPU_UNSUPPORTED
+    assert disposition.source_expected == ("torch.complex32",)
+    assert disposition.mismatches == (
+        dtype_contracts.SOURCE_EXPECTED_BUT_CPU_UNSUPPORTED,
+    )
+
+
+def test_opinfo_explicit_cpu_contract_skip_is_structured(monkeypatch):
+    import torch.testing._internal.common_methods_invocations as cmi
+
+    class FakeOp:
+        name = "fake_explicit_cpu_contract_op"
+        dtypes = (torch.complex32,)
+        backward_dtypes = ()
+        supports_autograd = False
+        supports_sparse = False
+        supports_sparse_csr = False
+
+    def fake_contract_disposition(*args, **kwargs):
+        return dtype_contracts.ContractDisposition(
+            False,
+            dtype_contracts.CPU_UNSUPPORTED,
+            "cpu_contract_unsupported",
+            "explicit unsupported",
+            source_expected=("torch.complex32",),
+            mismatches=(dtype_contracts.SOURCE_EXPECTED_BUT_CPU_UNSUPPORTED,),
+        )
+
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    monkeypatch.setattr(cmi, "op_db", [FakeOp()])
+    monkeypatch.setattr(opinfo_adapter_module, "contract_disposition", fake_contract_disposition)
+
+    tests = opinfo_adapter_module.get_forward_op_tests({
+        "capabilities": {"ieee754": False},
+        "supported_dtypes": {torch.complex32: True},
+    })
+    skips = opinfo_adapter_module.consume_pending_manifest_skips()
+
+    assert tests == []
+    assert len(skips) == 1
+    record = next(iter(skips.values()))
+    assert record["skip_reason"] == "cpu_contract_unsupported"
+    assert record["cpu_contract_status"] == dtype_contracts.CPU_UNSUPPORTED
+    assert record["source_expected"] == ["torch.complex32"]
+    assert record["source_probe_mismatches"] == [
+        dtype_contracts.SOURCE_EXPECTED_BUT_CPU_UNSUPPORTED,
+    ]
+
+
+def test_cpu_supported_but_missing_from_source_is_recorded():
+    disposition = dtype_contracts.disposition_from_cpu_probe(
+        "aten::fake_missing_source",
+        torch.float32,
+        supported=True,
+    )
+
+    assert disposition.allowed
+    assert disposition.status == dtype_contracts.CPU_SUPPORTED
+    assert disposition.mismatches == (dtype_contracts.CPU_SUPPORTED_BUT_MISSING_FROM_SOURCE,)
+
+
+def test_dtype_contract_disposition_includes_per_dtype_probe_detail(monkeypatch):
+    monkeypatch.setattr(dtype_contracts.torch, "__version__", "2.12.1")
+    monkeypatch.setattr(
+        dtype_contracts,
+        "_op_contract_versions",
+        lambda _dispatcher_name: {
+            "2.12": {
+                "cpu_unsupported": {"forward:clean": ["torch.complex32"]},
+                "probe_details": {
+                    "forward:clean": {
+                        "torch.complex32": {
+                            "status": "unsupported",
+                            "detail": "clean CPU probe failed: unsupported ComplexHalf",
+                        }
+                    }
+                },
+            }
+        },
+    )
+
+    disposition = dtype_contracts.contract_disposition("aten::fake_contract", torch.complex32)
+
+    assert not disposition.allowed
+    assert disposition.status == dtype_contracts.CPU_UNSUPPORTED
+    assert disposition.detail == "clean CPU probe failed: unsupported ComplexHalf"
+
+
+def test_generated_cpu_contract_probe_honors_explicit_out_args_on_misbucketed_out_schema():
+    from torchcts.generated.generated_cases import GENERATED_CASES
+
+    entry = next(
+        candidate
+        for entries in GENERATED_CASES["cases_by_surface"].values()
+        for candidate in entries
+        if isinstance(candidate, dict) and candidate.get("name") == "aten::_aminmax.dim_out"
+    )
+
+    assert entry["surface_kind"] == "mutating_or_inplace"
+    assert any(arg.get("is_out") for arg in entry["args"])
+
+    result = generated_helpers.probe_generated_clean_cpu_contract(
+        entry,
+        torch.float32,
+        {},
+        enforce_recorded_contract=False,
+    )
+
+    assert result["status"] == "supported"
 
 
 def test_generic_backward_excludes_nondeterministic_oracles():
@@ -2311,6 +2480,107 @@ def test_collection_src_dst_and_gradcheck_dtype_false_are_structured_deselection
     assert harness._SESSION_SKIPS[gradcheck_item.nodeid]["skip_reason"] == "dtype_not_supported"
 
 
+def test_collection_fixed_dtype_contract_marker_is_structured_deselection(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    item = _CollectionItem(
+        "test_fixed_scale_tensor",
+        "torchcts/dtypes/test_fake.py",
+        markers={"cpu_contract_dtype": _Marker("aten::q_per_channel_scales.out", torch.float64)},
+        params={},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float64: False},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    record = harness._SESSION_SKIPS[item.nodeid]
+    assert record["skip_reason"] == "dtype_not_supported"
+    assert record["dtype"] == "torch.float64"
+    assert record["cpu_contract_fixed_dtype"] is True
+    assert record["cpu_contract_fixed_surface"] == "aten::q_per_channel_scales.out"
+
+
+def test_collection_fixed_dtype_contract_marker_allows_unrecorded_contract_when_manifest_true(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    item = _CollectionItem(
+        "test_fixed_scale_tensor",
+        "torchcts/dtypes/test_fake.py",
+        markers={"cpu_contract_dtype": _Marker("aten::q_per_channel_scales.out", torch.float64)},
+        params={},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float64: True},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == [item]
+    assert config.deselected == []
+    assert harness._SESSION_SKIPS == {}
+
+
+def test_collection_uses_probed_contract_before_source_only_overload(monkeypatch):
+    opinfo_adapter_module.clear_pending_manifest_skips()
+    assert harness._candidate_contract_surfaces("aten::add.Tensor") == ("aten::add",)
+    assert harness._candidate_contract_surfaces("aten::slice.Tensor") == ("aten::slice",)
+    assert harness._candidate_contract_surfaces("aten::_to_copy") == ("aten::to.dtype",)
+
+    item = _CollectionItem(
+        "test_add_tensor",
+        "torchcts/operators/test_fake.py",
+        markers={"covers": _Marker("aten::add.Tensor")},
+        params={"dtype": torch.float32},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float32: True},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 6)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 6))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == [item]
+    assert config.deselected == []
+    assert harness._SESSION_SKIPS == {}
+
+
 def test_semantic_level_selection_parses_exact_and_range():
     exact = normalize_level_selection(cli_level_exact=3)
     level_range = normalize_level_selection(cli_level_range="3:5")
@@ -2363,9 +2633,12 @@ def test_collection_filters_exact_semantic_level(monkeypatch):
     monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("exact", 3, 3))
 
     items = [level_2, level_3]
-    harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
 
-    assert items == [level_2, level_3]
+    assert items == [level_3]
+    assert config.deselected == [level_2]
+    assert level_2.added_markers == []
     assert level_2.nodeid in harness._SESSION_SKIPS
     assert level_3.nodeid not in harness._SESSION_SKIPS
     assert harness._SESSION_SKIPS[level_2.nodeid]["skip_reason"] == "semantic_level_out_of_range"
@@ -2403,9 +2676,13 @@ def test_collection_filters_semantic_level_range(monkeypatch):
     monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("range", 3, 4))
 
     items = [level_2, level_4, level_5]
-    harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
 
-    assert items == [level_2, level_4, level_5]
+    assert items == [level_4]
+    assert config.deselected == [level_2, level_5]
+    assert level_2.added_markers == []
+    assert level_5.added_markers == []
     assert level_2.nodeid in harness._SESSION_SKIPS
     assert level_4.nodeid not in harness._SESSION_SKIPS
     assert level_5.nodeid in harness._SESSION_SKIPS
@@ -2561,6 +2838,8 @@ def test_rng_and_device_generator_capabilities_filter_independently(monkeypatch)
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
     monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
 
     items = [rng_item, device_generator_item]
     harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
@@ -2592,6 +2871,8 @@ def test_rng_distribution_capability_filters_independently(monkeypatch):
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
     monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
 
     items = [item]
     harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
@@ -3652,15 +3933,18 @@ def test_generated_foreach_collection_is_dtype_parametrized():
     entry = {
         "name": "aten::_foreach_add.List",
         "base_name": "_foreach_add",
+        "overload": "List",
         "status": "covered_generated",
         "surface_kind": "functional_data",
         "semantic_level": 4,
         "generated": {
-            "strategy": {
-                "strategy": "manual_foreach",
-                "family": "binary",
-            }
-        },
+                "strategy": {
+                    "strategy": "manual_foreach",
+                    "family": "binary",
+                    "foreach_name": "add",
+                    "overload": "List",
+                }
+            },
     }
     manifest = {
         "supported_dtypes": {
@@ -3687,10 +3971,18 @@ def test_generated_foreach_collection_honors_cli_dtype_override():
     entry = {
         "name": "aten::_foreach_add.List",
         "base_name": "_foreach_add",
+        "overload": "List",
         "status": "covered_generated",
         "surface_kind": "functional_data",
         "semantic_level": 4,
-        "generated": {"strategy": {"strategy": "manual_foreach"}},
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "binary",
+                "foreach_name": "add",
+                "overload": "List",
+            }
+        },
     }
 
     manifest = {"supported_dtypes": {torch.float32: True}}
@@ -3852,6 +4144,7 @@ def test_coverage_audit_publishes_pending_review_metadata():
     review = coverage_module.build_pending_review_artifact(audit)
 
     flash = by_name["aten::_scaled_dot_product_flash_attention"]
+    raw_quantized_flash = by_name["aten::_flash_attention_forward.quantized"]
     quantized_flash = by_name["aten::_scaled_dot_product_flash_attention.quantized"]
     pin_memory = by_name["aten::_pin_memory"]
     fused_dropout = by_name["aten::_fused_dropout"]
@@ -3860,9 +4153,13 @@ def test_coverage_audit_publishes_pending_review_metadata():
     assert flash["status"] == "covered_property"
     assert flash["oracle"]["oracle_id"] == "privateuse1_attention_public_sdpa"
 
-    assert quantized_flash["status"] == "pending_property"
-    assert quantized_flash["pending_review"]["blocker_type"] == "needs_public_proxy_proof"
-    assert quantized_flash["pending_review"]["required_closure"] == "prove_public_proxy_or_add_direct_runner"
+    assert raw_quantized_flash["status"] == "covered_property"
+    assert raw_quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
+    assert raw_quantized_flash["oracle"]["backend_gate"] == "any"
+
+    assert quantized_flash["status"] == "covered_property"
+    assert quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
+    assert quantized_flash["oracle"]["backend_gate"] == "any"
 
     assert pin_memory["status"] == "covered_property"
     assert pin_memory["oracle"]["oracle_id"] == "privateuse1_pin_memory_noop"
