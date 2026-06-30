@@ -346,6 +346,51 @@ def _known_crash_stats() -> dict:
     }
 
 
+def _dtype_contract_stats() -> dict:
+    path = REPO_ROOT / "torchcts" / "op_dtype_contracts.json"
+    if not path.exists():
+        return {"exists": False}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    contracts = data.get("contracts") or {}
+    metadata = data.get("metadata") or {}
+    bucket_dtype_counts = Counter()
+    version_rule_counts = Counter()
+    source_condition_counts = Counter()
+    mismatch_counts = Counter()
+
+    for versions in contracts.values():
+        if not isinstance(versions, dict):
+            continue
+        for version_rule, entry in versions.items():
+            if not isinstance(entry, dict):
+                continue
+            version_rule_counts[str(version_rule)] += 1
+            for bucket in ("cpu_supported", "cpu_unsupported", "cpu_unknown", "cpu_pending", "oracle_supported"):
+                for dtypes in (entry.get(bucket) or {}).values():
+                    for dtype in dtypes or ():
+                        bucket_dtype_counts[f"{bucket}:{dtype}"] += 1
+            for condition, dtypes in (entry.get("source_expected") or {}).items():
+                source_condition_counts[str(condition)] += len(dtypes or ())
+            for mismatch in entry.get("source_probe_mismatches") or ():
+                if isinstance(mismatch, dict):
+                    mismatch_counts[mismatch.get("kind") or "unknown"] += 1
+                else:
+                    mismatch_counts[str(mismatch)] += 1
+
+    return {
+        "exists": True,
+        "metadata": metadata,
+        "contract_count": len(contracts),
+        "contract_counts": metadata.get("contract_counts") or {},
+        "last_run_probe_counts": metadata.get("last_run_probe_counts") or {},
+        "source_extraction": metadata.get("source_extraction") or {},
+        "version_rule_counts": version_rule_counts,
+        "bucket_dtype_counts": bucket_dtype_counts,
+        "source_condition_counts": source_condition_counts,
+        "mismatch_counts": mismatch_counts,
+    }
+
+
 def _append_counter_section(lines: list[str], title: str, counter: Counter, *, limit: int | None = None) -> None:
     lines.append(f"## {title}")
     lines.append("")
@@ -370,6 +415,7 @@ def _append_mapping_section(lines: list[str], title: str, mapping: dict, *, nume
 def render_markdown(*, audit: dict, collection: dict | None, include_collect: bool) -> str:
     coverage = _coverage_stats(audit)
     known_crashes = _known_crash_stats()
+    dtype_contracts = _dtype_contract_stats()
     collection_stats = _collection_stats(collection["nodes"]) if collection else None
     generated_depth = coverage["generated_case_depth"]
     now = _datetime.datetime.now(_datetime.timezone.utc).isoformat().replace("+00:00", "Z")
@@ -407,6 +453,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ["Generated semantic cases", generated_depth.get("generated_semantic_cases", 0)],
         ["Required generated semantic cases", generated_depth.get("required_generated_semantic_cases", 0)],
         ["Known crash isolation rules", known_crashes["count"]],
+        ["CPU dtype contract records", dtype_contracts.get("contract_count", "not found")],
     ]
     lines.append("## Headline Stats")
     lines.append("")
@@ -505,6 +552,37 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     _append_mapping_section(lines, "Generated Semantic Cases By Semantic Level", generated_depth.get("by_semantic_level", {}), numeric_keys=True)
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy", coverage["generated_strategy_counts"])
     _append_counter_section(lines, "Generated Covered Surfaces By Strategy Family", coverage["generated_family_counts"])
+
+    lines.append("## CPU Dtype Contract Stats")
+    lines.append("")
+    if dtype_contracts.get("exists"):
+        contract_counts = dtype_contracts["contract_counts"]
+        source_extraction = dtype_contracts["source_extraction"]
+        lines.extend(_table(
+            ["Metric", "Value"],
+            [
+                ["Contracted dispatcher entries", dtype_contracts["contract_count"]],
+                ["CPU-supported dtype cases", contract_counts.get("cpu_supported", 0)],
+                ["CPU-unsupported dtype cases", contract_counts.get("cpu_unsupported", 0)],
+                ["CPU-pending dtype cases", contract_counts.get("cpu_pending", 0)],
+                ["CPU-unknown dtype cases", contract_counts.get("cpu_unknown", 0)],
+                ["Oracle-supported dtype cases", contract_counts.get("oracle_supported", 0)],
+                ["Source-expected ops", contract_counts.get("source_expected_ops", 0)],
+                ["Source-expected dtype entries", contract_counts.get("source_expected_entries", 0)],
+                ["Source/probe mismatches", contract_counts.get("source_probe_mismatches", 0)],
+                ["Local PyTorch source available", source_extraction.get("pytorch_src_available", False)],
+                ["Local PyTorch ufunc source entries", source_extraction.get("pytorch_src_ufunc_inner_loop_seeded_ops", 0)],
+            ],
+        ))
+        lines.append("")
+        _append_mapping_section(lines, "CPU Dtype Contract Last Run Probe Counts", dtype_contracts["last_run_probe_counts"])
+        _append_counter_section(lines, "CPU Dtype Contract Version Rules", dtype_contracts["version_rule_counts"])
+        _append_counter_section(lines, "CPU Dtype Contract Buckets By Dtype", dtype_contracts["bucket_dtype_counts"])
+        _append_counter_section(lines, "CPU Dtype Contract Source Conditions", dtype_contracts["source_condition_counts"])
+        _append_counter_section(lines, "CPU Dtype Contract Source Probe Mismatches", dtype_contracts["mismatch_counts"])
+    else:
+        lines.append("No dtype contract artifact found.")
+        lines.append("")
 
     lines.append("## Marker And Source Coverage Stats")
     lines.append("")

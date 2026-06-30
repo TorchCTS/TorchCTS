@@ -5,19 +5,19 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-29T21:19:06.871433Z |
+| Generated at | 2026-06-30T04:15:51.876265Z |
 | TorchCTS version | 0.3.0 |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-29T21:18:47.183353Z |
+| Coverage audit timestamp | 2026-06-30T04:15:30.533835Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 19632 |
+| Pytest nodes collected | 18867 |
 | ATen overloads inventoried | 3225 |
 | Backend-relevant overloads | 3214 |
 | Covered backend-relevant overloads | 2938 |
@@ -29,25 +29,26 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Generated semantic cases | 1921 |
 | Required generated semantic cases | 1921 |
 | Known crash isolation rules | 10 |
+| CPU dtype contract records | 3053 |
 
 ## Pytest Collection Summary
 
 | Metric | Value |
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation` |
-| Node IDs parsed | 19632 |
-| Pytest summary count | 19632 |
-| Parameterized node IDs | 19206 |
-| Unparameterized node IDs | 426 |
+| Node IDs parsed | 18867 |
+| Pytest summary count | 18867 |
+| Parameterized node IDs | 18433 |
+| Unparameterized node IDs | 434 |
 
 ## Pytest Nodes By Suite
 
 | Name | Count |
 | --- | --- |
-| opinfo | 13104 |
-| generated | 5025 |
+| opinfo | 13098 |
+| generated | 4258 |
 | operators | 434 |
-| selftest | 345 |
+| selftest | 353 |
 | compiler | 144 |
 | dtypes | 135 |
 | workloads | 120 |
@@ -66,23 +67,23 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Name | Count |
 | --- | --- |
-| opinfo | 13104 |
-| generated | 5025 |
+| opinfo | 13098 |
+| generated | 4258 |
 | handwritten | 1158 |
-| selftest | 345 |
+| selftest | 353 |
 
 ## Pytest Nodes By File
 
 | Name | Count |
 | --- | --- |
-| torchcts/opinfo/test_opinfo_forward.py | 10583 |
-| torchcts/generated/test_foreach_fused.py | 2736 |
+| torchcts/opinfo/test_opinfo_forward.py | 10577 |
 | torchcts/opinfo/test_opinfo_backward.py | 2319 |
+| torchcts/generated/test_foreach_fused.py | 1969 |
 | torchcts/generated/test_out_variants.py | 898 |
 | torchcts/generated/test_functional_variants.py | 578 |
 | torchcts/generated/test_inplace_variants.py | 346 |
 | torchcts/generated/test_oracle_surfaces.py | 273 |
-| torchcts/selftest/test_harness_reporting.py | 205 |
+| torchcts/selftest/test_harness_reporting.py | 213 |
 | torchcts/opinfo/test_opinfo_errors.py | 202 |
 | torchcts/selftest/test_mps_triage.py | 109 |
 | torchcts/generated/test_view_aliases.py | 100 |
@@ -171,9 +172,9 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Name | Count |
 | --- | --- |
-| test_op_forward | 10583 |
-| test_generated_foreach_or_fused | 2736 |
+| test_op_forward | 10577 |
 | test_op_backward | 2319 |
+| test_generated_foreach_or_fused | 1969 |
 | test_generated_out_variant | 898 |
 | test_generated_functional_variant | 578 |
 | test_generated_inplace_variant | 346 |
@@ -251,9 +252,9 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Name | Count |
 | --- | --- |
-| opinfo::test_op_forward | 10583 |
-| generated::test_generated_foreach_or_fused | 2736 |
+| opinfo::test_op_forward | 10577 |
 | opinfo::test_op_backward | 2319 |
+| generated::test_generated_foreach_or_fused | 1969 |
 | generated::test_generated_out_variant | 898 |
 | generated::test_generated_functional_variant | 578 |
 | generated::test_generated_inplace_variant | 346 |
@@ -331,29 +332,29 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Name | Count |
 | --- | --- |
-| torch.float32 | 2394 |
-| torch.float64 | 2390 |
-| torch.float16 | 2016 |
-| torch.bfloat16 | 2012 |
-| torch.complex128 | 1521 |
-| torch.complex64 | 1521 |
-| torch.int64 | 656 |
-| torch.int32 | 645 |
-| torch.uint8 | 645 |
-| torch.int16 | 643 |
-| torch.int8 | 643 |
-| torch.bool | 553 |
+| torch.float32 | 2385 |
+| torch.float64 | 2375 |
+| torch.float16 | 2007 |
+| torch.bfloat16 | 2003 |
+| torch.complex128 | 1443 |
+| torch.complex64 | 1443 |
+| torch.int64 | 571 |
+| torch.int32 | 560 |
+| torch.uint8 | 560 |
+| torch.int16 | 558 |
+| torch.int8 | 558 |
+| torch.bool | 403 |
 | torch.ops | 22 |
 
 ## Visible Generated Level Tokens In Node IDs
 
 | Name | Count |
 | --- | --- |
-| L4 | 2873 |
-| L3 | 1043 |
+| L4 | 2214 |
+| L3 | 971 |
 | L1 | 422 |
 | L5 | 391 |
-| L2 | 283 |
+| L2 | 247 |
 | L6 | 19 |
 
 ## Dispatcher Coverage Summary
@@ -1400,6 +1401,104 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | view_as_complex | 1 |
 | vstack | 1 |
 | zeros_like | 1 |
+
+## CPU Dtype Contract Stats
+
+| Metric | Value |
+| --- | --- |
+| Contracted dispatcher entries | 3053 |
+| CPU-supported dtype cases | 22757 |
+| CPU-unsupported dtype cases | 7820 |
+| CPU-pending dtype cases | 787 |
+| CPU-unknown dtype cases | 0 |
+| Oracle-supported dtype cases | 0 |
+| Source-expected ops | 2104 |
+| Source-expected dtype entries | 34512 |
+| Source/probe mismatches | 8802 |
+| Local PyTorch source available | True |
+| Local PyTorch ufunc source entries | 1 |
+
+## CPU Dtype Contract Last Run Probe Counts
+
+| Name | Count |
+| --- | --- |
+| generated_pending | 787 |
+| generated_supported | 16254 |
+| generated_total | 24830 |
+| generated_unsupported | 7789 |
+| opinfo_backward_supported | 2656 |
+| opinfo_backward_total | 2663 |
+| opinfo_backward_unsupported | 7 |
+| opinfo_forward_supported | 5894 |
+| opinfo_forward_total | 5918 |
+| opinfo_forward_unsupported | 24 |
+| pytorch_src_ufunc_seeded_ops | 1 |
+| source_seeded_ops | 1795 |
+
+## CPU Dtype Contract Version Rules
+
+| Name | Count |
+| --- | --- |
+| 2.12 | 3053 |
+
+## CPU Dtype Contract Buckets By Dtype
+
+| Name | Count |
+| --- | --- |
+| cpu_supported:torch.float32 | 2717 |
+| cpu_supported:torch.float64 | 2700 |
+| cpu_supported:torch.float16 | 2256 |
+| cpu_supported:torch.bfloat16 | 2254 |
+| cpu_supported:torch.int64 | 1565 |
+| cpu_supported:torch.uint8 | 1564 |
+| cpu_supported:torch.complex128 | 1562 |
+| cpu_supported:torch.complex64 | 1560 |
+| cpu_supported:torch.int32 | 1547 |
+| cpu_supported:torch.int16 | 1545 |
+| cpu_supported:torch.int8 | 1545 |
+| cpu_unsupported:torch.complex32 | 1308 |
+| cpu_supported:torch.bool | 1223 |
+| cpu_unsupported:torch.complex64 | 880 |
+| cpu_unsupported:torch.complex128 | 878 |
+| cpu_unsupported:torch.bool | 861 |
+| cpu_supported:torch.complex32 | 719 |
+| cpu_unsupported:torch.int16 | 621 |
+| cpu_unsupported:torch.int32 | 621 |
+| cpu_unsupported:torch.int8 | 621 |
+| cpu_unsupported:torch.int64 | 614 |
+| cpu_unsupported:torch.uint8 | 592 |
+| cpu_unsupported:torch.bfloat16 | 339 |
+| cpu_unsupported:torch.float16 | 337 |
+| cpu_unsupported:torch.float64 | 78 |
+| cpu_unsupported:torch.float32 | 70 |
+| cpu_pending:torch.uint8 | 69 |
+| cpu_pending:torch.bool | 66 |
+| cpu_pending:torch.float64 | 66 |
+| cpu_pending:torch.bfloat16 | 62 |
+| cpu_pending:torch.float16 | 62 |
+| cpu_pending:torch.complex128 | 58 |
+| cpu_pending:torch.complex64 | 58 |
+| cpu_pending:torch.float32 | 58 |
+| cpu_pending:torch.int16 | 58 |
+| cpu_pending:torch.int32 | 58 |
+| cpu_pending:torch.int64 | 58 |
+| cpu_pending:torch.int8 | 58 |
+| cpu_pending:torch.complex32 | 56 |
+
+## CPU Dtype Contract Source Conditions
+
+| Name | Count |
+| --- | --- |
+| * | 19080 |
+| forward:* | 13018 |
+| backward:* | 2414 |
+
+## CPU Dtype Contract Source Probe Mismatches
+
+| Name | Count |
+| --- | --- |
+| cpu_supported_but_missing_from_source | 8332 |
+| source_expected_but_cpu_unsupported | 470 |
 
 ## Marker And Source Coverage Stats
 
