@@ -5,12 +5,12 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-30T04:58:01.658360Z |
+| Generated at | 2026-06-30T05:04:23.341325Z |
 | TorchCTS version | 0.3.0 |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-30T04:57:39.195351Z |
+| Coverage audit timestamp | 2026-06-30T05:04:01.508074Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
