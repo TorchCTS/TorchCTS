@@ -5,12 +5,12 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-30T05:04:23.341325Z |
-| TorchCTS version | 0.3.0 |
+| Generated at | 2026-06-30T05:25:24.437929Z |
+| TorchCTS version | 0.3.3 |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-30T05:04:01.508074Z |
+| Coverage audit timestamp | 2026-06-30T05:25:02.656148Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
@@ -20,10 +20,10 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Pytest nodes collected | 18868 |
 | ATen overloads inventoried | 3225 |
 | Backend-relevant overloads | 3214 |
-| Covered backend-relevant overloads | 2938 |
-| Dispatcher coverage | 91.4% |
+| Covered backend-relevant overloads | 2966 |
+| Dispatcher coverage | 92.3% |
 | Unknown tensor-touching surfaces | 0 |
-| Pending surfaces | 220 |
+| Pending surfaces | 192 |
 | Excluded surfaces | 56 |
 | Generated coverage surfaces | 1910 |
 | Generated semantic cases | 1921 |
@@ -363,9 +363,9 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | --- | --- |
 | ATen overloads | 3225 |
 | Backend-relevant overloads | 3214 |
-| Covered backend-relevant overloads | 2938 |
-| Coverage percent | 91.4% |
-| Pending surfaces | 220 |
+| Covered backend-relevant overloads | 2966 |
+| Coverage percent | 92.3% |
+| Pending surfaces | 192 |
 | Excluded surfaces | 56 |
 | Unknown surfaces | 0 |
 
@@ -377,10 +377,10 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | covered_handwritten | 710 |
 | covered_opinfo | 265 |
 | pending_backend_pack | 143 |
-| pending_property | 77 |
+| pending_property | 49 |
+| covered_property | 48 |
 | excluded_framework_plumbing | 32 |
 | covered_backend_pack | 20 |
-| covered_property | 20 |
 | excluded_unsupported_public_api | 16 |
 | covered_oracle | 13 |
 | not_backend_relevant | 11 |
@@ -453,9 +453,9 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | handwritten | 555 |
 | opinfo+generated | 302 |
 | opinfo | 265 |
-| exclusion+pending_review | 247 |
+| exclusion+pending_review | 219 |
+| oracle+exclusion | 80 |
 | opinfo+handwritten+generated | 66 |
-| oracle+exclusion | 52 |
 | handwritten+generated | 46 |
 | opinfo+handwritten | 43 |
 | oracle+exclusion+pending_review | 29 |
@@ -505,14 +505,14 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | covered_handwritten | 419 |
 | covered_opinfo | 265 |
 | covered_oracle | 10 |
-| covered_property | 4 |
+| covered_property | 17 |
 | excluded_deprecated_or_removed | 4 |
 | excluded_distributed_scope | 2 |
 | excluded_framework_plumbing | 20 |
 | excluded_host_storage | 1 |
 | excluded_unsupported_public_api | 1 |
 | pending_backend_pack | 55 |
-| pending_property | 20 |
+| pending_property | 7 |
 
 ### Level 3
 
@@ -522,12 +522,12 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | covered_generated | 713 |
 | covered_handwritten | 184 |
 | covered_oracle | 3 |
-| covered_property | 9 |
+| covered_property | 23 |
 | excluded_framework_plumbing | 11 |
 | excluded_host_storage | 1 |
 | excluded_unsupported_public_api | 13 |
 | pending_backend_pack | 65 |
-| pending_property | 43 |
+| pending_property | 29 |
 
 ### Level 4
 
@@ -536,10 +536,10 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | covered_backend_pack | 5 |
 | covered_generated | 264 |
 | covered_handwritten | 92 |
-| covered_property | 1 |
+| covered_property | 2 |
 | excluded_framework_plumbing | 1 |
 | pending_backend_pack | 14 |
-| pending_property | 7 |
+| pending_property | 6 |
 
 ### Level 5
 
@@ -1504,8 +1504,8 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 620 |
-| Category markers discovered | 755 |
+| Coverage markers discovered | 633 |
+| Category markers discovered | 768 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -1526,7 +1526,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Name | Count |
 | --- | --- |
-| selftest | 275 |
+| selftest | 288 |
 | operators | 187 |
 | workloads | 57 |
 | strides | 40 |
@@ -1549,16 +1549,16 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Name | Count |
 | --- | --- |
 | needs_backend_pack | 143 |
-| kernel_unavailable_in_host_build | 60 |
 | out_of_backend_conformance_scope | 56 |
-| needs_public_proxy_proof | 16 |
+| kernel_unavailable_in_host_build | 47 |
+| needs_public_proxy_proof | 1 |
 | needs_valid_internal_inputs | 1 |
 
 ## Pending Backend Gate Counts
 
 | Name | Count |
 | --- | --- |
-| any | 125 |
+| any | 97 |
 | cuda | 55 |
 | cpu_build | 40 |
 | rocm | 21 |
@@ -1572,23 +1572,22 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Name | Count |
 | --- | --- |
 | implement_backend_gated_runner | 143 |
-| validate_on_backend_build_or_keep_pending | 60 |
+| validate_on_backend_build_or_keep_pending | 47 |
 | none_dispatcher_plumbing | 32 |
-| prove_public_proxy_or_add_direct_runner | 16 |
 | none_unsupported_public_api | 16 |
 | none_deprecated_or_removed | 4 |
 | none_host_storage_only | 2 |
 | none_distributed_scope | 2 |
 | construct_valid_internal_inputs_and_property_runner | 1 |
+| prove_public_proxy_or_add_direct_runner | 1 |
 
 ## Pending Next Family Counts
 
 | Name | Count |
 | --- | --- |
 | backend_specific_internal | 119 |
-| cpu_reference_invalid | 61 |
+| cpu_reference_invalid | 48 |
 | dispatcher_plumbing | 32 |
-| covered_by_public_surface | 16 |
 | manual_future_scope | 12 |
 | philox_mps_rng | 8 |
 | semi_structured_sparse_backend_pack | 7 |
@@ -1599,18 +1598,19 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | wrapped_quantized_linear_backend_pack | 2 |
 | distributed_or_c10d | 2 |
 | int4_scales_zeros_meta | 1 |
+| covered_by_public_surface | 1 |
 
 ## Pending Source Category Counts
 
 | Name | Count |
 | --- | --- |
 | backend_specific_internal | 119 |
-| cpu_reference_invalid | 70 |
+| cpu_reference_invalid | 57 |
 | dispatcher_plumbing | 32 |
 | unsafe_direct_invocation | 25 |
-| covered_by_public_surface | 16 |
 | manual_future_scope | 12 |
 | distributed_or_c10d | 2 |
+| covered_by_public_surface | 1 |
 
 ## Exclusion Category Counts
 
