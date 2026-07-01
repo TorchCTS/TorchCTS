@@ -221,6 +221,17 @@ def _gate_matches_device(gate: str | None, device_type: str) -> bool:
     return False
 
 
+def _oracle_gate_can_run_on_device(gate: str | None, device: str) -> bool:
+    device_type = torch.device(device).type
+    if _gate_matches_device(gate, device_type):
+        return True
+    if gate in {"cpu_build", "fbgemm", "quantized"}:
+        return device_type == "cpu"
+    if gate == "rocm":
+        return device_type == "cuda" and bool(getattr(torch.version, "hip", None))
+    return False
+
+
 def _backend_gate_for_entry(entry: dict[str, Any], spec: OracleSpec | None) -> str | None:
     if spec is not None:
         return spec.backend_gate
@@ -304,6 +315,14 @@ def _oracle_result(surface: str, device: str, spec: OracleSpec | None, *, run_or
         return {"ok": None, "skipped": True, "reason": "no oracle spec registered"}
     if not run_oracles:
         return {"ok": None, "skipped": True, "reason": "oracle execution disabled"}
+    if spec.coverage_status.startswith("pending_") or spec.runner == "backend_property":
+        return {"ok": None, "skipped": True, "reason": "oracle runner not implemented"}
+    if not _oracle_gate_can_run_on_device(spec.backend_gate, device):
+        return {
+            "ok": None,
+            "skipped": True,
+            "reason": f"backend gate {spec.backend_gate!r} does not run on device {torch.device(device).type!r}",
+        }
     return _safe_call(run_oracle_for_surface, surface, device)
 
 

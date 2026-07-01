@@ -146,8 +146,8 @@ Accepted contract:
   input shape.
 - The mask is boolean-like (`torch.bool` or `torch.uint8`) and contains only
   zero/one values.
-- The output value is `input * mask * (1 / (1 - p))` for the valid nonzero
-  dropout probability used by the oracle.
+- The output value is `input * mask * (1 / p)` for the valid nonzero keep
+  probability used by the `_fused_dropout` oracle.
 - `_fused_dropout.out` returns the provided `out0` and `out1` tensors and obeys
   the same output/mask value contract.
 - `_fill_mem_eff_dropout_mask_` requires a contiguous CUDA `torch.float32`

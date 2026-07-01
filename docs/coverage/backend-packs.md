@@ -158,7 +158,9 @@ pending-review records, oracle metadata, dispatcher schemas, dispatcher tables,
 and current oracle results. Pending backend-pack rows that do not yet have an
 `OracleSpec` are still included from the coverage audit with schema, dispatch,
 exclusion, and pending-review evidence; their oracle result is recorded as
-skipped because no runner exists yet.
+skipped because no runner exists yet. Registered oracle specs are also skipped
+when the selected evidence device cannot run that backend gate, so an all-gates
+archive from a CUDA machine does not report MPS or CPU-only oracles as failures.
 
 Accepted backend-pack evidence records must include:
 
