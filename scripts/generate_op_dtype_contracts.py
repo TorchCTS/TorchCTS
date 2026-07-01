@@ -35,7 +35,7 @@ from torchcts.core.dtype_contracts import (
     dtype_to_contract_str,
     phase_condition_key,
 )
-from torchcts.op_metadata import load_op_metadata
+from torchcts.op_metadata import load_op_metadata, op_available_in_runtime
 
 
 CONTRACT_PATH = REPO_ROOT / "torchcts" / "op_dtype_contracts.json"
@@ -150,14 +150,15 @@ def _version_rule() -> str:
     return ".".join(parts[:2])
 
 
-def _load_contracts() -> dict:
-    if CONTRACT_PATH.exists():
-        return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+def _load_contracts(path: Path = CONTRACT_PATH) -> dict:
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
     return {"version": 1, "metadata": {}, "contracts": {}}
 
 
-def _write_contracts(data: dict) -> None:
-    CONTRACT_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def _write_contracts(data: dict, path: Path = CONTRACT_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _selected_dtypes(raw_values: list[str] | None) -> tuple[str, ...]:
@@ -434,6 +435,8 @@ def _opinfo_contract_in_scope(op, phase: str) -> bool:
 def _seed_source_metadata(data: dict, *, version_rule: str) -> int:
     count = 0
     for name, metadata in (load_op_metadata().get("ops") or {}).items():
+        if not op_available_in_runtime(name):
+            continue
         dtypes = [dtype_to_contract_str(dtype) for dtype in metadata.get("pytorch_dtypes", ()) or ()]
         dtypes = [dtype for dtype in dtypes if dtype]
         if not dtypes:
@@ -485,6 +488,8 @@ def _seed_pytorch_source_ufunc_metadata(data: dict, *, version_rule: str, pytorc
         dtypes = _source_dtypes_from_ufunc_loop(record.get("ufunc_inner_loop") or {})
         if not dispatcher_name or not dtypes:
             continue
+        if not op_available_in_runtime(dispatcher_name):
+            continue
         _set_source_expected(data, dispatcher_name, dtypes, version_rule=version_rule, phase=None)
         entry = _version_entry(data, dispatcher_name, version_rule)
         evidence = entry.setdefault("evidence", {})
@@ -520,6 +525,8 @@ def _iter_generated_entries():
             name = entry.get("name")
             strategy = (entry.get("generated") or {}).get("strategy") or {}
             if not name or not strategy or name in seen:
+                continue
+            if not op_available_in_runtime(name):
                 continue
             if entry.get("status") not in {"covered_generated", "unknown"}:
                 continue
@@ -726,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="suppress per-probe output")
     parser.add_argument("--summary-every", type=int, default=250, help="print progress every N probes when --quiet is set")
     parser.add_argument("--version-rule", default=_version_rule())
+    parser.add_argument("--out", type=Path, default=CONTRACT_PATH, help="contract output path")
     parser.add_argument(
         "--pytorch-src",
         default=str(REPO_ROOT.parent / "pytorch-src"),
@@ -739,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
     args.layer = layers
 
     selected_dtypes = _selected_dtypes(args.dtypes)
-    data = _load_contracts()
+    data = _load_contracts(args.out)
     counts: Counter = Counter()
 
     source_seed_count = 0
@@ -778,8 +786,8 @@ def main(argv: list[str] | None = None) -> int:
         source_seed_count=source_seed_count,
         ufunc_seed_count=ufunc_seed_count,
     )
-    _write_contracts(data)
-    print(f"Wrote {CONTRACT_PATH}")
+    _write_contracts(data, args.out)
+    print(f"Wrote {args.out}")
     for key, value in sorted(counts.items()):
         print(f"{key}: {value}")
     return 0

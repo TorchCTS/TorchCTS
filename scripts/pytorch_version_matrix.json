@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "source_url": "https://pytorch.org/get-started/previous-versions/",
+  "families": {
+    "cpu": {
+      "index_url": "https://download.pytorch.org/whl/cpu"
+    },
+    "cuda-cu118": {
+      "index_url": "https://download.pytorch.org/whl/cu118"
+    },
+    "cuda-cu126": {
+      "index_url": "https://download.pytorch.org/whl/cu126"
+    },
+    "cuda-cu128": {
+      "index_url": "https://download.pytorch.org/whl/cu128"
+    },
+    "default-macos": {
+      "index_url": ""
+    },
+    "rocm6.3": {
+      "index_url": "https://download.pytorch.org/whl/rocm6.3"
+    }
+  },
+  "selections": {
+    "torch-2.7-through-2.12-cpu": [
+      {
+        "version": "2.7.0",
+        "family": "cpu"
+      },
+      {
+        "version": "2.7.1",
+        "family": "cpu"
+      },
+      {
+        "version": "2.8.0",
+        "family": "cpu"
+      },
+      {
+        "alias": "latest:2.8",
+        "minor": "2.8",
+        "family": "cpu"
+      },
+      {
+        "version": "2.9.0",
+        "family": "cpu"
+      },
+      {
+        "version": "2.9.1",
+        "family": "cpu"
+      },
+      {
+        "alias": "latest:2.9",
+        "minor": "2.9",
+        "family": "cpu"
+      },
+      {
+        "version": "2.10.0",
+        "family": "cpu"
+      },
+      {
+        "alias": "latest:2.10",
+        "minor": "2.10",
+        "family": "cpu"
+      },
+      {
+        "version": "2.11.0",
+        "family": "cpu"
+      },
+      {
+        "alias": "latest:2.11",
+        "minor": "2.11",
+        "family": "cpu"
+      },
+      {
+        "version": "2.12.0",
+        "family": "cpu"
+      },
+      {
+        "alias": "latest:2.12",
+        "version": "2.12.1",
+        "family": "cpu"
+      }
+    ]
+  }
+}
