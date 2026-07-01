@@ -11,6 +11,7 @@ from __future__ import annotations
 from functools import lru_cache
 import json
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -23,11 +24,19 @@ from torchcts.core.pytorch_compat import (
 from torchcts.core.version_rules import parse_torch_version
 
 
+def _read_package_resource_text(resource_name: str) -> str:
+    try:
+        return resources.files("torchcts").joinpath(resource_name).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        module_adjacent = Path(__file__).with_name(resource_name)
+        return module_adjacent.read_text(encoding="utf-8")
+
+
 @lru_cache(maxsize=1)
 def load_op_metadata() -> dict:
     """Load TorchCTS-owned generic PyTorch op metadata."""
 
-    text = resources.files("torchcts").joinpath("op_metadata.json").read_text(encoding="utf-8")
+    text = _read_package_resource_text("op_metadata.json")
     return json.loads(text)
 
 

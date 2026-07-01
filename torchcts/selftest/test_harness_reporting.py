@@ -347,6 +347,7 @@ def test_declared_capability_probe_failure_is_diagnostic(tmp_path, monkeypatch, 
     monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
     monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
     monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+    monkeypatch.setattr(harness, "_SESSION_PROBE_RESULTS", [])
     monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
     monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
     monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
@@ -380,10 +381,47 @@ def test_declared_capability_probe_failure_is_diagnostic(tmp_path, monkeypatch, 
     assert records[0]["outcome"] == "failed"
     assert records[0]["returncode"] == 1
     assert "NYI: named tensors" in records[0]["stderr_tail"]
-    assert "tests will still run" in capsys.readouterr().err
+    assert "tests will still run" not in capsys.readouterr().err
     path = next(tmp_path.glob("unit_hw_harness_probe_failures_*.jsonl"))
     payload = json.loads(path.read_text(encoding="utf-8").strip())
     assert payload["name"] == "named_tensor"
+
+
+def test_declared_capability_probe_success_returns_pass_row(monkeypatch):
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
+    caps = {"named_tensor": True}
+
+    def fake_probe(device_name, capability):
+        return device_module.CapabilityProbeResult(
+            device_name=device_name,
+            capability=capability,
+            supported=True,
+            returncode=0,
+            stdout="SUCCESS\n",
+        )
+
+    records = harness._apply_declared_capability_probes(
+        caps,
+        "privateuseone",
+        probe_func=fake_probe,
+    )
+
+    assert records == [{
+        "probe_kind": "capability",
+        "name": "named_tensor",
+        "stage": "declared_capability_probe",
+        "declared": True,
+        "outcome": "passed",
+        "error_type": "",
+        "error_message": "",
+        "returncode": None,
+        "timed_out": False,
+        "stdout_tail": "",
+        "stderr_tail": "",
+        "command_args": [],
+    }]
+    assert harness._SESSION_PROBE_FAILURES == []
 
 
 def test_declared_dtype_probe_failure_is_diagnostic(tmp_path, monkeypatch, capsys):
@@ -394,6 +432,7 @@ def test_declared_dtype_probe_failure_is_diagnostic(tmp_path, monkeypatch, capsy
     monkeypatch.setenv("TORCHCTS_HARDWARE_KEY", "unit_hw")
     monkeypatch.setenv("TORCHCTS_DEVICE_NAME", "privateuseone")
     monkeypatch.setenv("TORCHCTS_PYTORCH_VERSION", "9.9.9")
+    monkeypatch.setattr(harness, "_SESSION_PROBE_RESULTS", [])
     monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
     monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
     monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
@@ -412,10 +451,216 @@ def test_declared_dtype_probe_failure_is_diagnostic(tmp_path, monkeypatch, capsy
     assert records[0]["declared"] is True
     assert records[0]["outcome"] == "failed"
     assert "value cannot be converted" in records[0]["error_message"]
-    assert "tests will still run" in capsys.readouterr().err
+    assert "tests will still run" not in capsys.readouterr().err
     path = next(tmp_path.glob("unit_hw_harness_probe_failures_*.jsonl"))
     payload = json.loads(path.read_text(encoding="utf-8").strip())
     assert payload["name"] == "torch.float32"
+
+
+def test_declared_dtype_probe_success_returns_pass_row(monkeypatch):
+    calls = []
+
+    def fake_zeros(*args, **kwargs):
+        calls.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
+    monkeypatch.setattr(harness.torch, "zeros", fake_zeros)
+
+    records = harness._apply_declared_dtype_probes({torch.float32: True}, "privateuseone")
+
+    assert len(calls) == 1
+    assert records == [{
+        "probe_kind": "dtype",
+        "name": "torch.float32",
+        "stage": "declared_dtype_probe",
+        "declared": True,
+        "outcome": "passed",
+        "error_type": "",
+        "error_message": "",
+        "returncode": None,
+        "timed_out": False,
+        "stdout_tail": "",
+        "stderr_tail": "",
+        "command_args": [],
+    }]
+    assert harness._SESSION_PROBE_FAILURES == []
+
+
+def test_probe_results_table_renders_mixed_pass_fail_and_artifact(monkeypatch):
+    monkeypatch.setattr(harness, "_RESULTS_DIR", "./results")
+    monkeypatch.setattr(harness, "_HARDWARE_KEY", "unit_hw")
+    records = [
+        harness._probe_result_record("dtype", "torch.float32", "declared_dtype_probe", "passed"),
+        harness._probe_result_record(
+            "capability",
+            "pinned_memory",
+            "declared_capability_probe",
+            "failed",
+            error_type="CapabilityProbeFailed",
+            error_message=(
+                "CUDA runtime error\n"
+                "CUDA kernel errors might be asynchronously reported at some other API call\n"
+                "For debugging consider passing CUDA_LAUNCH_BLOCKING=1"
+            ),
+        ),
+    ]
+
+    text = harness._format_probe_results_table(records, "cuda")
+
+    assert "TorchCTS diagnostic probes" in text
+    assert "Device: cuda" in text
+    assert "dtype" in text and "torch.float32" in text and "PASS" in text
+    assert "capability" in text and "pinned_memory" in text and "FAIL" in text
+    assert "CapabilityProbeFailed: CUDA runtime error" in text
+    assert "CUDA_LAUNCH_BLOCKING" not in text
+    assert "Summary: 1 passed, 1 failed" in text
+    assert "Full failure evidence: ./results/unit_hw_harness_probe_failures_" in text
+
+
+def test_probe_results_table_renders_all_pass_without_artifact(monkeypatch):
+    monkeypatch.setattr(harness, "_RESULTS_DIR", "./results")
+    monkeypatch.setattr(harness, "_HARDWARE_KEY", "unit_hw")
+
+    text = harness._format_probe_results_table(
+        [harness._probe_result_record("dtype", "torch.float32", "declared_dtype_probe", "passed")],
+        "cuda",
+    )
+
+    assert "torch.float32" in text
+    assert "PASS" in text
+    assert "Summary: 1 passed, 0 failed" in text
+    assert "Full failure evidence" not in text
+
+
+def test_probe_result_note_truncates_long_cuda_like_error():
+    record = harness._probe_result_record(
+        "dtype",
+        "torch.float32",
+        "declared_dtype_probe",
+        "failed",
+        error_type="AcceleratorError",
+        error_message=(
+            "AcceleratorError: " + ("x" * 200) + "\n"
+            "CUDA kernel errors might be asynchronously reported at some other API call"
+        ),
+    )
+
+    note = harness._probe_result_note(record)
+
+    assert len(note) <= 120
+    assert note.startswith("AcceleratorError: ")
+    assert "asynchronously reported" not in note
+
+
+def test_run_declared_diagnostic_probes_prints_one_table(monkeypatch, capsys):
+    dtype_row = harness._probe_result_record("dtype", "torch.float32", "declared_dtype_probe", "passed")
+    capability_row = harness._probe_result_record(
+        "capability",
+        "pinned_memory",
+        "declared_capability_probe",
+        "failed",
+        error_type="CapabilityProbeFailed",
+        error_message="pin_memory failed",
+    )
+    monkeypatch.setattr(harness, "_SESSION_PROBE_RESULTS", [])
+    monkeypatch.setattr(harness, "_IS_XDIST_WORKER", False)
+    monkeypatch.setattr(harness, "_apply_declared_dtype_probes", lambda *_args, **_kwargs: [dtype_row])
+    monkeypatch.setattr(harness, "_apply_declared_capability_probes", lambda *_args, **_kwargs: [capability_row])
+
+    records = harness._run_declared_diagnostic_probes({}, {}, "cuda", emit_table=True)
+
+    assert records == [dtype_row, capability_row]
+    assert harness._SESSION_PROBE_RESULTS == [dtype_row, capability_row]
+    err = capsys.readouterr().err
+    assert err.count("TorchCTS diagnostic probes") == 1
+    assert "Summary: 1 passed, 1 failed" in err
+
+
+def test_run_declared_diagnostic_probes_suppresses_table_in_xdist_worker(monkeypatch, capsys):
+    dtype_row = harness._probe_result_record("dtype", "torch.float32", "declared_dtype_probe", "passed")
+    monkeypatch.setattr(harness, "_SESSION_PROBE_RESULTS", [])
+    monkeypatch.setattr(harness, "_IS_XDIST_WORKER", True)
+    monkeypatch.setattr(harness, "_apply_declared_dtype_probes", lambda *_args, **_kwargs: [dtype_row])
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("capability probes should not run in xdist workers")
+
+    monkeypatch.setattr(harness, "_apply_declared_capability_probes", fail_if_called)
+
+    records = harness._run_declared_diagnostic_probes({}, {"named_tensor": True}, "cuda", emit_table=True)
+
+    assert records == [dtype_row]
+    assert capsys.readouterr().err == ""
+
+
+def test_declared_diagnostic_probe_enablement_suppresses_special_modes(monkeypatch):
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", False)
+    assert harness._declared_diagnostic_probes_enabled(False)
+    assert not harness._declared_diagnostic_probes_enabled(True)
+
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    assert not harness._declared_diagnostic_probes_enabled(False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", True)
+    assert not harness._declared_diagnostic_probes_enabled(False)
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", True)
+    assert not harness._declared_diagnostic_probes_enabled(False)
+
+
+def test_op_metadata_loader_falls_back_to_module_adjacent_resource(tmp_path, monkeypatch):
+    source_pkg = tmp_path / "source_pkg"
+    source_pkg.mkdir()
+    module_file = source_pkg / "op_metadata.py"
+    module_file.write_text("# synthetic module path\n", encoding="utf-8")
+    (source_pkg / "op_metadata.json").write_text(
+        json.dumps({"version": 2, "metadata": {"loaded": "module-adjacent"}, "ops": {}}),
+        encoding="utf-8",
+    )
+
+    missing_resource_root = tmp_path / "stale_site_packages" / "torchcts"
+    monkeypatch.setattr(op_metadata_module, "__file__", str(module_file))
+    monkeypatch.setattr(op_metadata_module.resources, "files", lambda _package: missing_resource_root)
+    op_metadata_module.load_op_metadata.cache_clear()
+    try:
+        metadata = op_metadata_module.load_op_metadata()
+    finally:
+        op_metadata_module.load_op_metadata.cache_clear()
+
+    assert metadata["metadata"]["loaded"] == "module-adjacent"
+
+
+def test_dtype_contract_loader_falls_back_to_module_adjacent_package_resource(tmp_path, monkeypatch):
+    source_pkg = tmp_path / "source_pkg"
+    core_dir = source_pkg / "core"
+    core_dir.mkdir(parents=True)
+    module_file = core_dir / "dtype_contracts.py"
+    module_file.write_text("# synthetic module path\n", encoding="utf-8")
+    (source_pkg / "op_dtype_contracts.json").write_text(
+        json.dumps({
+            "version": 2,
+            "format": "runtime_profile_ranges",
+            "metadata": {"loaded": "module-adjacent"},
+            "profiles": {},
+            "contracts": {},
+        }),
+        encoding="utf-8",
+    )
+
+    missing_resource_root = tmp_path / "stale_site_packages" / "torchcts"
+    monkeypatch.setattr(dtype_contracts, "__file__", str(module_file))
+    monkeypatch.setattr(dtype_contracts.resources, "files", lambda _package: missing_resource_root)
+    dtype_contracts.load_dtype_contracts.cache_clear()
+    try:
+        contracts = dtype_contracts.load_dtype_contracts()
+    finally:
+        dtype_contracts.load_dtype_contracts.cache_clear()
+
+    assert contracts["metadata"]["loaded"] == "module-adjacent"
 
 
 def test_atomic_json_dump_preserves_existing_file_on_failure(tmp_path):
@@ -551,6 +796,17 @@ def test_flush_results_includes_harness_probe_failures(tmp_path, monkeypatch):
     monkeypatch.setattr(harness, "_START_TIME", 0)
     monkeypatch.setattr(harness, "_SESSION_RESULTS", {})
     monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SESSION_PROBE_RESULTS", [
+        harness._probe_result_record("dtype", "torch.float32", "declared_dtype_probe", "passed"),
+        harness._probe_result_record(
+            "dtype",
+            "torch.float64",
+            "declared_dtype_probe",
+            "failed",
+            error_type="RuntimeError",
+            error_message="probe failed",
+        ),
+    ])
     monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [record])
     monkeypatch.setattr(harness, "_SESSION_COMPLETED", False)
     monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
@@ -561,6 +817,8 @@ def test_flush_results_includes_harness_probe_failures(tmp_path, monkeypatch):
 
     payload = json.loads((tmp_path / "unit_hw_latest.json").read_text(encoding="utf-8"))
     assert payload["metadata"]["harness_probe_failure_count"] == 1
+    assert payload["metadata"]["harness_probe_pass_count"] == 1
+    assert payload["metadata"]["harness_probe_total_count"] == 2
     assert payload["metadata"]["harness_probe_failure_artifact"].endswith(
         "unit_hw_harness_probe_failures_{}.jsonl".format(os.getpid())
     )
@@ -587,7 +845,11 @@ def test_merge_xdist_worker_files_dedupes_harness_probe_failures(tmp_path):
     latest = tmp_path / "unit_hw_latest.json"
     latest.write_text(
         json.dumps({
-            "metadata": {"elapsed_sec": 1.0},
+            "metadata": {
+                "elapsed_sec": 1.0,
+                "harness_probe_pass_count": 3,
+                "harness_probe_total_count": 4,
+            },
             "results": {},
             "skips": {},
             "harness_probe_failures": [base_record],
@@ -597,7 +859,11 @@ def test_merge_xdist_worker_files_dedupes_harness_probe_failures(tmp_path):
     worker = tmp_path / "unit_hw_latest.gw0.json"
     worker.write_text(
         json.dumps({
-            "metadata": {"elapsed_sec": 2.0},
+            "metadata": {
+                "elapsed_sec": 2.0,
+                "harness_probe_pass_count": 4,
+                "harness_probe_total_count": 6,
+            },
             "results": {"node": {"status": "PASS"}},
             "skips": {},
             "harness_probe_failures": [base_record, other_record],
@@ -609,6 +875,8 @@ def test_merge_xdist_worker_files_dedupes_harness_probe_failures(tmp_path):
 
     payload = json.loads(latest.read_text(encoding="utf-8"))
     assert payload["metadata"]["harness_probe_failure_count"] == 2
+    assert payload["metadata"]["harness_probe_pass_count"] == 4
+    assert payload["metadata"]["harness_probe_total_count"] == 6
     assert payload["harness_probe_failures"] == [base_record, other_record]
     assert payload["results"] == {"node": {"status": "PASS"}}
 

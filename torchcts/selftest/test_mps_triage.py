@@ -1344,6 +1344,40 @@ def test_harness_known_segfault_validation_rejects_stale_in_scope_rule():
         harness._validate_known_segfault_collection(config, [entry], [item])
 
 
+def test_harness_known_segfault_validation_warns_for_stale_normal_run(capsys):
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(
+                    match="dispatcher",
+                    nodeid=None,
+                    dispatcher="aten::missing.out",
+                    evidence_scope="constrained_metadata",
+                    constraints={"suite": ["generated"]},
+                )
+            ],
+        }
+    ])[0]
+    item = _generated_item(
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
+        _reflection_pad3d_out_entry(),
+    )
+    config = SimpleNamespace(args=["torchcts/generated"], getoption=lambda name: "generated")
+
+    descriptors = harness._validate_known_segfault_collection(
+        config,
+        [entry],
+        [item],
+        strict_stale=False,
+    )
+
+    assert descriptors[0]["canonical_nodeid"].endswith("reflection_pad3d.out[L3]]")
+    err = capsys.readouterr().err
+    assert "Warning: Known segfault ledger contains stale in-scope rule(s):" in err
+    assert "aten::missing.out" in err
+
+
 def test_harness_known_segfault_validation_ignores_dtype_excluded_rule():
     entry = known_segfaults.validate_known_segfaults([
         {
