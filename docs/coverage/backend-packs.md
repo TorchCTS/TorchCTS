@@ -142,6 +142,21 @@ python -m torchcts coverage evidence-pack \
 Use `--backend-gate all` or `--include-all-backend-packs` only when the archive
 should include every backend-pack row regardless of the current machine.
 
+Use `--run-pending-candidates` only for promotion work. It executes pending
+backend-pack specs that already have real runners, while generated conformance
+tests continue to skip `pending_backend_pack` rows. Combine it with
+`--require-oracle-results` and `--fail-on-oracle-failure` when collecting
+promotion evidence:
+
+```bash
+python -m torchcts coverage evidence-pack \
+  --device cuda \
+  --backend-gate cuda \
+  --run-pending-candidates \
+  --require-oracle-results \
+  --fail-on-oracle-failure
+```
+
 For a focused bundle, repeat `--surface` with exact dispatcher names:
 
 ```bash
@@ -172,6 +187,22 @@ Accepted backend-pack evidence records must include:
 - direct dispatcher surfaces exercised;
 - reference or property used;
 - result.
+
+## Feasibility Ledger
+
+`torchcts coverage audit` also writes a tracked backend-pack feasibility ledger
+to `docs/coverage/backend-pack-feasibility.json`. The ledger is generated from
+the live audit and oracle registry and assigns each backend-pack row to exactly
+one review bucket:
+
+- `promote_now`: already covered by an accepted contract, runner, and promotion
+  evidence;
+- `candidate_only`: contract accepted or candidate, real runner exists, but
+  matching backend evidence has not promoted it yet;
+- `blocked_contract`: no accepted source-derived contract;
+- `blocked_schema`: no safe exact dispatcher invocation path;
+- `blocked_hardware`: requires an unavailable backend/build;
+- `blocked_runtime`: known runtime blocker such as OOM or unsupported layout.
 
 Record accepted results in `contract-evidence.md` or another reviewed public
 evidence file. Do not record partial investigation logs in public docs.

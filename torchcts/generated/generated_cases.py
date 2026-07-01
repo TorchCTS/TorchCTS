@@ -760,8 +760,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::_nested_select_backward',
                                              'oracle': {'backend_gate': 'cpu',
+                                                        'contract_ref': '',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'property',
                                                         'oracle_id': 'nested_select_backward',
+                                                        'promotion_backend': 'cpu',
+                                                        'promotion_evidence': '',
                                                         'reason': 'Nested select backward is validated with real '
                                                                   'nested tensors against the public select-backward '
                                                                   'scatter semantics.',
@@ -1783,8 +1787,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::linear_backward',
                                              'oracle': {'backend_gate': 'mps',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#mps-autograd-backward-backend-pack',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'linear_backward',
+                                                        'promotion_backend': 'mps',
+                                                        'promotion_evidence': 'reviewed-local-mps-generated-autograd-backward-run-2026-06-29',
                                                         'reason': 'MPS linear backward is validated against public CPU '
                                                                   'linear autograd gradients and output_mask behavior.',
                                                         'runner': 'linear_backward'},
@@ -1904,8 +1912,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::lstm_mps_backward',
                                              'oracle': {'backend_gate': 'mps',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#mps-lstm-backend-pack',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mps_lstm_cpu_reference',
+                                                        'promotion_backend': 'mps',
+                                                        'promotion_evidence': 'reviewed-local-mps-lstm-backend-pack-run',
                                                         'reason': 'MPS LSTM helpers are validated against public LSTM '
                                                                   'forward and autograd backward references.',
                                                         'runner': 'mps_lstm'},
@@ -1969,8 +1981,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::matmul_backward',
                                              'oracle': {'backend_gate': 'privateuse1',
+                                                        'contract_ref': '',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'property',
                                                         'oracle_id': 'privateuse1_matmul_backward_formula',
+                                                        'promotion_backend': 'privateuse1',
+                                                        'promotion_evidence': '',
                                                         'reason': 'PrivateUse1 matmul_backward is validated against '
                                                                   'explicit matrix-gradient formulas and output_mask '
                                                                   'behavior.',
@@ -2042,8 +2058,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::max_pool2d_backward',
                                              'oracle': {'backend_gate': 'mps',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#mps-autograd-backward-backend-pack',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'max_pool2d_backward',
+                                                        'promotion_backend': 'mps',
+                                                        'promotion_evidence': 'reviewed-local-mps-generated-autograd-backward-run-2026-06-29',
                                                         'reason': 'MPS max-pool backward is validated against public '
                                                                   'CPU max_pool2d autograd gradients.',
                                                         'runner': 'max_pool2d_backward'},
@@ -2849,8 +2869,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::mps_convolution_backward',
                                              'oracle': {'backend_gate': 'mps',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mps_convolution_cpu_reference',
+                                                        'promotion_backend': 'mps',
+                                                        'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                         'reason': 'MPS convolution helpers are validated against CPU '
                                                                   'conv2d/conv_transpose2d forward and gradient '
                                                                   'references.',
@@ -2937,8 +2961,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'min_semantic_level': 4,
                                              'name': 'aten::mps_convolution_transpose_backward',
                                              'oracle': {'backend_gate': 'mps',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                        'contract_status': 'accepted',
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mps_convolution_cpu_reference',
+                                                        'promotion_backend': 'mps',
+                                                        'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                         'reason': 'MPS convolution helpers are validated against CPU '
                                                                   'conv2d/conv_transpose2d forward and gradient '
                                                                   'references.',
@@ -3231,8 +3259,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                    'min_semantic_level': 2,
                                    'name': 'aten::_empty_affine_quantized',
                                    'oracle': {'backend_gate': 'cpu',
+                                              'contract_ref': '',
+                                              'contract_status': 'accepted',
                                               'coverage_kind': 'oracle',
                                               'oracle_id': 'quantized_affine_allocation',
+                                              'promotion_backend': 'cpu',
+                                              'promotion_evidence': '',
                                               'reason': 'Internal affine quantized allocation is validated for shape, '
                                                         'dtype, qscheme, scale, and zero point.',
                                               'runner': 'quantized_allocation'},
@@ -6239,8 +6271,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_convert_weight_to_int4pack',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-tinygemm-int4-pack-and-matmul-helpers',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'int4_mps_pack',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': 'reviewed-local-mps-int4-backend-pack-run',
                                                       'reason': 'Generic MPS int4 packed-weight helpers are validated '
                                                                 'with TinyGEMM byte packing, per-group scale/zero '
                                                                 'dequantization, and CPU matmul reference values.',
@@ -6280,8 +6316,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_convert_weight_to_int4pack_for_cpu',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'int4_cpu_pack_value_oracle',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'CPU int4 packed-weight helpers are validated against '
                                                                 'a value oracle for scale-1 zero-0 dequantized matmul '
                                                                 'semantics.',
@@ -7551,8 +7591,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_dyn_quant_matmul_4bit',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'dynamic_int4_pack_matmul_value_oracle',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'CPU dynamic 4-bit pack/matmul helpers are validated '
                                                                 'by round-tripping opaque packed weights through a '
                                                                 'nibble-unpack, grouped-scale, bias-aware value '
@@ -7617,8 +7661,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_dyn_quant_pack_4bit_weight',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'dynamic_int4_pack_matmul_value_oracle',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'CPU dynamic 4-bit pack/matmul helpers are validated '
                                                                 'by round-tripping opaque packed weights through a '
                                                                 'nibble-unpack, grouped-scale, bias-aware value '
@@ -7731,8 +7779,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_efficient_attention_forward',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 attention internals are directly '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention forward values and '
@@ -8623,8 +8675,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_flash_attention_forward',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 attention internals are directly '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention forward values and '
@@ -8788,8 +8844,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_flash_attention_forward.quantized',
                                            'oracle': {'backend_gate': 'any',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'quantized_flash_attention_public_sdpa',
+                                                      'promotion_backend': 'any',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Quantized flash-attention dispatcher surfaces are '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention for fp16 and bf16 '
@@ -13022,8 +13082,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_fw_primal_copy',
                                            'oracle': {'backend_gate': 'any',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'forward_ad_inference_copy',
+                                                      'promotion_backend': 'any',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Forward-AD copy helpers are validated through their '
                                                                 'required inference-mode direct-call path for value '
                                                                 'copy, non-aliasing, inference tensor output, and out '
@@ -14067,8 +14131,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_lstm_mps',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-lstm-backend-pack',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mps_lstm_cpu_reference',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': 'reviewed-local-mps-lstm-backend-pack-run',
                                                       'reason': 'MPS LSTM helpers are validated against public LSTM '
                                                                 'forward and autograd backward references.',
                                                       'runner': 'mps_lstm'},
@@ -14119,8 +14187,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_make_dual_copy',
                                            'oracle': {'backend_gate': 'any',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'forward_ad_inference_copy',
+                                                      'promotion_backend': 'any',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Forward-AD copy helpers are validated through their '
                                                                 'required inference-mode direct-call path for value '
                                                                 'copy, non-aliasing, inference tensor output, and out '
@@ -14376,8 +14448,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_mps_convolution',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mps_convolution_cpu_reference',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                       'reason': 'MPS convolution helpers are validated against CPU '
                                                                 'conv2d/conv_transpose2d forward and gradient '
                                                                 'references.',
@@ -14989,10 +15065,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_philox_key_fold_in',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'philox_mps_rng',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build and need an MPS backend-pack oracle.',
+                                                                'build, but local MPS 2.12.1 probing reports runtime '
+                                                                'unsupported CPU fallback for direct dispatcher calls; '
+                                                                'promotion needs runtime support plus a source-derived '
+                                                                'RNG contract.',
                                                       'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -15040,10 +15123,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_philox_normal',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'philox_mps_rng',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build and need an MPS backend-pack oracle.',
+                                                                'build, but local MPS 2.12.1 probing reports runtime '
+                                                                'unsupported CPU fallback for direct dispatcher calls; '
+                                                                'promotion needs runtime support plus a source-derived '
+                                                                'RNG contract.',
                                                       'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -15092,10 +15182,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_philox_uniform',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'philox_mps_rng',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build and need an MPS backend-pack oracle.',
+                                                                'build, but local MPS 2.12.1 probing reports runtime '
+                                                                'unsupported CPU fallback for direct dispatcher calls; '
+                                                                'promotion needs runtime support plus a source-derived '
+                                                                'RNG contract.',
                                                       'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -15131,8 +15228,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_pin_memory',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_pin_memory_noop',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 pinned-memory surfaces are validated as '
                                                                 'device-preserving value-copy no-ops; no host-pinned '
                                                                 'allocator semantics are claimed.',
@@ -15207,8 +15308,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_resize_output',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_resize_output_property',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 resize-output helpers are validated for '
                                                                 'device-preserving shape mutation and in-place return '
                                                                 'identity.',
@@ -15407,8 +15512,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_attention_math_for_mps',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-sdpa-math-backend-pack',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mps_sdpa_math_public_reference',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': 'reviewed-local-mps-sdpa-backend-pack-run',
                                                       'reason': 'MPS SDPA math helper is validated against public '
                                                                 'scaled_dot_product_attention output.',
                                                       'runner': 'mps_sdpa_math'},
@@ -15595,8 +15704,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_efficient_attention',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 attention internals are directly '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention forward values and '
@@ -15683,8 +15796,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_flash_attention',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 attention internals are directly '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention forward values and '
@@ -15805,8 +15922,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_flash_attention.quantized',
                                            'oracle': {'backend_gate': 'any',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'quantized_flash_attention_public_sdpa',
+                                                      'promotion_backend': 'any',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Quantized flash-attention dispatcher surfaces are '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention for fp16 and bf16 '
@@ -15911,8 +16032,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_flash_attention_for_cpu',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-flash-attention-backend-pack',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cpu_flash_attention_public_sdpa',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'torchcts/selftest/test_harness_reporting.py::test_oracle_runner_executes_cpu_oracle_surfaces',
                                                       'reason': 'CPU flash-attention helper is validated against '
                                                                 'public CPU scaled_dot_product_attention '
                                                                 'forward/backward.',
@@ -15996,8 +16121,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_fused_attention_overrideable',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 attention internals are directly '
                                                                 'validated against public CPU '
                                                                 'scaled_dot_product_attention forward values and '
@@ -16406,8 +16535,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_sobol_engine_draw',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'sobol_engine_state',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Sobol dispatcher helpers are validated against '
                                                                 'SobolEngine state protocol and exact low-dimensional '
                                                                 'sequences.',
@@ -16669,8 +16802,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_thnn_fused_gru_cell',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_thnn_cell_formula',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 fused THNN GRU/LSTM forward cells are '
                                                                 'validated against explicit gate formulas and '
                                                                 'workspace shape contracts.',
@@ -16729,8 +16866,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_thnn_fused_lstm_cell',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_thnn_cell_formula',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 fused THNN GRU/LSTM forward cells are '
                                                                 'validated against explicit gate formulas and '
                                                                 'workspace shape contracts.',
@@ -16967,8 +17108,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_unsafe_index.Tensor',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'unsafe_valid_input_semantics',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Unsafe helpers are validated only for valid inputs '
                                                                 'against public-equivalent view/index/split semantics.',
                                                       'runner': 'unsafe_property'},
@@ -17017,8 +17162,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_unsafe_index_put',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'unsafe_valid_input_semantics',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Unsafe helpers are validated only for valid inputs '
                                                                 'against public-equivalent view/index/split semantics.',
                                                       'runner': 'unsafe_property'},
@@ -18146,8 +18295,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_weight_int4pack_mm',
                                            'oracle': {'backend_gate': 'mps',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#mps-tinygemm-int4-pack-and-matmul-helpers',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'int4_mps_pack',
+                                                      'promotion_backend': 'mps',
+                                                      'promotion_evidence': 'reviewed-local-mps-int4-backend-pack-run',
                                                       'reason': 'Generic MPS int4 packed-weight helpers are validated '
                                                                 'with TinyGEMM byte packing, per-group scale/zero '
                                                                 'dequantization, and CPU matmul reference values.',
@@ -18198,8 +18351,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_weight_int4pack_mm_for_cpu',
                                            'oracle': {'backend_gate': 'cpu',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'int4_cpu_pack_value_oracle',
+                                                      'promotion_backend': 'cpu',
+                                                      'promotion_evidence': '',
                                                       'reason': 'CPU int4 packed-weight helpers are validated against '
                                                                 'a value oracle for scale-1 zero-0 dequantized matmul '
                                                                 'semantics.',
@@ -18257,8 +18414,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_weight_int4pack_mm_with_scales_and_zeros',
                                            'oracle': {'backend_gate': 'any',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'int4_scales_zeros_meta',
+                                                      'promotion_backend': 'any',
+                                                      'promotion_evidence': '',
                                                       'reason': 'This PyTorch build exposes only metadata coverage for '
                                                                 'the explicit scale/zero int4 matmul surface.',
                                                       'runner': 'backend_property'},
@@ -18310,8 +18471,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_wrapped_linear_prepack',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'wrapped_quantized_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Wrapped quantized linear internals depend on FBGEMM '
                                                                 'packed-weight state and need an FBGEMM backend-pack '
                                                                 'oracle.',
@@ -18381,8 +18546,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_wrapped_quantized_linear_prepacked',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'wrapped_quantized_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Wrapped quantized linear internals depend on FBGEMM '
                                                                 'packed-weight state and need an FBGEMM backend-pack '
                                                                 'oracle.',
@@ -19870,8 +20039,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::batch_norm_elemt',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_batch_norm_forward_formula',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 batch-norm forward helpers are validated '
                                                                 'against explicit per-channel mean, invstd, and '
                                                                 'normalization formulas.',
@@ -20054,8 +20227,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::batch_norm_stats',
                                            'oracle': {'backend_gate': 'privateuse1',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'property',
                                                       'oracle_id': 'privateuse1_batch_norm_forward_formula',
+                                                      'promotion_backend': 'privateuse1',
+                                                      'promotion_evidence': '',
                                                       'reason': 'PrivateUse1 batch-norm forward helpers are validated '
                                                                 'against explicit per-channel mean, invstd, and '
                                                                 'normalization formulas.',
@@ -38749,8 +38926,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_gru.data',
                                            'oracle': {'backend_gate': 'quantized',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'quantized_dynamic_rnn',
+                                                      'promotion_backend': 'quantized',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Modern quantized RNN dispatcher surfaces are driven '
                                                                 'with PyTorch-created CellParamsBase objects.',
                                                       'runner': 'quantized_rnn'},
@@ -38833,8 +39014,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_gru.input',
                                            'oracle': {'backend_gate': 'quantized',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'quantized_dynamic_rnn',
+                                                      'promotion_backend': 'quantized',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Modern quantized RNN dispatcher surfaces are driven '
                                                                 'with PyTorch-created CellParamsBase objects.',
                                                       'runner': 'quantized_rnn'},
@@ -38948,8 +39133,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_gru_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Static quantized cell schemas require legacy '
                                                                 'tensor-packed FBGEMM invariants.',
                                                       'runner': 'backend_property'},
@@ -39045,8 +39234,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_lstm.data',
                                            'oracle': {'backend_gate': 'quantized',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'quantized_dynamic_rnn',
+                                                      'promotion_backend': 'quantized',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Modern quantized RNN dispatcher surfaces are driven '
                                                                 'with PyTorch-created CellParamsBase objects.',
                                                       'runner': 'quantized_rnn'},
@@ -39144,8 +39337,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_lstm.input',
                                            'oracle': {'backend_gate': 'quantized',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'accepted',
                                                       'coverage_kind': 'oracle',
                                                       'oracle_id': 'quantized_dynamic_rnn',
+                                                      'promotion_backend': 'quantized',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Modern quantized RNN dispatcher surfaces are driven '
                                                                 'with PyTorch-created CellParamsBase objects.',
                                                       'runner': 'quantized_rnn'},
@@ -39261,8 +39458,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_lstm_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Static quantized cell schemas require legacy '
                                                                 'tensor-packed FBGEMM invariants.',
                                                       'runner': 'backend_property'},
@@ -39377,8 +39578,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_rnn_relu_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Static quantized cell schemas require legacy '
                                                                 'tensor-packed FBGEMM invariants.',
                                                       'runner': 'backend_property'},
@@ -39492,8 +39697,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_rnn_tanh_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': '',
+                                                      'contract_status': 'blocked',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
                                                       'reason': 'Static quantized cell schemas require legacy '
                                                                 'tensor-packed FBGEMM invariants.',
                                                       'runner': 'backend_property'},
@@ -50443,8 +50652,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_bsc_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50520,8 +50733,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_bsr_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50598,8 +50815,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_compressed_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50675,8 +50896,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_coo_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50752,8 +50977,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_csc_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50829,8 +51058,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_csr_tensor_unsafe',
                                           'oracle': {'backend_gate': 'cpu',
+                                                     'contract_ref': '',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'property',
                                                      'oracle_id': 'sparse_unsafe_valid_constructor',
+                                                     'promotion_backend': 'cpu',
+                                                     'promotion_evidence': '',
                                                      'reason': 'Unsafe sparse constructors are validated only with '
                                                                'invariant-preserving indices, values, layouts, and '
                                                                'sizes.',
@@ -50902,13 +51135,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_addmm',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
+                                                     'contract_status': 'candidate',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
+                                                               'internals are candidate-covered by a CUDA '
+                                                               'direct-dispatch runner using PyTorch-created 2:4 '
+                                                               'compressed values and dense references; promotion '
+                                                               'requires matching CUDA evidence.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                           'schema': 'aten::_sparse_semi_structured_addmm(Tensor input, Tensor mat1, '
@@ -50945,12 +51183,15 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_apply',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
+                                                     'contract_status': 'blocked',
                                                      'coverage_kind': 'backend_pack',
-                                                     'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
+                                                     'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
+                                                               'reviewed thread-mask contract before TorchCTS can '
+                                                               'build a meaningful direct dispatcher runner.',
                                                      'runner': 'backend_property'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -50988,12 +51229,15 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_apply_dense',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
+                                                     'contract_status': 'blocked',
                                                      'coverage_kind': 'backend_pack',
-                                                     'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
+                                                     'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
+                                                               'reviewed thread-mask contract before TorchCTS can '
+                                                               'build a meaningful direct dispatcher runner.',
                                                      'runner': 'backend_property'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -51054,13 +51298,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_linear',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
+                                                     'contract_status': 'candidate',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
+                                                               'internals are candidate-covered by a CUDA '
+                                                               'direct-dispatch runner using PyTorch-created 2:4 '
+                                                               'compressed values and dense references; promotion '
+                                                               'requires matching CUDA evidence.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                           'schema': 'aten::_sparse_semi_structured_linear(Tensor input, Tensor weight, '
@@ -51109,13 +51358,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_mm',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
+                                                     'contract_status': 'candidate',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
+                                                               'internals are candidate-covered by a CUDA '
+                                                               'direct-dispatch runner using PyTorch-created 2:4 '
+                                                               'compressed values and dense references; promotion '
+                                                               'requires matching CUDA evidence.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                           'schema': 'aten::_sparse_semi_structured_mm(Tensor mat1, Tensor mat1_meta, '
@@ -51157,12 +51411,15 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_sparse_semi_structured_tile',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
+                                                     'contract_status': 'blocked',
                                                      'coverage_kind': 'backend_pack',
-                                                     'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
+                                                     'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
+                                                               'reviewed thread-mask contract before TorchCTS can '
+                                                               'build a meaningful direct dispatcher runner.',
                                                      'runner': 'backend_property'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -51197,13 +51454,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'min_semantic_level': 5,
                                           'name': 'aten::_to_sparse_semi_structured',
                                           'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
+                                                     'contract_status': 'candidate',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
-                                                     'reason': 'Semi-structured sparse internals require encoded '
-                                                               'metadata and accelerator-specific kernels, so they '
-                                                               'need a CUDA backend-pack oracle instead of generic CPU '
-                                                               'direct invocation.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': '',
+                                                     'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
+                                                               'internals are candidate-covered by a CUDA '
+                                                               'direct-dispatch runner using PyTorch-created 2:4 '
+                                                               'compressed values and dense references; promotion '
+                                                               'requires matching CUDA evidence.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                       {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -52464,8 +52726,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_fill_mem_eff_dropout_mask_',
                                                'oracle': {'backend_gate': 'cuda',
+                                                          'contract_ref': 'docs/coverage/contract-evidence.md#cuda-fused-dropout-backend-pack',
+                                                          'contract_status': 'accepted',
                                                           'coverage_kind': 'backend_pack',
                                                           'oracle_id': 'fused_dropout_backend_pack',
+                                                          'promotion_backend': 'cuda',
+                                                          'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                                           'reason': 'CUDA fused-dropout internals are validated with '
                                                                     'direct dispatcher calls for mask/output '
                                                                     'contracts, out identity, and memory-efficient '
@@ -57074,10 +57340,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_philox_normal_',
                                                'oracle': {'backend_gate': 'mps',
+                                                          'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                          'contract_status': 'blocked',
                                                           'coverage_kind': 'backend_pack',
                                                           'oracle_id': 'philox_mps_rng',
+                                                          'promotion_backend': 'mps',
+                                                          'promotion_evidence': '',
                                                           'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                    'build and need an MPS backend-pack oracle.',
+                                                                    'build, but local MPS 2.12.1 probing reports '
+                                                                    'runtime unsupported CPU fallback for direct '
+                                                                    'dispatcher calls; promotion needs runtime support '
+                                                                    'plus a source-derived RNG contract.',
                                                           'runner': 'backend_property'},
                                                'overload': '',
                                                'returns': [{'alias': {'is_write': True},
@@ -57131,10 +57404,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_philox_uniform_',
                                                'oracle': {'backend_gate': 'mps',
+                                                          'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                          'contract_status': 'blocked',
                                                           'coverage_kind': 'backend_pack',
                                                           'oracle_id': 'philox_mps_rng',
+                                                          'promotion_backend': 'mps',
+                                                          'promotion_evidence': '',
                                                           'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                    'build and need an MPS backend-pack oracle.',
+                                                                    'build, but local MPS 2.12.1 probing reports '
+                                                                    'runtime unsupported CPU fallback for direct '
+                                                                    'dispatcher calls; promotion needs runtime support '
+                                                                    'plus a source-derived RNG contract.',
                                                           'runner': 'backend_property'},
                                                'overload': '',
                                                'returns': [{'alias': {'is_write': True},
@@ -57180,8 +57460,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_resize_output_',
                                                'oracle': {'backend_gate': 'privateuse1',
+                                                          'contract_ref': '',
+                                                          'contract_status': 'accepted',
                                                           'coverage_kind': 'property',
                                                           'oracle_id': 'privateuse1_resize_output_property',
+                                                          'promotion_backend': 'privateuse1',
+                                                          'promotion_evidence': '',
                                                           'reason': 'PrivateUse1 resize-output helpers are validated '
                                                                     'for device-preserving shape mutation and in-place '
                                                                     'return identity.',
@@ -57337,8 +57621,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_sobol_engine_ff_',
                                                'oracle': {'backend_gate': 'cpu',
+                                                          'contract_ref': '',
+                                                          'contract_status': 'accepted',
                                                           'coverage_kind': 'oracle',
                                                           'oracle_id': 'sobol_engine_state',
+                                                          'promotion_backend': 'cpu',
+                                                          'promotion_evidence': '',
                                                           'reason': 'Sobol dispatcher helpers are validated against '
                                                                     'SobolEngine state protocol and exact '
                                                                     'low-dimensional sequences.',
@@ -57382,8 +57670,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_sobol_engine_initialize_state_',
                                                'oracle': {'backend_gate': 'cpu',
+                                                          'contract_ref': '',
+                                                          'contract_status': 'accepted',
                                                           'coverage_kind': 'oracle',
                                                           'oracle_id': 'sobol_engine_state',
+                                                          'promotion_backend': 'cpu',
+                                                          'promotion_evidence': '',
                                                           'reason': 'Sobol dispatcher helpers are validated against '
                                                                     'SobolEngine state protocol and exact '
                                                                     'low-dimensional sequences.',
@@ -57433,8 +57725,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'min_semantic_level': 3,
                                                'name': 'aten::_sobol_engine_scramble_',
                                                'oracle': {'backend_gate': 'cpu',
+                                                          'contract_ref': '',
+                                                          'contract_status': 'accepted',
                                                           'coverage_kind': 'oracle',
                                                           'oracle_id': 'sobol_engine_state',
+                                                          'promotion_backend': 'cpu',
+                                                          'promotion_evidence': '',
                                                           'reason': 'Sobol dispatcher helpers are validated against '
                                                                     'SobolEngine state protocol and exact '
                                                                     'low-dimensional sequences.',
@@ -75712,8 +76008,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_efficient_attention_backward',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 attention internals are directly validated '
                                                             'against public CPU scaled_dot_product_attention forward '
                                                             'values and autograd gradients.',
@@ -76711,8 +77011,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_flash_attention_backward',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 attention internals are directly validated '
                                                             'against public CPU scaled_dot_product_attention forward '
                                                             'values and autograd gradients.',
@@ -81328,8 +81632,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_fused_dropout.out',
                                        'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-fused-dropout-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'fused_dropout_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                                   'reason': 'CUDA fused-dropout internals are validated with direct '
                                                             'dispatcher calls for mask/output contracts, out identity, '
                                                             'and memory-efficient mask-fill identity/determinism.',
@@ -81382,8 +81690,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_fw_primal_copy.out',
                                        'oracle': {'backend_gate': 'any',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'forward_ad_inference_copy',
+                                                  'promotion_backend': 'any',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Forward-AD copy helpers are validated through their '
                                                             'required inference-mode direct-call path for value copy, '
                                                             'non-aliasing, inference tensor output, and out identity.',
@@ -82072,8 +82384,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_lstm_mps.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-lstm-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mps_lstm_cpu_reference',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-lstm-backend-pack-run',
                                                   'reason': 'MPS LSTM helpers are validated against public LSTM '
                                                             'forward and autograd backward references.',
                                                   'runner': 'mps_lstm'},
@@ -82150,8 +82466,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_make_dual_copy.out',
                                        'oracle': {'backend_gate': 'any',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'forward_ad_inference_copy',
+                                                  'promotion_backend': 'any',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Forward-AD copy helpers are validated through their '
                                                             'required inference-mode direct-call path for value copy, '
                                                             'non-aliasing, inference tensor output, and out identity.',
@@ -82469,8 +82789,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_mps_convolution.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mps_convolution_cpu_reference',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                   'reason': 'MPS convolution helpers are validated against CPU '
                                                             'conv2d/conv_transpose2d forward and gradient references.',
                                                   'runner': 'mps_convolution'},
@@ -82548,8 +82872,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_mps_convolution_transpose.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mps_convolution_cpu_reference',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                   'reason': 'MPS convolution helpers are validated against CPU '
                                                             'conv2d/conv_transpose2d forward and gradient references.',
                                                   'runner': 'mps_convolution'},
@@ -82664,8 +82992,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_native_batch_norm_legit.no_stats_out',
                                        'oracle': {'backend_gate': 'any',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'native_batch_norm_no_stats_out',
+                                                  'promotion_backend': 'any',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Native batch-norm no-stats out helper is validated for '
                                                             'out identity, save_mean/save_invstd, and public '
                                                             'batch_norm output semantics.',
@@ -83697,10 +84029,16 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_philox_normal.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                  'contract_status': 'blocked',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'philox_mps_rng',
-                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build '
-                                                            'and need an MPS backend-pack oracle.',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
+                                                            'but local MPS 2.12.1 probing reports runtime unsupported '
+                                                            'CPU fallback for direct dispatcher calls; promotion needs '
+                                                            'runtime support plus a source-derived RNG contract.',
                                                   'runner': 'backend_property'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
@@ -83758,10 +84096,16 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_philox_uniform.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                  'contract_status': 'blocked',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'philox_mps_rng',
-                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build '
-                                                            'and need an MPS backend-pack oracle.',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
+                                                            'but local MPS 2.12.1 probing reports runtime unsupported '
+                                                            'CPU fallback for direct dispatcher calls; promotion needs '
+                                                            'runtime support plus a source-derived RNG contract.',
                                                   'runner': 'backend_property'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
@@ -83806,8 +84150,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_pin_memory.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_pin_memory_noop',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 pinned-memory surfaces are validated as '
                                                             'device-preserving value-copy no-ops; no host-pinned '
                                                             'allocator semantics are claimed.',
@@ -83931,8 +84279,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_resize_output.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_resize_output_property',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 resize-output helpers are validated for '
                                                             'device-preserving shape mutation and in-place return '
                                                             'identity.',
@@ -84228,8 +84580,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_scaled_dot_product_efficient_attention_backward',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 attention internals are directly validated '
                                                             'against public CPU scaled_dot_product_attention forward '
                                                             'values and autograd gradients.',
@@ -84353,8 +84709,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_scaled_dot_product_flash_attention_backward',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 attention internals are directly validated '
                                                             'against public CPU scaled_dot_product_attention forward '
                                                             'values and autograd gradients.',
@@ -84456,8 +84816,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_scaled_dot_product_flash_attention_for_cpu_backward',
                                        'oracle': {'backend_gate': 'cpu',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-flash-attention-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cpu_flash_attention_public_sdpa',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'torchcts/selftest/test_harness_reporting.py::test_oracle_runner_executes_cpu_oracle_surfaces',
                                                   'reason': 'CPU flash-attention helper is validated against public '
                                                             'CPU scaled_dot_product_attention forward/backward.',
                                                   'runner': 'cpu_flash_attention'},
@@ -84598,8 +84962,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_scaled_dot_product_fused_attention_overrideable_backward',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_attention_public_sdpa',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 attention internals are directly validated '
                                                             'against public CPU scaled_dot_product_attention forward '
                                                             'values and autograd gradients.',
@@ -85312,8 +85680,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_thnn_fused_gru_cell.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_thnn_cell_formula',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 fused THNN GRU/LSTM forward cells are '
                                                             'validated against explicit gate formulas and workspace '
                                                             'shape contracts.',
@@ -85488,8 +85860,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_thnn_fused_lstm_cell.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_thnn_cell_formula',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 fused THNN GRU/LSTM forward cells are '
                                                             'validated against explicit gate formulas and workspace '
                                                             'shape contracts.',
@@ -86029,8 +86405,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::_unsafe_view.out',
                                        'oracle': {'backend_gate': 'cpu',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'unsafe_valid_input_semantics',
+                                                  'promotion_backend': 'cpu',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Unsafe helpers are validated only for valid inputs '
                                                             'against public-equivalent view/index/split semantics.',
                                                   'runner': 'unsafe_property'},
@@ -90489,8 +90869,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::batch_norm_elemt.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_batch_norm_forward_formula',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 batch-norm forward helpers are validated '
                                                             'against explicit per-channel mean, invstd, and '
                                                             'normalization formulas.',
@@ -90727,8 +91111,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::batch_norm_stats.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_batch_norm_forward_formula',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 batch-norm forward helpers are validated '
                                                             'against explicit per-channel mean, invstd, and '
                                                             'normalization formulas.',
@@ -108583,8 +108971,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::linear_backward.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-autograd-backward-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'linear_backward',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-generated-autograd-backward-run-2026-06-29',
                                                   'reason': 'MPS linear backward out variant is validated for out '
                                                             'identity and CPU linear autograd gradients.',
                                                   'runner': 'linear_backward'},
@@ -110249,8 +110641,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::lstm_mps_backward.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-lstm-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mps_lstm_cpu_reference',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-lstm-backend-pack-run',
                                                   'reason': 'MPS LSTM helpers are validated against public LSTM '
                                                             'forward and autograd backward references.',
                                                   'runner': 'mps_lstm'},
@@ -110828,8 +111224,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::matmul_backward.out',
                                        'oracle': {'backend_gate': 'privateuse1',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'privateuse1_matmul_backward_formula',
+                                                  'promotion_backend': 'privateuse1',
+                                                  'promotion_evidence': '',
                                                   'reason': 'PrivateUse1 matmul_backward.out is validated against '
                                                             'explicit matrix-gradient formulas for enabled outputs and '
                                                             'out identity.',
@@ -111094,8 +111494,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::max_pool2d_backward.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-autograd-backward-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'max_pool2d_backward',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-generated-autograd-backward-run-2026-06-29',
                                                   'reason': 'MPS max-pool backward out variant is validated for out '
                                                             'identity and CPU max_pool2d autograd gradients.',
                                                   'runner': 'max_pool2d_backward'},
@@ -114196,8 +114600,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::mps_convolution_transpose_backward.out',
                                        'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mps_convolution_cpu_reference',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                   'reason': 'MPS convolution helpers are validated against CPU '
                                                             'conv2d/conv_transpose2d forward and gradient references.',
                                                   'runner': 'mps_convolution'},
@@ -131941,8 +132349,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::unsafe_split.Tensor_out',
                                        'oracle': {'backend_gate': 'cpu',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'unsafe_valid_input_semantics',
+                                                  'promotion_backend': 'cpu',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Unsafe helpers are validated only for valid inputs '
                                                             'against public-equivalent view/index/split semantics.',
                                                   'runner': 'unsafe_property'},
@@ -131991,8 +132403,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'min_semantic_level': 3,
                                        'name': 'aten::unsafe_split_with_sizes.out',
                                        'oracle': {'backend_gate': 'cpu',
+                                                  'contract_ref': '',
+                                                  'contract_status': 'accepted',
                                                   'coverage_kind': 'property',
                                                   'oracle_id': 'unsafe_valid_input_semantics',
+                                                  'promotion_backend': 'cpu',
+                                                  'promotion_evidence': '',
                                                   'reason': 'Unsafe helpers are validated only for valid inputs '
                                                             'against public-equivalent view/index/split semantics.',
                                                   'runner': 'unsafe_property'},
@@ -133824,8 +134240,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                'min_semantic_level': 3,
                                'name': 'aten::_fused_dropout',
                                'oracle': {'backend_gate': 'cuda',
+                                          'contract_ref': 'docs/coverage/contract-evidence.md#cuda-fused-dropout-backend-pack',
+                                          'contract_status': 'accepted',
                                           'coverage_kind': 'backend_pack',
                                           'oracle_id': 'fused_dropout_backend_pack',
+                                          'promotion_backend': 'cuda',
+                                          'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                           'reason': 'CUDA fused-dropout internals are validated with direct dispatcher '
                                                     'calls for mask/output contracts, out identity, and '
                                                     'memory-efficient mask-fill identity/determinism.',
@@ -134442,8 +134862,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::_autocast_to_full_precision',
                                          'oracle': {'backend_gate': 'cpu',
+                                                    'contract_ref': '',
+                                                    'contract_status': 'accepted',
                                                     'coverage_kind': 'property',
                                                     'oracle_id': 'autocast_cast_policy',
+                                                    'promotion_backend': 'cpu',
+                                                    'promotion_evidence': '',
                                                     'reason': 'Raw autocast helpers are validated for CPU '
                                                               'promotion/reduction policy and disabled-autocast '
                                                               'identity behavior.',
@@ -134503,8 +134927,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::_autocast_to_reduced_precision',
                                          'oracle': {'backend_gate': 'cpu',
+                                                    'contract_ref': '',
+                                                    'contract_status': 'accepted',
                                                     'coverage_kind': 'property',
                                                     'oracle_id': 'autocast_cast_policy',
+                                                    'promotion_backend': 'cpu',
+                                                    'promotion_evidence': '',
                                                     'reason': 'Raw autocast helpers are validated for CPU '
                                                               'promotion/reduction policy and disabled-autocast '
                                                               'identity behavior.',
@@ -134728,8 +135156,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::_mps_convolution_transpose',
                                          'oracle': {'backend_gate': 'mps',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                    'contract_status': 'accepted',
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'mps_convolution_cpu_reference',
+                                                    'promotion_backend': 'mps',
+                                                    'promotion_evidence': 'reviewed-local-mps-convolution-backend-pack-run',
                                                     'reason': 'MPS convolution helpers are validated against CPU '
                                                               'conv2d/conv_transpose2d forward and gradient '
                                                               'references.',
@@ -134868,10 +135300,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::_philox_key_split',
                                          'oracle': {'backend_gate': 'mps',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
+                                                    'contract_status': 'blocked',
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'philox_mps_rng',
-                                                    'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build '
-                                                              'and need an MPS backend-pack oracle.',
+                                                    'promotion_backend': 'mps',
+                                                    'promotion_evidence': '',
+                                                    'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
+                                                              'but local MPS 2.12.1 probing reports runtime '
+                                                              'unsupported CPU fallback for direct dispatcher calls; '
+                                                              'promotion needs runtime support plus a source-derived '
+                                                              'RNG contract.',
                                                     'runner': 'backend_property'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -135142,8 +135581,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::_unsafe_view',
                                          'oracle': {'backend_gate': 'cpu',
+                                                    'contract_ref': '',
+                                                    'contract_status': 'accepted',
                                                     'coverage_kind': 'property',
                                                     'oracle_id': 'unsafe_valid_input_semantics',
+                                                    'promotion_backend': 'cpu',
+                                                    'promotion_evidence': '',
                                                     'reason': 'Unsafe helpers are validated only for valid inputs '
                                                               'against public-equivalent view/index/split semantics.',
                                                     'runner': 'unsafe_property'},
@@ -137312,8 +137755,12 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'min_semantic_level': 3,
                                          'name': 'aten::pin_memory',
                                          'oracle': {'backend_gate': 'privateuse1',
+                                                    'contract_ref': '',
+                                                    'contract_status': 'accepted',
                                                     'coverage_kind': 'property',
                                                     'oracle_id': 'privateuse1_pin_memory_noop',
+                                                    'promotion_backend': 'privateuse1',
+                                                    'promotion_evidence': '',
                                                     'reason': 'PrivateUse1 pinned-memory surfaces are validated as '
                                                               'device-preserving value-copy no-ops; no host-pinned '
                                                               'allocator semantics are claimed.',
@@ -140339,7 +140786,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'view'}]},
  'metadata': {'case_count': 2183,
-              'generated_at': '2026-07-01T19:03:06.351604Z',
+              'generated_at': '2026-07-01T20:52:26.583538Z',
               'pytorch_version': '2.12.1',
               'semantic_level_counts': {'1': 422, '2': 952, '3': 1051, '4': 384, '5': 380, '6': 19, '7': 6},
               'semantic_level_descriptions': {'1': 'Core primitive behavior that every backend should run '

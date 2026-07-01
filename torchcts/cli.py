@@ -260,7 +260,10 @@ def run_coverage_command(command, strict_unknowns=False):
             surfaces=getattr(coverage_args, "surface", None),
             backend_gates=getattr(coverage_args, "backend_gate", None),
             run_oracles=not getattr(coverage_args, "no_run_oracles", False),
+            run_pending_candidates=getattr(coverage_args, "run_pending_candidates", False),
             include_all_backend_packs=getattr(coverage_args, "include_all_backend_packs", False),
+            require_oracle_results=getattr(coverage_args, "require_oracle_results", False),
+            fail_on_oracle_failure=getattr(coverage_args, "fail_on_oracle_failure", False),
         )
     print("Error: coverage subcommand is required.", file=sys.stderr)
     return 1
@@ -534,6 +537,21 @@ def main():
         "--include-all-backend-packs",
         action="store_true",
         help="Include backend-pack oracle specs for every backend gate instead of only the target device",
+    )
+    evidence_pack.add_argument(
+        "--run-pending-candidates",
+        action="store_true",
+        help="Execute pending backend-pack specs that have real oracle runners",
+    )
+    evidence_pack.add_argument(
+        "--require-oracle-results",
+        action="store_true",
+        help="Return nonzero unless every selected surface produces a passing oracle result",
+    )
+    evidence_pack.add_argument(
+        "--fail-on-oracle-failure",
+        action="store_true",
+        help="Return nonzero when any executed oracle fails",
     )
     coverage_check = coverage_subparsers.add_parser("check", help="Validate coverage audit consistency")
     coverage_check.add_argument("--strict-unknowns", action="store_true", help="Return nonzero if unknown surfaces remain")

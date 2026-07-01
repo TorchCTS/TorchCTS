@@ -310,13 +310,22 @@ def _dispatch_evidence(surface: str) -> dict[str, Any]:
     }
 
 
-def _oracle_result(surface: str, device: str, spec: OracleSpec | None, *, run_oracles: bool) -> dict[str, Any]:
+def _oracle_result(
+    surface: str,
+    device: str,
+    spec: OracleSpec | None,
+    *,
+    run_oracles: bool,
+    run_pending_candidates: bool = False,
+) -> dict[str, Any]:
     if spec is None:
         return {"ok": None, "skipped": True, "reason": "no oracle spec registered"}
     if not run_oracles:
         return {"ok": None, "skipped": True, "reason": "oracle execution disabled"}
-    if spec.coverage_status.startswith("pending_") or spec.runner == "backend_property":
+    if spec.runner == "backend_property":
         return {"ok": None, "skipped": True, "reason": "oracle runner not implemented"}
+    if spec.coverage_status.startswith("pending_") and not run_pending_candidates:
+        return {"ok": None, "skipped": True, "reason": "pending candidate oracle not requested"}
     if not _oracle_gate_can_run_on_device(spec.backend_gate, device):
         return {
             "ok": None,
@@ -332,6 +341,7 @@ def _backend_pack_evidence(
     device: str,
     *,
     run_oracles: bool,
+    run_pending_candidates: bool,
 ) -> dict[str, Any]:
     records = []
     for target in targets:
@@ -354,7 +364,13 @@ def _backend_pack_evidence(
                 "exclusion": audit_entry.get("exclusion"),
                 "schema": _schema_evidence(surface),
                 "dispatch": _dispatch_evidence(surface),
-                "oracle_result": _oracle_result(surface, device, spec, run_oracles=run_oracles),
+                "oracle_result": _oracle_result(
+                    surface,
+                    device,
+                    spec,
+                    run_oracles=run_oracles,
+                    run_pending_candidates=run_pending_candidates,
+                ),
             }
         )
     return {
@@ -362,6 +378,7 @@ def _backend_pack_evidence(
             "device": device,
             "backend_gates": sorted({target["backend_gate"] for target in targets if target.get("backend_gate")}),
             "run_oracles": run_oracles,
+            "run_pending_candidates": run_pending_candidates,
             "record_count": len(records),
         },
         "records": records,
@@ -383,7 +400,10 @@ def _write_readme(path: Path, summary: dict[str, Any]) -> None:
                 f"- Backend gates: `{', '.join(summary['backend_gates']) or 'none'}`",
                 f"- Selected oracle surfaces: `{summary['surface_count']}`",
                 f"- Oracle results run: `{summary['run_oracles']}`",
+                f"- Pending candidates run: `{summary['run_pending_candidates']}`",
                 f"- Oracle failures: `{summary['oracle_failure_count']}`",
+                f"- Oracle successes: `{summary['oracle_success_count']}`",
+                f"- Oracle skipped: `{summary['oracle_skipped_count']}`",
                 "",
                 "Important files:",
                 "",
@@ -405,6 +425,7 @@ def build_evidence_pack(
     surfaces: list[str] | tuple[str, ...] | None = None,
     backend_gates: list[str] | tuple[str, ...] | None = None,
     run_oracles: bool = True,
+    run_pending_candidates: bool = False,
     include_all_backend_packs: bool = False,
 ) -> dict[str, Any]:
     output_root = Path(output_dir) if output_dir is not None else coverage.DEFAULT_OUTPUT_DIR / "evidence-packs"
@@ -422,7 +443,13 @@ def build_evidence_pack(
         backend_gates=backend_gates,
         include_all_backend_packs=include_all_backend_packs,
     )
-    backend_evidence = _backend_pack_evidence(audit, targets, device, run_oracles=run_oracles)
+    backend_evidence = _backend_pack_evidence(
+        audit,
+        targets,
+        device,
+        run_oracles=run_oracles,
+        run_pending_candidates=run_pending_candidates,
+    )
     oracle_failures = [
         record
         for record in backend_evidence["records"]
@@ -435,7 +462,14 @@ def build_evidence_pack(
         "backend_gates": sorted({target["backend_gate"] for target in targets if target.get("backend_gate")}),
         "surface_count": len(targets),
         "run_oracles": run_oracles,
+        "run_pending_candidates": run_pending_candidates,
         "oracle_failure_count": len(oracle_failures),
+        "oracle_success_count": sum(
+            1 for record in backend_evidence["records"] if record.get("oracle_result", {}).get("ok") is True
+        ),
+        "oracle_skipped_count": sum(
+            1 for record in backend_evidence["records"] if record.get("oracle_result", {}).get("skipped")
+        ),
         "archive_name": f"{pack_name}.tar.gz",
     }
 
@@ -473,7 +507,10 @@ def run_evidence_pack_command(
     surfaces: list[str] | tuple[str, ...] | None,
     backend_gates: list[str] | tuple[str, ...] | None,
     run_oracles: bool,
+    run_pending_candidates: bool,
     include_all_backend_packs: bool,
+    require_oracle_results: bool = False,
+    fail_on_oracle_failure: bool = False,
 ) -> int:
     result = build_evidence_pack(
         device=device,
@@ -481,6 +518,7 @@ def run_evidence_pack_command(
         surfaces=surfaces,
         backend_gates=backend_gates,
         run_oracles=run_oracles,
+        run_pending_candidates=run_pending_candidates,
         include_all_backend_packs=include_all_backend_packs,
     )
     print(f"Wrote evidence directory: {result['staging_dir']}")
@@ -489,4 +527,13 @@ def run_evidence_pack_command(
     print(f"Selected oracle surfaces: {result['surface_count']}")
     if run_oracles:
         print(f"Oracle failures: {result['oracle_failure_count']}")
-    return 0
+        print(f"Oracle successes: {result['oracle_success_count']}")
+        print(f"Oracle skipped: {result['oracle_skipped_count']}")
+    exit_code = 0
+    if fail_on_oracle_failure and result["oracle_failure_count"]:
+        exit_code = 1
+    if require_oracle_results and result["oracle_success_count"] != result["surface_count"]:
+        missing = result["surface_count"] - result["oracle_success_count"]
+        print(f"Error: {missing} selected oracle surfaces did not produce passing oracle results")
+        exit_code = 1
+    return exit_code
