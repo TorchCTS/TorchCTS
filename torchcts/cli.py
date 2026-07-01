@@ -229,6 +229,10 @@ def check_manifest(manifest_path=None):
     return 0
 
 def run_coverage_command(command, strict_unknowns=False):
+    coverage_args = command if not isinstance(command, str) else None
+    if coverage_args is not None:
+        command = coverage_args.coverage_command
+        strict_unknowns = getattr(coverage_args, "strict_unknowns", False)
     from torchcts.core.coverage import (
         run_audit_command,
         run_check_command,
@@ -247,6 +251,17 @@ def run_coverage_command(command, strict_unknowns=False):
         return run_materialize_command()
     if command == "check":
         return run_check_command(strict_unknowns=strict_unknowns)
+    if command == "evidence-pack":
+        from torchcts.core.evidence_pack import run_evidence_pack_command
+
+        return run_evidence_pack_command(
+            device=getattr(coverage_args, "device", "cuda"),
+            output_dir=getattr(coverage_args, "output_dir", None),
+            surfaces=getattr(coverage_args, "surface", None),
+            backend_gates=getattr(coverage_args, "backend_gate", None),
+            run_oracles=not getattr(coverage_args, "no_run_oracles", False),
+            include_all_backend_packs=getattr(coverage_args, "include_all_backend_packs", False),
+        )
     print("Error: coverage subcommand is required.", file=sys.stderr)
     return 1
 
@@ -495,6 +510,31 @@ def main():
     coverage_subparsers.add_parser("audit", help="Build coverage audit using default paths")
     coverage_subparsers.add_parser("report", help="Render coverage report from default audit")
     coverage_subparsers.add_parser("materialize", help="Write deterministic generated coverage cases using default paths")
+    evidence_pack = coverage_subparsers.add_parser(
+        "evidence-pack",
+        help="Build a portable backend-pack promotion evidence archive",
+    )
+    evidence_pack.add_argument("--device", default="cuda", help="Target device for backend evidence")
+    evidence_pack.add_argument(
+        "--backend-gate",
+        action="append",
+        help=(
+            "Backend-pack gate selector to include; may be repeated or use comma/plus syntax "
+            "(for example cuda+rocm or cpu+fbgemm+cpu_build)"
+        ),
+    )
+    evidence_pack.add_argument("--surface", action="append", help="Exact oracle surface to include; may be repeated")
+    evidence_pack.add_argument("--output-dir", help="Directory for the evidence directory and .tar.gz archive")
+    evidence_pack.add_argument(
+        "--no-run-oracles",
+        action="store_true",
+        help="Collect environment, audit, schema, and dispatcher evidence without executing oracle runners",
+    )
+    evidence_pack.add_argument(
+        "--include-all-backend-packs",
+        action="store_true",
+        help="Include backend-pack oracle specs for every backend gate instead of only the target device",
+    )
     coverage_check = coverage_subparsers.add_parser("check", help="Validate coverage audit consistency")
     coverage_check.add_argument("--strict-unknowns", action="store_true", help="Return nonzero if unknown surfaces remain")
     coverage_check.add_argument(
@@ -545,7 +585,7 @@ def main():
         sys.exit(check_manifest(args.manifest))
 
     elif args.command == "coverage":
-        sys.exit(run_coverage_command(args.coverage_command, getattr(args, "strict_unknowns", False)))
+        sys.exit(run_coverage_command(args, getattr(args, "strict_unknowns", False)))
 
     elif args.command == "triage":
         sys.exit(run_triage_command(args))

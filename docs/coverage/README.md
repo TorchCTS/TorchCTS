@@ -16,6 +16,8 @@ torchcts coverage materialize
 torchcts coverage check
 torchcts coverage check --fail-on-unknown
 torchcts coverage report
+torchcts coverage evidence-pack --device cuda
+torchcts coverage evidence-pack --device cuda --backend-gate cuda+rocm
 ```
 
 Default artifacts are written under `results/coverage/`:
@@ -26,6 +28,11 @@ Default artifacts are written under `results/coverage/`:
 - `generated_cases.json`: generated coverage cases used by generated tests.
 - `summary.md`: human-readable coverage summary.
 - `pending_review.md`: human-readable pending and exclusion review.
+
+Backend promotion evidence archives are written under
+`results/coverage/evidence-packs/` by `torchcts coverage evidence-pack`. Use
+that command when a backend-specific CUDA, MPS, ROCm, or PrivateUse1 machine can
+collect data that needs maintainer review elsewhere.
 
 ## Coverage Kinds
 
