@@ -118,6 +118,7 @@ _RESULTS_DIR = "./results"
 _START_TIME = 0
 _SESSION_RESULTS = {}
 _SESSION_SKIPS = {}
+_SESSION_PROBE_RESULTS = []
 _SESSION_PROBE_FAILURES = []
 _SESSION_PROBE_FAILURE_KEYS = set()
 _DTYPE_MANIFEST_SKIP_REASONS = frozenset({
@@ -525,7 +526,23 @@ def _known_segfault_entry_in_scope(config, entry, descriptors):
     return False
 
 
-def _validate_known_segfault_collection(config, entries, items):
+def _format_stale_known_segfault_entries(entries):
+    return (
+        "Known segfault ledger contains stale in-scope rule(s):\n"
+        + "\n".join(
+            "  - {id}: match={match} dispatcher={dispatcher} evidence_scope={scope} constraints={constraints}".format(
+                id=entry["id"],
+                match=entry["match"],
+                dispatcher=entry["dispatcher"],
+                scope=entry["evidence_scope"],
+                constraints=entry.get("constraints") or {},
+            )
+            for entry in entries
+        )
+    )
+
+
+def _validate_known_segfault_collection(config, entries, items, *, strict_stale=True):
     from torchcts.core.known_segfaults import (
         KnownSegfaultError,
         best_known_segfault_match,
@@ -552,19 +569,11 @@ def _validate_known_segfault_collection(config, entries, items):
             stale_entries.append(entry)
 
     if stale_entries:
-        errors.append(
-            "Known segfault ledger contains stale in-scope rule(s):\n"
-            + "\n".join(
-                "  - {id}: match={match} dispatcher={dispatcher} evidence_scope={scope} constraints={constraints}".format(
-                    id=entry["id"],
-                    match=entry["match"],
-                    dispatcher=entry["dispatcher"],
-                    scope=entry["evidence_scope"],
-                    constraints=entry.get("constraints") or {},
-                )
-                for entry in stale_entries
-            )
-        )
+        stale_message = _format_stale_known_segfault_entries(stale_entries)
+        if strict_stale:
+            errors.append(stale_message)
+        else:
+            print("Warning: " + stale_message, file=sys.stderr)
 
     if errors:
         pytest.exit("\n".join(errors), returncode=1)
@@ -748,20 +757,70 @@ def _harness_probe_artifact_path():
     )
 
 
-def _warn_probe_failure_once(record):
-    if _COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT:
-        return
-    message = _probe_failure_tail(record.get("error_message"), limit=300).replace("\n", " | ")
-    print(
-        "Warning: declared {kind} {name!r} failed diagnostic probe "
-        "({stage}); tests will still run. {etype}: {message}".format(
-            kind=record.get("probe_kind"),
-            name=record.get("name"),
-            stage=record.get("stage"),
-            etype=record.get("error_type"),
-            message=message,
-        ),
-        file=sys.stderr,
+def _probe_result_record(
+    probe_kind,
+    name,
+    stage,
+    outcome,
+    *,
+    error_type="",
+    error_message="",
+    returncode=None,
+    timed_out=False,
+    stdout_tail="",
+    stderr_tail="",
+    command_args=None,
+):
+    return {
+        "probe_kind": str(probe_kind),
+        "name": str(name),
+        "stage": str(stage),
+        "declared": True,
+        "outcome": str(outcome),
+        "error_type": "" if error_type is None else str(error_type),
+        "error_message": "" if error_message is None else str(error_message),
+        "returncode": returncode,
+        "timed_out": bool(timed_out),
+        "stdout_tail": "" if stdout_tail is None else str(stdout_tail),
+        "stderr_tail": "" if stderr_tail is None else str(stderr_tail),
+        "command_args": list(command_args or []),
+    }
+
+
+def _probe_result_from_failure_record(probe_kind, name, stage, record, exc_or_result):
+    if isinstance(record, dict):
+        return _probe_result_record(
+            probe_kind,
+            name,
+            stage,
+            "failed",
+            error_type=record.get("error_type") or "",
+            error_message=record.get("error_message") or "",
+            returncode=record.get("returncode"),
+            timed_out=record.get("timed_out", False),
+            stdout_tail=record.get("stdout_tail") or "",
+            stderr_tail=record.get("stderr_tail") or "",
+            command_args=record.get("command_args") or [],
+        )
+
+    evidence = exc_or_result.to_dict() if hasattr(exc_or_result, "to_dict") else {}
+    if not isinstance(evidence, dict):
+        evidence = {}
+    error_message = evidence.get("error_message")
+    if error_message is None:
+        error_message = _probe_failure_tail(exc_or_result, limit=4000)
+    return _probe_result_record(
+        probe_kind,
+        name,
+        stage,
+        "failed",
+        error_type=evidence.get("error_type") or type(exc_or_result).__name__,
+        error_message=error_message,
+        returncode=evidence.get("returncode"),
+        timed_out=evidence.get("timed_out", False),
+        stdout_tail=evidence.get("stdout_tail", evidence.get("stdout", "")),
+        stderr_tail=evidence.get("stderr_tail", evidence.get("stderr", "")),
+        command_args=evidence.get("command_args") or [],
     )
 
 
@@ -774,39 +833,62 @@ def _record_session_probe_failure(probe_kind, name, exc_or_result, *, stage):
         return record
     _SESSION_PROBE_FAILURE_KEYS.add(key)
     _SESSION_PROBE_FAILURES.append(record)
-    _warn_probe_failure_once(record)
     return record
 
 
 def _apply_declared_dtype_probes(supported_dtypes, device_name):
-    records = []
+    results = []
     for dt, val in list(supported_dtypes.items()):
         if not val:
             continue
         probe_dtype = dt if isinstance(dt, torch.dtype) else str_to_dtype(str(dt))
         dtype_name = dtype_to_str(probe_dtype) if probe_dtype is not None else str(dt)
         if probe_dtype is None:
-            records.append(
-                _record_session_probe_failure(
+            exc = ValueError(f"Could not resolve manifest dtype key {dt!r}.")
+            failure_record = _record_session_probe_failure(
+                "dtype",
+                dtype_name,
+                exc,
+                stage="declared_dtype_probe",
+            )
+            results.append(
+                _probe_result_from_failure_record(
                     "dtype",
                     dtype_name,
-                    ValueError(f"Could not resolve manifest dtype key {dt!r}."),
-                    stage="declared_dtype_probe",
+                    "declared_dtype_probe",
+                    failure_record,
+                    exc,
                 )
             )
             continue
         try:
             torch.zeros(1, dtype=probe_dtype, device=device_name)
         except Exception as exc:
-            records.append(
-                _record_session_probe_failure(
+            failure_record = _record_session_probe_failure(
+                "dtype",
+                dtype_name,
+                exc,
+                stage="declared_dtype_probe",
+            )
+            results.append(
+                _probe_result_from_failure_record(
                     "dtype",
                     dtype_name,
+                    "declared_dtype_probe",
+                    failure_record,
                     exc,
-                    stage="declared_dtype_probe",
                 )
             )
-    return [record for record in records if record is not None]
+        else:
+            results.append(
+                _probe_result_record(
+                    "dtype",
+                    dtype_name,
+                    "declared_dtype_probe",
+                    "passed",
+                )
+            )
+    return results
 
 
 def _capability_probe_accepts_backend_import(probe_func):
@@ -825,7 +907,7 @@ def _apply_declared_capability_probes(caps, device_name, probe_func=None, backen
 
         probe_func = probe_capability_result
     probe_accepts_backend_import = _capability_probe_accepts_backend_import(probe_func)
-    records = []
+    results = []
     for cap in ["pinned_memory", "sparse", "nested", "named_tensor", "fp8"]:
         if not caps.get(cap, False):
             continue
@@ -834,16 +916,147 @@ def _apply_declared_capability_probes(caps, device_name, probe_func=None, backen
         else:
             probe = probe_func(device_name, cap)
         if probe.supported:
+            results.append(
+                _probe_result_record(
+                    "capability",
+                    cap,
+                    "declared_capability_probe",
+                    "passed",
+                )
+            )
             continue
-        records.append(
-            _record_session_probe_failure(
+        failure_record = _record_session_probe_failure(
+            "capability",
+            cap,
+            probe,
+            stage="declared_capability_probe",
+        )
+        results.append(
+            _probe_result_from_failure_record(
                 "capability",
                 cap,
+                "declared_capability_probe",
+                failure_record,
                 probe,
-                stage="declared_capability_probe",
             )
         )
-    return [record for record in records if record is not None]
+    return results
+
+
+_PROBE_NOTE_BOILERPLATE_PATTERNS = (
+    "CUDA kernel errors might be asynchronously reported",
+    "For debugging consider passing CUDA_LAUNCH_BLOCKING=1",
+    "TORCH_USE_CUDA_DSA",
+    "cuda-runtime-api/group__CUDART__TYPES",
+)
+
+
+def _probe_note_candidate(value):
+    text = "" if value is None else str(value)
+    if not text.strip():
+        return ""
+    text = text.replace("\r", "\n")
+    chunks = []
+    for line in text.splitlines():
+        chunks.extend(part.strip() for part in line.split(" | "))
+    for chunk in chunks:
+        chunk = " ".join(chunk.split())
+        if not chunk:
+            continue
+        if any(pattern in chunk for pattern in _PROBE_NOTE_BOILERPLATE_PATTERNS):
+            continue
+        return chunk
+    return " ".join(text.split())
+
+
+def _probe_result_note(result, *, limit=120):
+    if result.get("outcome") == "passed":
+        return "ok"
+    message = ""
+    for key in ("error_message", "stderr_tail", "stdout_tail"):
+        message = _probe_note_candidate(result.get(key))
+        if message:
+            break
+    error_type = str(result.get("error_type") or "").strip()
+    if error_type and message and not message.startswith(f"{error_type}:"):
+        note = f"{error_type}: {message}"
+    else:
+        note = message or error_type or "probe failed"
+    return note if len(note) <= limit else note[: limit - 3] + "..."
+
+
+def _format_probe_results_table(results, device_name):
+    rows = list(results or [])
+    if not rows:
+        return ""
+    table_rows = []
+    passed = 0
+    failed = 0
+    for result in rows:
+        outcome = result.get("outcome")
+        status = "PASS" if outcome == "passed" else "FAIL"
+        if status == "PASS":
+            passed += 1
+        else:
+            failed += 1
+        table_rows.append((
+            str(result.get("probe_kind") or ""),
+            str(result.get("name") or ""),
+            status,
+            _probe_result_note(result),
+        ))
+
+    headers = ("Kind", "Probe", "Status", "Note")
+    widths = [
+        max(len(headers[0]), *(len(row[0]) for row in table_rows)),
+        max(len(headers[1]), *(len(row[1]) for row in table_rows)),
+        max(len(headers[2]), *(len(row[2]) for row in table_rows)),
+        max(len(headers[3]), *(len(row[3]) for row in table_rows)),
+    ]
+    lines = [
+        "TorchCTS diagnostic probes",
+        f"Device: {device_name}",
+        "Probe failures are diagnostic; tests will still run.",
+        "",
+        "  ".join(header.ljust(width) for header, width in zip(headers, widths)),
+        "  ".join("-" * width for width in widths),
+    ]
+    for row in table_rows:
+        lines.append("  ".join(value.ljust(width) for value, width in zip(row, widths)))
+    lines.extend([
+        "",
+        f"Summary: {passed} passed, {failed} failed",
+    ])
+    if failed:
+        lines.append(f"Full failure evidence: {_harness_probe_artifact_path()}")
+    return "\n".join(lines)
+
+
+def _print_probe_results_table(results, device_name):
+    text = _format_probe_results_table(results, device_name)
+    if text:
+        print(text, file=sys.stderr)
+
+
+def _run_declared_diagnostic_probes(supported_dtypes, caps, device_name, *, backend_import=None, emit_table=True):
+    results = []
+    results.extend(_apply_declared_dtype_probes(supported_dtypes, device_name))
+    if not _IS_XDIST_WORKER:
+        results.extend(
+            _apply_declared_capability_probes(
+                caps,
+                device_name,
+                backend_import=backend_import,
+            )
+        )
+    _SESSION_PROBE_RESULTS.extend(results)
+    if emit_table and not _IS_XDIST_WORKER:
+        _print_probe_results_table(results, device_name)
+    return results
+
+
+def _declared_diagnostic_probes_enabled(is_validation):
+    return not is_validation and not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT)
 
 
 def _extract_result_metadata(item):
@@ -1488,7 +1701,7 @@ def pytest_configure(config):
     global _KNOWN_SEGFAULT_AUDIT
     global _ADAPTIVE_ISOLATION_MODE, _ADAPTIVE_ISOLATION_LOAD, _ADAPTIVE_ISOLATION_ACTIVE
     global _ADAPTIVE_ISOLATION_REJECTED, _ADAPTIVE_ISOLATION_WARNINGS, _SESSION_COMPLETED
-    global _SESSION_PROBE_FAILURES, _SESSION_PROBE_FAILURE_KEYS
+    global _SESSION_PROBE_RESULTS, _SESSION_PROBE_FAILURES, _SESSION_PROBE_FAILURE_KEYS
 
     # Register custom markers
     config.addinivalue_line("markers", "gate: backend registration gate tests — run first")
@@ -1677,6 +1890,7 @@ def pytest_configure(config):
     _ADAPTIVE_ISOLATION_REJECTED = []
     _ADAPTIVE_ISOLATION_WARNINGS = []
     _SESSION_COMPLETED = False
+    _SESSION_PROBE_RESULTS = []
     _SESSION_PROBE_FAILURES = []
     _SESSION_PROBE_FAILURE_KEYS = set()
     policy_option = config.getoption("--known-segfault-policy")
@@ -1686,22 +1900,19 @@ def pytest_configure(config):
     _KNOWN_SEGFAULT_WARNINGS = []
 
     # Diagnostic probes only. Probe failures never decide conformance outcomes.
-    if not is_validation and not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT):
+    if _declared_diagnostic_probes_enabled(is_validation):
         supported_dtypes = _MANIFEST.setdefault("supported_dtypes", {})
-        _apply_declared_dtype_probes(
+        caps = _MANIFEST.setdefault("capabilities", {})
+        _run_declared_diagnostic_probes(
             supported_dtypes,
+            caps,
             _DEVICE_NAME,
+            backend_import=backend_import,
+            emit_table=not _IS_XDIST_WORKER,
         )
 
         # Skip in xdist workers: concurrent subprocess probes cause hangs.
         if not _IS_XDIST_WORKER:
-            caps = _MANIFEST.setdefault("capabilities", {})
-            _apply_declared_capability_probes(
-                caps,
-                _DEVICE_NAME,
-                backend_import=backend_import,
-            )
-
             # Hard prerequisite: inference must be True
             if not caps.get("inference", True):
                 pytest.exit(
@@ -2195,6 +2406,7 @@ def pytest_collection_modifyitems(session, config, items):
             config,
             _KNOWN_SEGFAULTS_ACTIVE,
             keep_items,
+            strict_stale=bool(_KNOWN_SEGFAULT_AUDIT or config.getoption("--validation")),
         )
         if _KNOWN_SEGFAULT_AUDIT:
             _print_known_segfault_audit(config, _KNOWN_SEGFAULTS_ACTIVE, known_segfault_descriptors)
@@ -2235,12 +2447,13 @@ def pytest_collection_modifyitems(session, config, items):
 
 def flush_results_to_disk():
     global _SESSION_RESULTS, _SESSION_SKIPS, _START_TIME, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR
-    global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED, _SESSION_PROBE_FAILURES
+    global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED, _SESSION_PROBE_RESULTS, _SESSION_PROBE_FAILURES
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
     
     elapsed = time.time() - _START_TIME
+    probe_pass_count = sum(1 for record in _SESSION_PROBE_RESULTS if record.get("outcome") == "passed")
     data = {
         "metadata": {
             "device_name": _DEVICE_NAME,
@@ -2255,6 +2468,8 @@ def flush_results_to_disk():
             "skip_count": len(_SESSION_SKIPS),
             "session_completed": _SESSION_COMPLETED,
             "harness_probe_failure_count": len(_SESSION_PROBE_FAILURES),
+            "harness_probe_pass_count": probe_pass_count,
+            "harness_probe_total_count": len(_SESSION_PROBE_RESULTS),
             "harness_probe_failure_artifact": (
                 _harness_probe_artifact_path() if _SESSION_PROBE_FAILURES else None
             ),
@@ -2292,6 +2507,8 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     merged_skips = {}
     merged_probe_failures = []
     merged_probe_failure_keys = set()
+    merged_probe_pass_count = 0
+    merged_probe_total_count = 0
     merged_metadata = None
     total_elapsed = 0.0
 
@@ -2313,6 +2530,9 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
             merged_skips = existing.get("skips", {})
             add_probe_failures(existing.get("harness_probe_failures", []))
             merged_metadata = existing.get("metadata")
+            if isinstance(merged_metadata, dict):
+                merged_probe_pass_count = max(merged_probe_pass_count, int(merged_metadata.get("harness_probe_pass_count", 0) or 0))
+                merged_probe_total_count = max(merged_probe_total_count, int(merged_metadata.get("harness_probe_total_count", 0) or 0))
         except Exception:
             pass
     
@@ -2326,6 +2546,8 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
             add_probe_failures(wdata.get("harness_probe_failures", []))
             wm = wdata.get("metadata", {})
             total_elapsed = max(total_elapsed, wm.get("elapsed_sec", 0.0))
+            merged_probe_pass_count = max(merged_probe_pass_count, int(wm.get("harness_probe_pass_count", 0) or 0))
+            merged_probe_total_count = max(merged_probe_total_count, int(wm.get("harness_probe_total_count", 0) or 0))
             if merged_metadata is None:
                 merged_metadata = wm
         except Exception:
@@ -2335,6 +2557,8 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
         merged_metadata["elapsed_sec"] = total_elapsed
     if merged_metadata is not None:
         merged_metadata["harness_probe_failure_count"] = len(merged_probe_failures)
+        merged_metadata["harness_probe_pass_count"] = merged_probe_pass_count
+        merged_metadata["harness_probe_total_count"] = merged_probe_total_count
         if merged_probe_failures and not merged_metadata.get("harness_probe_failure_artifact"):
             merged_metadata["harness_probe_failure_artifact"] = None
     

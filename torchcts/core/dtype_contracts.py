@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 import json
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -129,7 +130,10 @@ def _normalize_op_name(op_name: str | None) -> str | None:
 @lru_cache(maxsize=1)
 def load_dtype_contracts() -> dict:
     try:
-        text = resources.files("torchcts").joinpath(CONTRACT_RESOURCE).read_text(encoding="utf-8")
+        try:
+            text = resources.files("torchcts").joinpath(CONTRACT_RESOURCE).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            text = Path(__file__).resolve().parents[1].joinpath(CONTRACT_RESOURCE).read_text(encoding="utf-8")
         data = json.loads(text)
     except FileNotFoundError:
         data = {}
