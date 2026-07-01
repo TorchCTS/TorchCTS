@@ -4338,6 +4338,63 @@ def test_coverage_evidence_pack_selects_explicit_backend_gates():
     ]
 
 
+def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
+    from torchcts.core import evidence_pack as evidence_pack_module
+    from torchcts.core.oracles import OracleSpec
+
+    calls = []
+    monkeypatch.setattr(
+        evidence_pack_module,
+        "run_oracle_for_surface",
+        lambda surface, device: calls.append((surface, device)),
+    )
+
+    pending = OracleSpec(
+        surface="aten::pending_cuda",
+        oracle_id="pending",
+        coverage_status="pending_backend_pack",
+        coverage_kind="backend_pack",
+        runner="backend_property",
+        backend_gate="cuda",
+    )
+    wrong_device = OracleSpec(
+        surface="aten::mps_only",
+        oracle_id="mps",
+        coverage_status="covered_backend_pack",
+        coverage_kind="backend_pack",
+        runner="mps_lstm",
+        backend_gate="mps",
+    )
+    runnable = OracleSpec(
+        surface="aten::cuda_ok",
+        oracle_id="cuda",
+        coverage_status="covered_backend_pack",
+        coverage_kind="backend_pack",
+        runner="cuda_fused_dropout",
+        backend_gate="cuda",
+    )
+
+    assert evidence_pack_module._oracle_result(
+        "aten::pending_cuda",
+        "cuda",
+        pending,
+        run_oracles=True,
+    )["reason"] == "oracle runner not implemented"
+    assert "does not run on device" in evidence_pack_module._oracle_result(
+        "aten::mps_only",
+        "cuda",
+        wrong_device,
+        run_oracles=True,
+    )["reason"]
+    assert evidence_pack_module._oracle_result(
+        "aten::cuda_ok",
+        "cuda",
+        runnable,
+        run_oracles=True,
+    )["ok"] is True
+    assert calls == [("aten::cuda_ok", "cuda")]
+
+
 def test_cli_routes_coverage_evidence_pack(monkeypatch):
     from torchcts.core import evidence_pack as evidence_pack_module
 

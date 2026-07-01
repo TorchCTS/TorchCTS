@@ -2060,7 +2060,7 @@ def _assert_fused_dropout_result(
     input_tensor: torch.Tensor,
     output: torch.Tensor,
     mask: torch.Tensor,
-    p: float,
+    keep_probability: float,
     label: str,
 ) -> None:
     if tuple(output.shape) != tuple(input_tensor.shape):
@@ -2070,7 +2070,7 @@ def _assert_fused_dropout_result(
     if output.device != input_tensor.device:
         raise AssertionError(f"{label} output device mismatch: {output.device} vs {input_tensor.device}")
     _assert_fused_dropout_mask(mask, input_tensor, label)
-    expected = input_tensor * mask.to(dtype=input_tensor.dtype) * (1.0 / (1.0 - p))
+    expected = input_tensor * mask.to(dtype=input_tensor.dtype) * (1.0 / keep_probability)
     _assert_close_tensor(output, expected, label, rtol=1e-6, atol=1e-6)
 
 
@@ -2096,24 +2096,24 @@ def _run_cuda_fused_dropout(spec: OracleSpec, device: str) -> None:
     _check_backend_gate(spec, device)
     device_obj = torch.device(device)
     input_tensor = torch.linspace(-3.0, 3.0, steps=64, device=device_obj, dtype=torch.float32).reshape(8, 8)
-    p = 0.25
+    keep_probability = 0.25
 
     try:
         if spec.surface == "aten::_fill_mem_eff_dropout_mask_":
             first = torch.empty((1, 2, 4, 8), device=device_obj, dtype=torch.float32)
-            returned = torch.ops.aten._fill_mem_eff_dropout_mask_(first, p, 12345, 0)
+            returned = torch.ops.aten._fill_mem_eff_dropout_mask_(first, keep_probability, 12345, 0)
             assert_out_identity(returned, first, spec.surface)
             _assert_mem_eff_dropout_mask_fill(first, spec.surface)
 
             second = torch.empty_like(first)
-            torch.ops.aten._fill_mem_eff_dropout_mask_(second, p, 12345, 0)
+            torch.ops.aten._fill_mem_eff_dropout_mask_(second, keep_probability, 12345, 0)
             _assert_close_tensor(first, second, f"{spec.surface}.deterministic_seed", rtol=0.0, atol=0.0)
             return
 
         if spec.surface == "aten::_fused_dropout":
             generator = _cuda_generator(device_obj, 1729)
-            output, mask = torch.ops.aten._fused_dropout(input_tensor, p, generator)
-            _assert_fused_dropout_result(input_tensor, output, mask, p, spec.surface)
+            output, mask = torch.ops.aten._fused_dropout(input_tensor, keep_probability, generator)
+            _assert_fused_dropout_result(input_tensor, output, mask, keep_probability, spec.surface)
             return
 
         if spec.surface == "aten::_fused_dropout.out":
@@ -2125,7 +2125,7 @@ def _run_cuda_fused_dropout(spec: OracleSpec, device: str) -> None:
                 try:
                     output, mask = torch.ops.aten._fused_dropout.out(
                         input_tensor,
-                        p,
+                        keep_probability,
                         generator,
                         out0=out0,
                         out1=out1,
@@ -2135,7 +2135,7 @@ def _run_cuda_fused_dropout(spec: OracleSpec, device: str) -> None:
                     continue
                 assert_out_identity(output, out0, f"{spec.surface}.out0")
                 assert_out_identity(mask, out1, f"{spec.surface}.out1")
-                _assert_fused_dropout_result(input_tensor, output, mask, p, spec.surface)
+                _assert_fused_dropout_result(input_tensor, output, mask, keep_probability, spec.surface)
                 return
             if last_exc is not None:
                 raise last_exc
