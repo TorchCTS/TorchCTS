@@ -215,7 +215,18 @@ def main(argv: list[str] | None = None) -> int:
                 str(args.max_runtime_bytes),
             ])
             if not args.skip_selftests:
-                run_command([sys.executable, "-m", "pytest", "torchcts/selftest"])
+                run_command([
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    "torchcts/selftest",
+                    "--validation",
+                    "--device",
+                    "cpu",
+                ])
+            run_command([sys.executable, "scripts/check_release_hygiene.py"])
+            run_command(["git", "diff", "--check"])
             if not args.skip_build:
                 run_command([sys.executable, "-m", "build"])
                 artifacts = [str(path) for path in sorted((REPO_ROOT / "dist").glob("*")) if path.suffix in {".whl", ".gz"}]

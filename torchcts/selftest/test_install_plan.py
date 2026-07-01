@@ -19,21 +19,12 @@
 # SOFTWARE.
 
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from torchcts.site_scripts import install_plan
 
 pytestmark = pytest.mark.covers_category("selftest")
-
-
-def test_packaged_install_plan_matches_site_script_when_source_file_exists():
-    source_path = Path.cwd() / "site_scripts" / "install_plan.py"
-    packaged_path = Path(install_plan.__file__).resolve()
-    if source_path.exists() and source_path.resolve() != packaged_path:
-        assert packaged_path.read_bytes() == source_path.read_bytes()
-
 
 def make_context(
     *,

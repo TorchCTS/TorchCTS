@@ -14,10 +14,16 @@ from pathlib import Path
 REQUIRED_PACKAGE_FILES = (
     "torchcts/op_dtype_contracts.json",
     "torchcts/op_metadata.json",
+    "torchcts/site_scripts/install_plan.py",
 )
 FORBIDDEN_FRAGMENTS = (
     "op_dtype_contract_evidence.jsonl",
     "data/pytorch-version-matrix",
+)
+FORBIDDEN_LOGICAL_PATHS = (
+    "site_scripts/install_plan.py",
+    "site_scripts/install.sh",
+    "site_scripts/install.ps1",
 )
 TORCH_REQUIREMENT_RE = re.compile(r"^Requires-Dist:\s*torch(?P<constraints>.*)$", re.MULTILINE)
 TORCH_UPPER_BOUND_RE = re.compile(r"<\s*\d+\.\d+\.\d+")
@@ -51,6 +57,14 @@ def _contains_suffix(members: list[str], suffix: str) -> bool:
     return any(member.endswith(suffix) for member in members)
 
 
+def _logical_member(path: Path, member: str) -> str:
+    normalized = member.replace("\\", "/").strip("/")
+    if path.suffix == ".whl":
+        return normalized
+    parts = normalized.split("/", 1)
+    return parts[1] if len(parts) == 2 else normalized
+
+
 def verify_archive(path: Path) -> list[str]:
     errors: list[str] = []
     members, metadata_text = _normalized_members(path)
@@ -62,6 +76,9 @@ def verify_archive(path: Path) -> list[str]:
         for fragment in FORBIDDEN_FRAGMENTS:
             if fragment in normalized:
                 errors.append(f"{path}: forbidden evidence artifact included as {member}")
+        logical = _logical_member(path, member)
+        if logical in FORBIDDEN_LOGICAL_PATHS:
+            errors.append(f"{path}: forbidden standalone site installer artifact included as {member}")
     torch_requirement = TORCH_REQUIREMENT_RE.search(metadata_text or "")
     if not torch_requirement:
         errors.append(f"{path}: missing torch dependency")

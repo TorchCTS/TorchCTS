@@ -5,7 +5,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-07-01T07:18:57.157676Z |
+| Generated at | 2026-07-01T15:17:16.159917Z |
 | TorchCTS version | 0.3.4 |
 | Installed TorchCTS metadata version | 0.3.4 |
 | pyproject.toml version | 0.3.4 |
@@ -14,15 +14,15 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-07-01T07:16:38.679941Z |
+| Coverage audit timestamp | 2026-07-01T15:14:59.393495Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 18905 |
-| Pytest executable nodes | 18821 |
+| Pytest nodes collected | 18906 |
+| Pytest executable nodes | 18822 |
 | Pytest skip-marked nodes | 84 |
 | Structured deselected nodes | 0 |
 | ATen overloads inventoried | 3225 |
@@ -45,7 +45,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 813 | 813 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 1 | 814 | 814 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
 | 2 | 13773 | 13759 | 14 | 0 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
 | 3 | 1084 | 1081 | 3 | 0 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
 | 4 | 2405 | 2380 | 25 | 0 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
@@ -60,17 +60,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 18905 |
-| Node IDs parsed from stdout | 18905 |
-| Pytest summary count | 18905 |
+| Structured records parsed | 18906 |
+| Node IDs parsed from stdout | 18906 |
+| Pytest summary count | 18906 |
 | Parameterized node IDs | 18433 |
-| Unparameterized node IDs | 472 |
+| Unparameterized node IDs | 473 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 18821 |
+| executable | 18822 |
 | pytest_skip_marked | 84 |
 
 ## Pytest Collection Skip Reasons
@@ -88,7 +88,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | operators | 434 |
-| selftest | 391 |
+| selftest | 392 |
 | compiler | 144 |
 | dtypes | 135 |
 | workloads | 120 |
@@ -110,7 +110,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | handwritten | 1158 |
-| selftest | 391 |
+| selftest | 392 |
 
 ## Pytest Nodes By File
 
@@ -153,9 +153,9 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/operators/test_creation.py | 19 |
 | torchcts/operators/test_misc.py | 19 |
 | torchcts/operators/test_norm.py | 19 |
-| torchcts/selftest/test_install_plan.py | 19 |
 | torchcts/autograd/test_inplace_safety.py | 18 |
 | torchcts/operators/test_reduction.py | 18 |
+| torchcts/selftest/test_install_plan.py | 18 |
 | torchcts/training/test_training_pipeline.py | 18 |
 | torchcts/operators/test_conv.py | 17 |
 | torchcts/operators/test_nested.py | 15 |
@@ -202,6 +202,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/workloads/test_attention_dispatcher.py | 3 |
 | torchcts/autograd/test_tensor_metadata_mutation.py | 2 |
 | torchcts/operators/test_fractional_pooling_backward.py | 2 |
+| torchcts/selftest/test_package_artifacts.py | 2 |
 | torchcts/stress/test_rapid_alloc.py | 2 |
 | torchcts/dtypes/test_metadata_ops.py | 1 |
 | torchcts/strides/test_channels_last.py | 1 |
@@ -402,7 +403,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16101 |
+| none | 16102 |
 | training | 2400 |
 | compile | 120 |
 | sparse | 36 |
@@ -506,14 +507,14 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
-| category | 813 |
+| category | 814 |
 | handwritten | 736 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 14627 |
+| none | 14628 |
 | out_variant | 1637 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -527,7 +528,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 14647 |
+| none | 14648 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1257,20 +1258,20 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Name | Count |
 | --- | --- |
 | present | 17882 |
-| missing | 1023 |
+| missing | 1024 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13911 |
+| missing | 13912 |
 | present | 4994 |
 
 ## Pytest Nodes By Semantic Level
 
 | Level | Count |
 | --- | --- |
-| 1 | 813 |
+| 1 | 814 |
 | 2 | 13773 |
 | 3 | 1084 |
 | 4 | 2405 |
@@ -1285,7 +1286,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 813 |
+| executable | 814 |
 
 ### Level 2
 
@@ -2520,8 +2521,8 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 670 |
-| Category markers discovered | 805 |
+| Coverage markers discovered | 671 |
+| Category markers discovered | 806 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2542,7 +2543,7 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| selftest | 325 |
+| selftest | 326 |
 | operators | 187 |
 | workloads | 57 |
 | strides | 40 |
