@@ -862,7 +862,14 @@ def _apply_declared_dtype_probes(supported_dtypes, device_name):
             )
             continue
         try:
-            torch.zeros(1, dtype=probe_dtype, device=device_name)
+            with warnings.catch_warnings():
+                if probe_dtype is torch.complex32:
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="ComplexHalf support is experimental.*",
+                        category=UserWarning,
+                    )
+                torch.zeros(1, dtype=probe_dtype, device=device_name)
         except Exception as exc:
             failure_record = _record_session_probe_failure(
                 "dtype",

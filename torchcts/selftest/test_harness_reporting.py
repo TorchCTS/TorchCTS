@@ -490,6 +490,28 @@ def test_declared_dtype_probe_success_returns_pass_row(monkeypatch):
     assert harness._SESSION_PROBE_FAILURES == []
 
 
+def test_declared_complex32_probe_suppresses_pytorch_experimental_warning(monkeypatch):
+    def fake_zeros(*args, **kwargs):
+        warnings.warn(
+            "ComplexHalf support is experimental and many operators don't support it yet.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return object()
+
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURES", [])
+    monkeypatch.setattr(harness, "_SESSION_PROBE_FAILURE_KEYS", set())
+    monkeypatch.setattr(harness.torch, "zeros", fake_zeros)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        records = harness._apply_declared_dtype_probes({torch.complex32: True}, "cuda")
+
+    assert records[0]["outcome"] == "passed"
+    assert caught == []
+    assert harness._SESSION_PROBE_FAILURES == []
+
+
 def test_probe_results_table_renders_mixed_pass_fail_and_artifact(monkeypatch):
     monkeypatch.setattr(harness, "_RESULTS_DIR", "./results")
     monkeypatch.setattr(harness, "_HARDWARE_KEY", "unit_hw")
