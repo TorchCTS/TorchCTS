@@ -119,6 +119,47 @@ MKLDNN and NNPACK family:
 
 ## Accepted Result Records
 
+Use the packaged evidence command when collecting data from hardware that is not
+available to the maintainer doing the promotion:
+
+```bash
+python -m torchcts coverage evidence-pack --device cuda
+```
+
+Use `--backend-gate` when the evidence target is a build family rather than a
+plain `torch.device(...).type`, or when a backend reports as another device type:
+
+```bash
+python -m torchcts coverage evidence-pack \
+  --device cuda \
+  --backend-gate cuda+rocm
+
+python -m torchcts coverage evidence-pack \
+  --device cpu \
+  --backend-gate cpu+fbgemm+cpu_build
+```
+
+Use `--backend-gate all` or `--include-all-backend-packs` only when the archive
+should include every backend-pack row regardless of the current machine.
+
+For a focused bundle, repeat `--surface` with exact dispatcher names:
+
+```bash
+python -m torchcts coverage evidence-pack \
+  --device cuda \
+  --surface aten::_fused_dropout \
+  --surface aten::_fused_dropout.out
+```
+
+The command writes both an unpacked directory and a `.tar.gz` archive under
+`results/coverage/evidence-packs/` by default. The archive includes host and
+PyTorch environment facts, CUDA/MPS device state, the live coverage audit,
+pending-review records, oracle metadata, dispatcher schemas, dispatcher tables,
+and current oracle results. Pending backend-pack rows that do not yet have an
+`OracleSpec` are still included from the coverage audit with schema, dispatch,
+exclusion, and pending-review evidence; their oracle result is recorded as
+skipped because no runner exists yet.
+
 Accepted backend-pack evidence records must include:
 
 - backend family;

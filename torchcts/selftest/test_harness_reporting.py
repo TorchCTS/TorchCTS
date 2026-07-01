@@ -23,6 +23,8 @@ import os
 import runpy
 import subprocess
 import sys
+import tarfile
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -4155,6 +4157,195 @@ def test_coverage_default_commands_write_default_artifacts(tmp_path, monkeypatch
 
     captured = capsys.readouterr()
     assert "Wrote coverage audit" in captured.out
+
+
+def test_coverage_evidence_pack_writes_portable_archive(tmp_path, monkeypatch):
+    from torchcts.core import evidence_pack as evidence_pack_module
+
+    audit = {
+        "metadata": {
+            "pytorch_version": "test",
+            "generated_at": "2026-07-01T00:00:00Z",
+            "total_aten_overloads": 1,
+            "surface_counts": {},
+            "unknown_count": 0,
+        },
+        "entries": [
+            {
+                "name": "aten::_fused_dropout",
+                "schema": "aten::_fused_dropout(Tensor self, float p, Generator? generator=None) -> (Tensor, Tensor)",
+                "status": "covered_backend_pack",
+                "coverage_kind": "backend_pack",
+                "oracle": {
+                    "oracle_id": "fused_dropout_backend_pack",
+                    "backend_gate": "cuda",
+                },
+                "pending_review": None,
+            },
+            {
+                "name": "aten::cudnn_convolution",
+                "schema": (
+                    "aten::cudnn_convolution(Tensor self, Tensor weight, SymInt[] padding, "
+                    "SymInt[] stride, SymInt[] dilation, SymInt groups, bool benchmark, "
+                    "bool deterministic, bool allow_tf32) -> Tensor"
+                ),
+                "status": "pending_backend_pack",
+                "coverage_kind": "backend_pack",
+                "surface_kind": "functional_data",
+                "variant_kind": "functional",
+                "oracle": None,
+                "pending_review": {
+                    "blocker_type": "needs_backend_pack",
+                    "backend_gate": "cuda",
+                    "required_closure": "implement_backend_gated_runner",
+                },
+                "exclusion": {
+                    "name": "^aten::.*cudnn.*$",
+                    "match": "regex",
+                    "category": "backend_specific_internal",
+                },
+            }
+        ],
+        "warnings": [],
+        "errors": [],
+    }
+
+    monkeypatch.setattr(evidence_pack_module, "_utc_stamp", lambda: "20260701T000000Z")
+    monkeypatch.setattr(evidence_pack_module.socket, "gethostname", lambda: "unit-host")
+    monkeypatch.setattr(evidence_pack_module.coverage, "build_audit", lambda: audit)
+    monkeypatch.setattr(
+        evidence_pack_module.coverage,
+        "build_pending_review_artifact",
+        lambda _audit: {"metadata": {"record_count": 0}, "records": []},
+    )
+    monkeypatch.setattr(evidence_pack_module.coverage, "render_summary_markdown", lambda _audit: "# Summary\n")
+    monkeypatch.setattr(evidence_pack_module.coverage, "render_pending_review_markdown", lambda _audit: "# Pending\n")
+
+    result = evidence_pack_module.build_evidence_pack(
+        device="cuda",
+        output_dir=tmp_path,
+        run_oracles=False,
+    )
+
+    archive_path = Path(result["archive"])
+    assert archive_path.exists()
+    assert Path(result["staging_dir"]).exists()
+
+    prefix = "torchcts-evidence-unit-host-cuda-20260701T000000Z"
+    with tarfile.open(archive_path) as archive:
+        names = set(archive.getnames())
+        assert f"{prefix}/environment.json" in names
+        assert f"{prefix}/coverage/audit.json" in names
+        assert f"{prefix}/coverage/pending_review.json" in names
+        assert f"{prefix}/oracles/backend_pack_evidence.json" in names
+        evidence_file = archive.extractfile(f"{prefix}/oracles/backend_pack_evidence.json")
+        assert evidence_file is not None
+        evidence = json.loads(evidence_file.read().decode("utf-8"))
+
+    assert evidence["metadata"]["record_count"] == 2
+    by_surface = {record["surface"]: record for record in evidence["records"]}
+    assert by_surface["aten::_fused_dropout"]["oracle_result"]["skipped"] is True
+    assert by_surface["aten::cudnn_convolution"]["oracle"] is None
+    assert by_surface["aten::cudnn_convolution"]["backend_gate"] == "cuda"
+    assert by_surface["aten::cudnn_convolution"]["oracle_result"]["reason"] == "no oracle spec registered"
+
+
+def test_coverage_evidence_pack_selects_explicit_backend_gates():
+    from torchcts.core import evidence_pack as evidence_pack_module
+
+    audit = {
+        "entries": [
+            {
+                "name": "aten::cuda_only",
+                "coverage_kind": "backend_pack",
+                "pending_review": {"backend_gate": "cuda"},
+            },
+            {
+                "name": "aten::rocm_only",
+                "coverage_kind": "backend_pack",
+                "pending_review": {"backend_gate": "rocm"},
+            },
+            {
+                "name": "aten::fbgemm_only",
+                "coverage_kind": "backend_pack",
+                "pending_review": {"backend_gate": "fbgemm"},
+            },
+            {
+                "name": "aten::cpu_build_only",
+                "coverage_kind": "backend_pack",
+                "pending_review": {"backend_gate": "cpu_build"},
+            },
+            {
+                "name": "aten::any_backend",
+                "coverage_kind": "backend_pack",
+                "pending_review": {"backend_gate": "any"},
+            },
+            {
+                "name": "aten::generated",
+                "coverage_kind": "generated",
+                "pending_review": {"backend_gate": "cuda"},
+            },
+        ]
+    }
+
+    default_cuda = evidence_pack_module._select_targets(audit, "cuda")
+    assert [target["surface"] for target in default_cuda] == [
+        "aten::any_backend",
+        "aten::cuda_only",
+    ]
+
+    explicit = evidence_pack_module._select_targets(
+        audit,
+        "cuda",
+        backend_gates=["rocm,fbgemm+cpu_build"],
+    )
+    assert [target["surface"] for target in explicit] == [
+        "aten::any_backend",
+        "aten::cpu_build_only",
+        "aten::fbgemm_only",
+        "aten::rocm_only",
+    ]
+
+    all_gates = evidence_pack_module._select_targets(audit, "cpu", backend_gates=["all"])
+    assert [target["surface"] for target in all_gates] == [
+        "aten::any_backend",
+        "aten::cpu_build_only",
+        "aten::cuda_only",
+        "aten::fbgemm_only",
+        "aten::rocm_only",
+    ]
+
+
+def test_cli_routes_coverage_evidence_pack(monkeypatch):
+    from torchcts.core import evidence_pack as evidence_pack_module
+
+    calls = []
+
+    def fake_run_evidence_pack_command(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(evidence_pack_module, "run_evidence_pack_command", fake_run_evidence_pack_command)
+    args = SimpleNamespace(
+        coverage_command="evidence-pack",
+        device="cuda",
+        output_dir="out",
+        surface=["aten::_fused_dropout"],
+        backend_gate=["cuda+rocm"],
+        no_run_oracles=True,
+        include_all_backend_packs=True,
+        strict_unknowns=False,
+    )
+
+    assert cli_module.run_coverage_command(args) == 0
+    assert calls == [{
+        "device": "cuda",
+        "output_dir": "out",
+        "surfaces": ["aten::_fused_dropout"],
+        "backend_gates": ["cuda+rocm"],
+        "run_oracles": False,
+        "include_all_backend_packs": True,
+    }]
 
 
 def test_coverage_materializes_generated_cases(tmp_path, monkeypatch):
