@@ -117,6 +117,51 @@ Promotion rule:
   compared against the value oracle. Shape-only, dtype-only, or finite-output
   checks are not enough.
 
+## CUDA Fused Dropout Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::_fill_mem_eff_dropout_mask_`
+- `aten::_fused_dropout`
+- `aten::_fused_dropout.out`
+
+Accepted evidence:
+
+- A DGX GB10 CUDA evidence bundle collected on 2026-07-01 recorded PyTorch
+  `2.11.0+cu128`, CUDA `12.8`, cuDNN `91900`, compute capability `12.1`, and
+  healthy post-service free memory before promotion review.
+- Dispatcher evidence from that bundle showed CUDA registration for
+  `_fill_mem_eff_dropout_mask_` and `_fused_dropout`, and a CUDA-capable
+  composite explicit autograd registration for `_fused_dropout.out`.
+- PyTorch source for `_fill_mem_eff_dropout_mask_` records that the helper fills
+  a contiguous float tensor with random uniform values and returns `self`.
+- `torchcts/core/oracles.py` registers these surfaces with oracle id
+  `fused_dropout_backend_pack` and executes direct CUDA dispatcher calls.
+
+Accepted contract:
+
+- `_fused_dropout` returns an output tensor and mask on the input device with the
+  input shape.
+- The mask is boolean-like (`torch.bool` or `torch.uint8`) and contains only
+  zero/one values.
+- The output value is `input * mask * (1 / (1 - p))` for the valid nonzero
+  dropout probability used by the oracle.
+- `_fused_dropout.out` returns the provided `out0` and `out1` tensors and obeys
+  the same output/mask value contract.
+- `_fill_mem_eff_dropout_mask_` requires a contiguous CUDA `torch.float32`
+  4D tensor for the oracle sample, returns that same tensor, fills finite values
+  in `[0, 1]`, and is deterministic for the same seed and offset.
+
+Promotion rule:
+
+- These surfaces remain covered only while a CUDA build executes the direct
+  dispatcher paths and satisfies the value/identity properties above. Dispatcher
+  registration alone is not enough.
+- This promotion does not cover cuDNN, CSLT, Triton, or semi-structured sparse
+  backend-pack surfaces.
+
 ## Explicit Scale/Zero Int4 Matmul
 
 Status: `pending_property`

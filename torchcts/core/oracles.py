@@ -143,6 +143,9 @@ def _raise_backend_unavailable_if_applicable(spec: OracleSpec, exc: Exception) -
         "only available for these backends",
         "requires MPS",
         "requires CUDA",
+        "not enabled for build",
+        "only enabled with aotriton",
+        "was not enabled for build",
     )
     if isinstance(exc, (NotImplementedError, RuntimeError)) and any(
         fragment in message for fragment in unavailable_fragments
@@ -2039,6 +2042,110 @@ def _run_mps_lstm(spec: OracleSpec, device: str) -> None:
     raise AssertionError(f"No MPS LSTM implementation for {spec.surface}")
 
 
+def _assert_fused_dropout_mask(mask: torch.Tensor, input_tensor: torch.Tensor, label: str) -> None:
+    if tuple(mask.shape) != tuple(input_tensor.shape):
+        raise AssertionError(f"{label} mask shape mismatch: {tuple(mask.shape)} vs {tuple(input_tensor.shape)}")
+    if mask.device != input_tensor.device:
+        raise AssertionError(f"{label} mask device mismatch: {mask.device} vs {input_tensor.device}")
+    if mask.dtype not in (torch.bool, torch.uint8):
+        raise AssertionError(f"{label} mask dtype mismatch: {mask.dtype}")
+    mask_cpu = mask.detach().cpu()
+    if mask.dtype == torch.bool:
+        return
+    if not torch.all((mask_cpu == 0) | (mask_cpu == 1)):
+        raise AssertionError(f"{label} mask contains values other than 0 and 1")
+
+
+def _assert_fused_dropout_result(
+    input_tensor: torch.Tensor,
+    output: torch.Tensor,
+    mask: torch.Tensor,
+    p: float,
+    label: str,
+) -> None:
+    if tuple(output.shape) != tuple(input_tensor.shape):
+        raise AssertionError(f"{label} output shape mismatch: {tuple(output.shape)} vs {tuple(input_tensor.shape)}")
+    if output.dtype != input_tensor.dtype:
+        raise AssertionError(f"{label} output dtype mismatch: {output.dtype} vs {input_tensor.dtype}")
+    if output.device != input_tensor.device:
+        raise AssertionError(f"{label} output device mismatch: {output.device} vs {input_tensor.device}")
+    _assert_fused_dropout_mask(mask, input_tensor, label)
+    expected = input_tensor * mask.to(dtype=input_tensor.dtype) * (1.0 / (1.0 - p))
+    _assert_close_tensor(output, expected, label, rtol=1e-6, atol=1e-6)
+
+
+def _cuda_generator(device: torch.device, seed: int) -> torch.Generator:
+    generator = torch.Generator(device=device)
+    generator.manual_seed(seed)
+    return generator
+
+
+def _assert_mem_eff_dropout_mask_fill(tensor: torch.Tensor, label: str) -> None:
+    if tensor.dtype != torch.float32:
+        raise AssertionError(f"{label} mask dtype mismatch: {tensor.dtype}")
+    if not tensor.is_contiguous():
+        raise AssertionError(f"{label} mask tensor is not contiguous")
+    values = tensor.detach().cpu()
+    if not torch.isfinite(values).all():
+        raise AssertionError(f"{label} mask contains non-finite values")
+    if not torch.all((values >= 0.0) & (values <= 1.0)):
+        raise AssertionError(f"{label} mask contains values outside [0, 1]")
+
+
+def _run_cuda_fused_dropout(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    device_obj = torch.device(device)
+    input_tensor = torch.linspace(-3.0, 3.0, steps=64, device=device_obj, dtype=torch.float32).reshape(8, 8)
+    p = 0.25
+
+    try:
+        if spec.surface == "aten::_fill_mem_eff_dropout_mask_":
+            first = torch.empty((1, 2, 4, 8), device=device_obj, dtype=torch.float32)
+            returned = torch.ops.aten._fill_mem_eff_dropout_mask_(first, p, 12345, 0)
+            assert_out_identity(returned, first, spec.surface)
+            _assert_mem_eff_dropout_mask_fill(first, spec.surface)
+
+            second = torch.empty_like(first)
+            torch.ops.aten._fill_mem_eff_dropout_mask_(second, p, 12345, 0)
+            _assert_close_tensor(first, second, f"{spec.surface}.deterministic_seed", rtol=0.0, atol=0.0)
+            return
+
+        if spec.surface == "aten::_fused_dropout":
+            generator = _cuda_generator(device_obj, 1729)
+            output, mask = torch.ops.aten._fused_dropout(input_tensor, p, generator)
+            _assert_fused_dropout_result(input_tensor, output, mask, p, spec.surface)
+            return
+
+        if spec.surface == "aten::_fused_dropout.out":
+            last_exc: Exception | None = None
+            for mask_dtype in (torch.bool, torch.uint8):
+                out0 = torch.empty_like(input_tensor)
+                out1 = torch.empty_like(input_tensor, dtype=mask_dtype)
+                generator = _cuda_generator(device_obj, 1729)
+                try:
+                    output, mask = torch.ops.aten._fused_dropout.out(
+                        input_tensor,
+                        p,
+                        generator,
+                        out0=out0,
+                        out1=out1,
+                    )
+                except Exception as exc:
+                    last_exc = exc
+                    continue
+                assert_out_identity(output, out0, f"{spec.surface}.out0")
+                assert_out_identity(mask, out1, f"{spec.surface}.out1")
+                _assert_fused_dropout_result(input_tensor, output, mask, p, spec.surface)
+                return
+            if last_exc is not None:
+                raise last_exc
+            raise AssertionError(f"{spec.surface} did not execute with any supported mask dtype")
+    except Exception as exc:
+        _raise_backend_unavailable_if_applicable(spec, exc)
+
+    raise AssertionError(f"No CUDA fused-dropout oracle implementation for {spec.surface}")
+
+
 def _run_backend_property(spec: OracleSpec, device: str) -> None:
     _check_backend_gate(spec, device)
     raise OracleUnavailable(f"coverage_strategy_pending: {spec.surface} backend-pack runner is not implemented yet")
@@ -2070,6 +2177,7 @@ _RUNNERS: dict[str, Callable[[OracleSpec, str], None]] = {
     "mps_convolution": _run_mps_convolution,
     "mps_sdpa_math": _run_mps_sdpa_math,
     "mps_lstm": _run_mps_lstm,
+    "cuda_fused_dropout": _run_cuda_fused_dropout,
     "backend_property": _run_backend_property,
 }
 
@@ -2242,12 +2350,12 @@ for _surface in (
     _register(OracleSpec(
         surface=_surface,
         oracle_id="fused_dropout_backend_pack",
-        coverage_status="pending_backend_pack",
+        coverage_status="covered_backend_pack",
         coverage_kind="backend_pack",
-        runner="backend_property",
+        runner="cuda_fused_dropout",
         backend_gate="cuda",
         semantic_level=5,
-        reason="Fused dropout internals have no CPU/MPS runtime kernel in this build and need a backend-gated CUDA property runner.",
+        reason="CUDA fused-dropout internals are validated with direct dispatcher calls for mask/output contracts, out identity, and memory-efficient mask-fill identity/determinism.",
     ))
 
 for _surface in (

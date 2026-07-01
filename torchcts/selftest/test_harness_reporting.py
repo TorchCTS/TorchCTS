@@ -4896,9 +4896,9 @@ def test_coverage_audit_publishes_pending_review_metadata():
     assert pin_memory["status"] == "covered_property"
     assert pin_memory["oracle"]["oracle_id"] == "privateuse1_pin_memory_noop"
 
-    assert fused_dropout["status"] == "pending_backend_pack"
-    assert fused_dropout["pending_review"]["blocker_type"] == "needs_backend_pack"
-    assert fused_dropout["pending_review"]["backend_gate"] == "cuda"
+    assert fused_dropout["status"] == "covered_backend_pack"
+    assert fused_dropout["oracle"]["oracle_id"] == "fused_dropout_backend_pack"
+    assert fused_dropout["oracle"]["backend_gate"] == "cuda"
 
     assert nested_softmax["status"] == "pending_property"
     assert nested_softmax["pending_review"]["blocker_type"] == "needs_valid_internal_inputs"
@@ -4930,6 +4930,19 @@ def test_privateuse1_oracle_surfaces_require_privateuse1_device():
 
     with pytest.raises(OracleUnavailable, match="requires a PrivateUse1 backend"):
         run_oracle_for_surface("aten::_pin_memory", "cpu")
+
+
+def test_cuda_fused_dropout_oracle_surfaces_require_cuda():
+    from torchcts.core.oracles import OracleUnavailable, run_oracle_for_surface
+
+    with pytest.raises(OracleUnavailable, match="requires CUDA"):
+        run_oracle_for_surface("aten::_fused_dropout", "cpu")
+
+    with pytest.raises(OracleUnavailable, match="requires CUDA"):
+        run_oracle_for_surface("aten::_fused_dropout.out", "cpu")
+
+    with pytest.raises(OracleUnavailable, match="requires CUDA"):
+        run_oracle_for_surface("aten::_fill_mem_eff_dropout_mask_", "cpu")
 
 
 def test_mps_int4_oracle_dimension_guard():

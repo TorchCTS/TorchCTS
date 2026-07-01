@@ -2494,7 +2494,6 @@ def _alias_info_dict(alias_info) -> dict | None:
         return None
     return {
         "is_write": bool(getattr(alias_info, "is_write", False)),
-        "repr": repr(alias_info),
     }
 
 
