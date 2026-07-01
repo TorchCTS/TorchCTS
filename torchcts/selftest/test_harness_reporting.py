@@ -40,6 +40,7 @@ import torchcts.core.reference_oracles as reference_oracles
 import torchcts.core.runtime_evidence as runtime_evidence
 import torchcts.core.version_rules as version_rules
 import torchcts.generated.coverage_helpers as generated_helpers
+import torchcts.op_metadata as op_metadata_module
 import torchcts.sample_generation as sample_generation
 import torchcts.rng.test_generator as rng_tests
 from torchcts.core.comparer import (
@@ -69,6 +70,11 @@ from torchcts.opinfo.test_opinfo_errors import _assert_expected_error
 from torchcts.opinfo.test_opinfo_errors import _assert_exception_matches_expected
 
 pytestmark = pytest.mark.covers_category("selftest")
+_SOURCE_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SOURCE_CHECKOUT_ONLY = pytest.mark.skipif(
+    not (_SOURCE_REPO_ROOT / "pyproject.toml").exists(),
+    reason="source checkout test requires repository files",
+)
 
 
 def test_build_report_counts_opinfo_and_ignores_plumbing():
@@ -993,23 +999,26 @@ def test_cpu_supported_but_missing_from_source_is_recorded():
     assert disposition.mismatches == (dtype_contracts.CPU_SUPPORTED_BUT_MISSING_FROM_SOURCE,)
 
 
-def test_dtype_contract_disposition_includes_per_dtype_probe_detail(monkeypatch):
+def test_dtype_contract_disposition_uses_generic_runtime_detail_without_probe_blob(monkeypatch):
     monkeypatch.setattr(dtype_contracts.torch, "__version__", "2.12.1")
     monkeypatch.setattr(
         dtype_contracts,
-        "_op_contract_versions",
-        lambda _dispatcher_name: {
-            "2.12": {
-                "cpu_unsupported": {"forward:clean": ["torch.complex32"]},
-                "probe_details": {
-                    "forward:clean": {
-                        "torch.complex32": {
-                            "status": "unsupported",
-                            "detail": "clean CPU probe failed: unsupported ComplexHalf",
-                        }
-                    }
+        "load_dtype_contracts",
+        lambda: {
+            "version": 2,
+            "format": "runtime_profile_ranges",
+            "metadata": {"contract_authority": "versioned_cpu_probe", "collected_versions": ["2.12.1"]},
+            "profiles": {
+                "p000001": {
+                    "cpu_supported": {},
+                    "cpu_unsupported": {"forward:clean": ["torch.complex32"]},
+                    "cpu_unknown": {},
+                    "cpu_pending": {},
+                    "oracle_supported": {},
+                    "source_expected": {},
                 },
-            }
+            },
+            "contracts": {"aten::fake_contract": [["2.12.1", "2.12.1", "p000001"]]},
         },
     )
 
@@ -1017,7 +1026,76 @@ def test_dtype_contract_disposition_includes_per_dtype_probe_detail(monkeypatch)
 
     assert not disposition.allowed
     assert disposition.status == dtype_contracts.CPU_UNSUPPORTED
-    assert disposition.detail == "clean CPU probe failed: unsupported ComplexHalf"
+    assert disposition.detail == "torch.complex32 is not supported by the PyTorch CPU contract for aten::fake_contract"
+
+
+def test_dtype_contract_replacement_version_entry_removes_prior_bucket(monkeypatch):
+    monkeypatch.setattr(dtype_contracts.torch, "__version__", "2.8.0")
+    monkeypatch.setattr(
+        dtype_contracts,
+        "load_dtype_contracts",
+        lambda: {
+            "version": 2,
+            "format": "runtime_profile_ranges",
+            "metadata": {"contract_authority": "versioned_cpu_probe", "collected_versions": ["2.7.0", "2.8.0"]},
+            "profiles": {
+                "p000001": {
+                    "cpu_supported": {"forward:clean": ["torch.float32"]},
+                    "cpu_unsupported": {},
+                    "cpu_unknown": {},
+                    "cpu_pending": {},
+                    "oracle_supported": {},
+                    "source_expected": {},
+                },
+                "p000002": {
+                    "cpu_supported": {},
+                    "cpu_unsupported": {"forward:clean": ["torch.float32"]},
+                    "cpu_unknown": {},
+                    "cpu_pending": {},
+                    "oracle_supported": {},
+                    "source_expected": {},
+                },
+            },
+            "contracts": {"aten::fake_contract": [["2.7.0", "2.7.0", "p000001"], ["2.8.0", "2.8.0", "p000002"]]},
+        },
+    )
+
+    disposition = dtype_contracts.contract_disposition("aten::fake_contract", torch.float32)
+
+    assert not disposition.allowed
+    assert disposition.status == dtype_contracts.CPU_UNSUPPORTED
+    assert disposition.detail == "torch.float32 is not supported by the PyTorch CPU contract for aten::fake_contract"
+
+
+def test_source_expected_dtypes_prefers_versioned_contract_over_global_metadata(monkeypatch):
+    monkeypatch.setattr(dtype_contracts.torch, "__version__", "2.7.0")
+    monkeypatch.setattr(
+        dtype_contracts,
+        "load_dtype_contracts",
+        lambda: {
+            "version": 2,
+            "format": "runtime_profile_ranges",
+            "metadata": {"contract_authority": "versioned_cpu_probe", "collected_versions": ["2.7.0"]},
+            "profiles": {
+                "p000001": {
+                    "cpu_supported": {},
+                    "cpu_unsupported": {},
+                    "cpu_unknown": {},
+                    "cpu_pending": {},
+                    "oracle_supported": {},
+                    "source_expected": {"*": ["torch.float32"]},
+                },
+            },
+            "contracts": {"aten::fake_contract": [["2.7.0", "2.7.0", "p000001"]]},
+        },
+    )
+    monkeypatch.setattr(
+        dtype_contracts,
+        "get_op_metadata",
+        lambda _dispatcher_name: {"pytorch_dtypes": ["f64"]},
+    )
+
+    assert dtype_contracts.source_expected_dtypes("aten::fake_contract") == ("torch.float32",)
 
 
 def test_generated_cpu_contract_probe_honors_explicit_out_args_on_misbucketed_out_schema():
@@ -1269,13 +1347,22 @@ def test_build_report_ignores_runtime_skips_in_score_totals():
                 "dtype": "torch.float32",
             }
         },
-        "skips": {},
+        "skips": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_opinfo_forward[future]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "status": "SKIP",
+                "op": "future",
+                "skip_reason": "unavailable_in_pytorch_runtime",
+            }
+        },
     }
 
     scorecard, _ = build_report(current_data)
 
     assert "training        0/0 passed" in scorecard
     assert "training        0/1 passed" not in scorecard
+    assert "Ops not run (runtime): 1" in scorecard
     assert "float32" not in scorecard
 
 
@@ -1600,10 +1687,10 @@ def test_autocast_declared_but_failing_path_is_not_skipped(monkeypatch):
 
 
 def _load_release_hygiene_module():
-    repo_root = Path(__file__).resolve().parents[2]
-    return runpy.run_path(str(repo_root / "scripts" / "check_release_hygiene.py"))
+    return runpy.run_path(str(_SOURCE_REPO_ROOT / "scripts" / "check_release_hygiene.py"))
 
 
+@_SOURCE_CHECKOUT_ONLY
 def test_release_hygiene_rejects_package_known_failure_cache(tmp_path):
     hygiene = _load_release_hygiene_module()
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1616,6 +1703,7 @@ def test_release_hygiene_rejects_package_known_failure_cache(tmp_path):
     assert any("known_failures.json" in error for error in errors)
 
 
+@_SOURCE_CHECKOUT_ONLY
 def test_release_hygiene_rejects_tracked_backend_specific_text(tmp_path):
     hygiene = _load_release_hygiene_module()
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1628,8 +1716,9 @@ def test_release_hygiene_rejects_tracked_backend_specific_text(tmp_path):
     assert any("forbidden text" in error for error in errors)
 
 
+@_SOURCE_CHECKOUT_ONLY
 def test_pyproject_does_not_suppress_backend_fallback_or_pluggy_teardown_warnings():
-    pyproject = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (_SOURCE_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert "The operator .* is not currently supported on the MPS backend" not in pyproject
     assert "PluggyTeardownRaisedWarning" not in pyproject
@@ -2196,6 +2285,8 @@ def test_expected_error_helper_passes_when_op_raises():
 
 
 def test_init_cli_accepts_smoke_template(tmp_path):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(_SOURCE_REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     result = subprocess.run(
         [
             sys.executable,
@@ -2207,6 +2298,7 @@ def test_init_cli_accepts_smoke_template(tmp_path):
             "--non-interactive",
         ],
         cwd=tmp_path,
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
@@ -3732,6 +3824,53 @@ def test_coverage_exclusion_validation_rejects_unknown_names(tmp_path):
     assert any("not a known dispatcher overload" in error for error in result["errors"])
 
 
+def test_coverage_exclusion_validation_accepts_runtime_unavailable_names(tmp_path, monkeypatch):
+    inventory = {
+        "entries": [
+            {
+                "name": "aten::add.Tensor",
+                "base_name": "add",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        coverage_module,
+        "runtime_unavailable_op_entries",
+        lambda **_kwargs: [
+            {
+                "name": "aten::future",
+                "base_name": "future",
+            }
+        ],
+    )
+    exclusions = tmp_path / "coverage_exclusions.json"
+    exclusions.write_text(
+        json.dumps({
+            "version": 1,
+            "exclusions": [
+                {
+                    "name": "aten::future",
+                    "match": "exact",
+                    "surface": "functional_data",
+                    "category": "manual_future_scope",
+                    "reason": "Synthetic selftest exclusion for a version-known future op.",
+                    "owner": "torchcts",
+                    "review_after": "2099-01-01",
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    result = coverage_module.load_exclusions(
+        inventory,
+        package_path=exclusions,
+        project_path=tmp_path / "missing.json",
+    )
+
+    assert result["errors"] == []
+
+
 def test_coverage_default_commands_write_default_artifacts(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
 
@@ -3888,6 +4027,114 @@ def test_generated_entries_and_skip_reasons(capsys):
         skip_until_strategy_exists(entries[1], "out_variant")
 
 
+def test_coverage_audit_synthesizes_runtime_unavailable_metadata_entries(monkeypatch):
+    live_entry = {
+        "name": "aten::sample.Tensor",
+        "base_name": "sample",
+        "overload": "Tensor",
+        "schema": "aten::sample.Tensor(Tensor self) -> Tensor",
+        "args": [{"name": "self", "type": "Tensor", "tensor": True}],
+        "returns": [{"name": "", "type": "Tensor", "tensor": True}],
+        "tensor_args": [{"name": "self", "type": "Tensor", "tensor": True}],
+        "tensor_returns": [{"name": "", "type": "Tensor", "tensor": True}],
+        "has_tensor_args": True,
+        "has_tensor_returns": True,
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "dispatch": {"CPU": True},
+    }
+    unavailable_schema = {
+        "min": "2.9.0",
+        "max": None,
+        "schema_hash": "test",
+        "schema": "aten::future(Tensor self) -> Tensor",
+        "args": [{"name": "self", "type": "Tensor", "tensor": True}],
+        "returns": [{"name": "", "type": "Tensor", "tensor": True}],
+        "surface_kind": "functional_data",
+        "variant_kind": "functional",
+        "base_name": "future",
+        "overload": "",
+    }
+    metadata = {
+        "version": 2,
+        "metadata": {"collected_versions": ["2.8.0", "2.9.0"]},
+        "ops": {
+            "aten::sample.Tensor": {
+                "introduced": "2.7.0",
+                "removed": None,
+                "versions_seen": ["2.8.0"],
+                "versions_missing": ["2.9.0"],
+                "schema_ranges": [
+                    {
+                        **unavailable_schema,
+                        "schema": "aten::sample.Tensor(Tensor self) -> Tensor",
+                        "base_name": "sample",
+                        "overload": "Tensor",
+                        "min": "2.7.0",
+                    }
+                ],
+            },
+            "aten::future": {
+                "introduced": "2.9.0",
+                "removed": None,
+                "versions_seen": ["2.9.0"],
+                "versions_missing": ["2.8.0"],
+                "schema_ranges": [unavailable_schema],
+            },
+        },
+    }
+    monkeypatch.setattr(coverage_module.torch, "__version__", "2.8.0")
+    monkeypatch.setattr(
+        coverage_module,
+        "build_dispatcher_inventory",
+        lambda: {
+            "metadata": {"pytorch_version": "2.8.0", "total_aten_overloads": 1},
+            "entries": [live_entry],
+        },
+    )
+    monkeypatch.setattr(coverage_module, "build_opinfo_map", lambda: {"bases": {}, "exact": {}})
+    monkeypatch.setattr(coverage_module, "load_exclusions", lambda inventory: {"errors": [], "warnings": [], "exclusions": []})
+    monkeypatch.setattr(
+        coverage_module,
+        "collect_coverage_markers",
+        lambda root=None: {
+            "markers": [
+                {
+                    "nodeid": "torchcts/generated/test_future.py::test_future",
+                    "path": "torchcts/generated/test_future.py",
+                    "covers": ["aten::future"],
+                    "categories": [],
+                    "generated": True,
+                }
+            ],
+            "errors": [],
+            "warnings": [],
+            "unmapped_tests": [],
+        },
+    )
+    monkeypatch.setattr(op_metadata_module, "load_op_metadata", lambda: metadata)
+    monkeypatch.setattr(coverage_module, "runtime_unavailable_op_entries", op_metadata_module.runtime_unavailable_op_entries)
+
+    audit = coverage_module.build_audit()
+
+    by_name = {entry["name"]: entry for entry in audit["entries"]}
+    assert by_name["aten::future"]["status"] == "unavailable_in_pytorch_runtime"
+    assert by_name["aten::future"]["coverage_kind"] == "runtime_unavailable"
+    assert audit["metadata"]["status_counts"]["unavailable_in_pytorch_runtime"] == 1
+    assert audit["metadata"]["unknown_count"] == 1
+    assert audit["errors"] == []
+
+    summary = coverage_module.render_summary_markdown(audit)
+    assert "Runtime-unavailable overloads: 1" in summary
+    assert "`unavailable_in_pytorch_runtime`: 1" in summary
+
+    generated = coverage_module.build_generated_cases_manifest(audit)
+    assert generated["cases_by_surface"]["functional_data"][0]["status"] == "unavailable_in_pytorch_runtime"
+
+    with pytest.raises(pytest.skip.Exception, match="unavailable_in_pytorch_runtime"):
+        generated_helpers.skip_until_strategy_exists(by_name["aten::future"], "functional_data")
+
+
 def test_cli_dtype_filter_normalizes_and_deduplicates():
     effective, labels = harness._normalize_cli_dtype_filter([
         "float32",
@@ -3929,7 +4176,17 @@ def test_cli_dtype_filter_replaces_effective_manifest_dtypes():
     ]
 
 
-def test_generated_foreach_collection_is_dtype_parametrized():
+def test_generated_foreach_collection_is_dtype_parametrized(monkeypatch):
+    monkeypatch.setattr(
+        generated_helpers,
+        "_generated_clean_cpu_contract_allows",
+        lambda entry, dtype, manifest: True,
+    )
+    monkeypatch.setattr(
+        generated_helpers,
+        "contract_disposition",
+        lambda op_name, dtype: dtype_contracts.ContractDisposition(True, "cpu_supported"),
+    )
     entry = {
         "name": "aten::_foreach_add.List",
         "base_name": "_foreach_add",
@@ -3967,7 +4224,17 @@ def test_generated_foreach_collection_is_dtype_parametrized():
     ]
 
 
-def test_generated_foreach_collection_honors_cli_dtype_override():
+def test_generated_foreach_collection_honors_cli_dtype_override(monkeypatch):
+    monkeypatch.setattr(
+        generated_helpers,
+        "_generated_clean_cpu_contract_allows",
+        lambda entry, dtype, manifest: True,
+    )
+    monkeypatch.setattr(
+        generated_helpers,
+        "contract_disposition",
+        lambda op_name, dtype: dtype_contracts.ContractDisposition(True, "cpu_supported"),
+    )
     entry = {
         "name": "aten::_foreach_add.List",
         "base_name": "_foreach_add",
@@ -4153,13 +4420,19 @@ def test_coverage_audit_publishes_pending_review_metadata():
     assert flash["status"] == "covered_property"
     assert flash["oracle"]["oracle_id"] == "privateuse1_attention_public_sdpa"
 
-    assert raw_quantized_flash["status"] == "covered_property"
-    assert raw_quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
-    assert raw_quantized_flash["oracle"]["backend_gate"] == "any"
+    if raw_quantized_flash["status"] == "unavailable_in_pytorch_runtime":
+        assert raw_quantized_flash["coverage_kind"] == "runtime_unavailable"
+    else:
+        assert raw_quantized_flash["status"] == "covered_property"
+        assert raw_quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
+        assert raw_quantized_flash["oracle"]["backend_gate"] == "any"
 
-    assert quantized_flash["status"] == "covered_property"
-    assert quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
-    assert quantized_flash["oracle"]["backend_gate"] == "any"
+    if quantized_flash["status"] == "unavailable_in_pytorch_runtime":
+        assert quantized_flash["coverage_kind"] == "runtime_unavailable"
+    else:
+        assert quantized_flash["status"] == "covered_property"
+        assert quantized_flash["oracle"]["oracle_id"] == "quantized_flash_attention_public_sdpa"
+        assert quantized_flash["oracle"]["backend_gate"] == "any"
 
     assert pin_memory["status"] == "covered_property"
     assert pin_memory["oracle"]["oracle_id"] == "privateuse1_pin_memory_noop"

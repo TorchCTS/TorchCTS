@@ -44,6 +44,7 @@ from torchcts.core.semantic_levels import (
 )
 from torchcts.core.dtype_contracts import mismatch_counts as dtype_contract_mismatch_counts
 from torchcts.core.oracles import oracle_spec_for
+from torchcts.op_metadata import runtime_unavailable_op_entries
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +102,7 @@ FINAL_STATUSES = frozenset({
     "excluded_host_storage",
     "unknown",
     "not_backend_relevant",
+    "unavailable_in_pytorch_runtime",
 })
 
 COVERED_STATUSES = frozenset({
@@ -116,6 +118,10 @@ PENDING_STATUSES = frozenset({
     "pending_oracle",
     "pending_backend_pack",
     "pending_property",
+})
+
+RUNTIME_UNAVAILABLE_STATUSES = frozenset({
+    "unavailable_in_pytorch_runtime",
 })
 
 EXCLUDED_STATUSES = frozenset({
@@ -1649,8 +1655,16 @@ def load_exclusions(
 ) -> dict:
     package_path = package_path or PACKAGE_EXCLUSIONS_PATH
     project_path = project_path or DEFAULT_PROJECT_EXCLUSIONS
-    names = {entry["name"] for entry in inventory["entries"]}
-    bases = {entry["base_name"] for entry in inventory["entries"]}
+    live_names = {entry["name"] for entry in inventory["entries"]}
+    runtime_unavailable_entries = runtime_unavailable_op_entries(
+        runtime_version=torch.__version__,
+        live_names=live_names,
+    )
+    names = live_names | {entry["name"] for entry in runtime_unavailable_entries}
+    bases = (
+        {entry["base_name"] for entry in inventory["entries"]}
+        | {entry["base_name"] for entry in runtime_unavailable_entries}
+    )
     exclusions = []
     errors = []
     warnings = []
@@ -1816,6 +1830,8 @@ def _coverage_kind_for_status(status: str) -> str:
         return "opinfo"
     if status == "not_backend_relevant":
         return "not_backend_relevant"
+    if status in RUNTIME_UNAVAILABLE_STATUSES:
+        return "runtime_unavailable"
     return "unknown"
 
 
@@ -3256,6 +3272,7 @@ def _audit_entry_level_payload(
         "excluded_distributed_scope",
         "excluded_host_storage",
         "unknown",
+        "unavailable_in_pytorch_runtime",
     }:
         return _level_payload(generated_level_for_entry(entry))
     return {
@@ -3309,6 +3326,11 @@ def _summarize_generated_case_depth(entries: list[dict]) -> dict:
 
 def build_audit(root: str | os.PathLike | None = None) -> dict:
     inventory = build_dispatcher_inventory()
+    live_names = {entry["name"] for entry in inventory["entries"]}
+    runtime_unavailable_entries = runtime_unavailable_op_entries(
+        runtime_version=torch.__version__,
+        live_names=live_names,
+    )
     opinfo_map = build_opinfo_map()
     marker_data = collect_coverage_markers(root)
     handwritten_markers, generated_markers, category_markers = _marker_maps(marker_data)
@@ -3317,7 +3339,7 @@ def build_audit(root: str | os.PathLike | None = None) -> dict:
     errors = list(exclusion_data["errors"])
     errors.extend(marker_data.get("errors", []))
     warnings = list(exclusion_data["warnings"])
-    valid_names = {entry["name"] for entry in inventory["entries"]}
+    valid_names = live_names | {entry["name"] for entry in runtime_unavailable_entries}
     for marker in marker_data["markers"]:
         for covered in marker.get("covers", []):
             if covered not in valid_names:
@@ -3399,6 +3421,28 @@ def build_audit(root: str | os.PathLike | None = None) -> dict:
         entry["oracle"] = oracle_payload
         entry["coverage_kind"] = _coverage_kind_for_status(status)
         entry["pending_review"] = pending_review
+        entry["status"] = status
+        entry.update(level_payload)
+        audited_entries.append(entry)
+
+    for entry in runtime_unavailable_entries:
+        entry = dict(entry)
+        status = "unavailable_in_pytorch_runtime"
+        level_payload = _audit_entry_level_payload(
+            entry,
+            status=status,
+            hand_matches=[],
+            generated_matches=[],
+            generated_strategy=None,
+            generated_case_depth={},
+        )
+        entry["opinfo"] = {"covered": False, "matches": []}
+        entry["handwritten"] = {"covered": False, "markers": []}
+        entry["generated"] = {"covered": False, "strategy": None, "case_depth": {}, "markers": []}
+        entry["exclusion"] = None
+        entry["oracle"] = None
+        entry["coverage_kind"] = _coverage_kind_for_status(status)
+        entry["pending_review"] = None
         entry["status"] = status
         entry.update(level_payload)
         audited_entries.append(entry)
@@ -3604,7 +3648,12 @@ def render_pending_review_markdown(audit: dict) -> str:
 def render_summary_markdown(audit: dict) -> str:
     metadata = audit["metadata"]
     status_counts = metadata.get("status_counts", {})
-    relevant_total = metadata["total_aten_overloads"] - status_counts.get("not_backend_relevant", 0)
+    runtime_unavailable = sum(status_counts.get(status, 0) for status in RUNTIME_UNAVAILABLE_STATUSES)
+    relevant_total = (
+        metadata["total_aten_overloads"]
+        - status_counts.get("not_backend_relevant", 0)
+        - runtime_unavailable
+    )
     covered_total = sum(status_counts.get(status, 0) for status in COVERED_STATUSES)
     covered_percent = (covered_total / relevant_total * 100.0) if relevant_total else 100.0
     lines = [
@@ -3613,6 +3662,7 @@ def render_summary_markdown(audit: dict) -> str:
         f"PyTorch: `{metadata['pytorch_version']}`",
         f"Total ATen overloads: {metadata['total_aten_overloads']}",
         f"Backend-relevant overloads: {relevant_total}",
+        f"Runtime-unavailable overloads: {runtime_unavailable}",
         f"Covered relevant overloads: {covered_total} ({covered_percent:.1f}%)",
         f"Unknown surfaces: {metadata['unknown_count']}",
         "",
@@ -3898,6 +3948,7 @@ def build_generated_cases_manifest(audit: dict) -> dict:
     included_statuses = {
         "unknown",
         "excluded",
+        "unavailable_in_pytorch_runtime",
         "covered_generated",
         "covered_oracle",
         "covered_backend_pack",
@@ -4221,5 +4272,6 @@ def generated_entries_for(
             return []
     return [
         entry for entry in audit.get("entries", [])
-        if entry.get("surface_kind") == surface_kind and entry.get("status") in {"unknown", "excluded", "covered_generated"}
+        if entry.get("surface_kind") == surface_kind
+        and entry.get("status") in {"unknown", "excluded", "covered_generated", "unavailable_in_pytorch_runtime"}
     ]

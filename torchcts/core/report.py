@@ -120,6 +120,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     }
     runtime_skip_reasons = {
         "runtime_skip",
+        "unavailable_in_pytorch_runtime",
     }
     dtype_skip_reasons = {
         "dtype_not_supported",
