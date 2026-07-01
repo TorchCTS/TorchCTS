@@ -5,24 +5,24 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-06-30T05:57:07.972675Z |
-| TorchCTS version | 0.3.3 |
-| Installed TorchCTS metadata version | 0.3.3 |
-| pyproject.toml version | 0.3.3 |
+| Generated at | 2026-07-01T07:18:57.157676Z |
+| TorchCTS version | 0.3.4 |
+| Installed TorchCTS metadata version | 0.3.4 |
+| pyproject.toml version | 0.3.4 |
 | TorchCTS versions agree | True |
 | TorchCTS import path | /Users/kris/localprojects/torchcts/torchcts/__init__.py |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-06-30T05:56:46.373076Z |
+| Coverage audit timestamp | 2026-07-01T07:16:38.679941Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 18870 |
-| Pytest executable nodes | 18786 |
+| Pytest nodes collected | 18905 |
+| Pytest executable nodes | 18821 |
 | Pytest skip-marked nodes | 84 |
 | Structured deselected nodes | 0 |
 | ATen overloads inventoried | 3225 |
@@ -32,11 +32,12 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Unknown tensor-touching surfaces | 0 |
 | Pending surfaces | 192 |
 | Excluded surfaces | 56 |
+| Runtime-unavailable overloads | 0 |
 | Generated coverage surfaces | 1910 |
 | Generated dispatcher semantic cases | 1921 |
 | Required generated dispatcher semantic cases | 1921 |
 | Known crash isolation rules | 10 |
-| CPU dtype contract records | 3053 |
+| CPU dtype contract records | 3046 |
 
 ## Semantic Level Overview
 
@@ -44,7 +45,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 778 | 778 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 1 | 813 | 813 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
 | 2 | 13773 | 13759 | 14 | 0 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
 | 3 | 1084 | 1081 | 3 | 0 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
 | 4 | 2405 | 2380 | 25 | 0 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
@@ -59,17 +60,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 18870 |
-| Node IDs parsed from stdout | 18870 |
-| Pytest summary count | 18870 |
+| Structured records parsed | 18905 |
+| Node IDs parsed from stdout | 18905 |
+| Pytest summary count | 18905 |
 | Parameterized node IDs | 18433 |
-| Unparameterized node IDs | 437 |
+| Unparameterized node IDs | 472 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 18786 |
+| executable | 18821 |
 | pytest_skip_marked | 84 |
 
 ## Pytest Collection Skip Reasons
@@ -87,7 +88,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | operators | 434 |
-| selftest | 356 |
+| selftest | 391 |
 | compiler | 144 |
 | dtypes | 135 |
 | workloads | 120 |
@@ -109,7 +110,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | handwritten | 1158 |
-| selftest | 356 |
+| selftest | 391 |
 
 ## Pytest Nodes By File
 
@@ -122,7 +123,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/generated/test_functional_variants.py | 578 |
 | torchcts/generated/test_inplace_variants.py | 346 |
 | torchcts/generated/test_oracle_surfaces.py | 273 |
-| torchcts/selftest/test_harness_reporting.py | 214 |
+| torchcts/selftest/test_harness_reporting.py | 218 |
 | torchcts/opinfo/test_opinfo_errors.py | 202 |
 | torchcts/selftest/test_mps_triage.py | 109 |
 | torchcts/generated/test_view_aliases.py | 100 |
@@ -139,6 +140,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/operators/test_binary.py | 36 |
 | torchcts/operators/test_sparse.py | 34 |
 | torchcts/operators/test_view_shape.py | 33 |
+| torchcts/selftest/test_pytorch_version_matrix.py | 26 |
 | torchcts/rng/test_generator.py | 25 |
 | torchcts/compiler/test_compile_training.py | 24 |
 | torchcts/generated/test_layout_storage_variants.py | 24 |
@@ -151,13 +153,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/operators/test_creation.py | 19 |
 | torchcts/operators/test_misc.py | 19 |
 | torchcts/operators/test_norm.py | 19 |
+| torchcts/selftest/test_install_plan.py | 19 |
 | torchcts/autograd/test_inplace_safety.py | 18 |
 | torchcts/operators/test_reduction.py | 18 |
 | torchcts/training/test_training_pipeline.py | 18 |
 | torchcts/operators/test_conv.py | 17 |
 | torchcts/operators/test_nested.py | 15 |
 | torchcts/operators/test_index_scatter.py | 14 |
-| torchcts/selftest/test_install_plan.py | 14 |
 | torchcts/stress/test_adversarial.py | 14 |
 | torchcts/operators/test_pooling.py | 13 |
 | torchcts/autograd/test_double_backward.py | 12 |
@@ -400,7 +402,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16066 |
+| none | 16101 |
 | training | 2400 |
 | compile | 120 |
 | sparse | 36 |
@@ -504,14 +506,14 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
-| category | 778 |
+| category | 813 |
 | handwritten | 736 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 14592 |
+| none | 14627 |
 | out_variant | 1637 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -525,7 +527,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 14612 |
+| none | 14647 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1255,20 +1257,20 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Name | Count |
 | --- | --- |
 | present | 17882 |
-| missing | 988 |
+| missing | 1023 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13876 |
+| missing | 13911 |
 | present | 4994 |
 
 ## Pytest Nodes By Semantic Level
 
 | Level | Count |
 | --- | --- |
-| 1 | 778 |
+| 1 | 813 |
 | 2 | 13773 |
 | 3 | 1084 |
 | 4 | 2405 |
@@ -1283,7 +1285,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 778 |
+| executable | 813 |
 
 ### Level 2
 
@@ -1342,6 +1344,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Coverage percent | 92.3% |
 | Pending surfaces | 192 |
 | Excluded surfaces | 56 |
+| Runtime-unavailable overloads | 0 |
 | Unknown surfaces | 0 |
 
 ## Coverage Status Counts
@@ -1371,6 +1374,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | pending | 192 |
 | excluded | 56 |
 | not_backend_relevant | 11 |
+| runtime_unavailable | 0 |
 | unknown | 0 |
 
 ## Coverage Kind Counts
@@ -2402,106 +2406,122 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Contracted dispatcher entries | 3053 |
-| CPU-supported dtype cases | 22757 |
-| CPU-unsupported dtype cases | 7820 |
-| CPU-pending dtype cases | 787 |
-| CPU-unknown dtype cases | 0 |
+| Contracted dispatcher entries | 3046 |
+| Runtime contract format | runtime_profile_ranges |
+| Runtime contract artifact bytes | 292669 |
+| Runtime dtype profiles | 216 |
+| Runtime profile ranges | 3091 |
+| Collected PyTorch versions | 2.7.0, 2.7.1, 2.8.0, 2.9.0, 2.9.1, 2.10.0, 2.11.0, 2.12.0, 2.12.1 |
+| Max validated PyTorch version | 2.12.1 |
+| PyTorch dependency upper bound | 2.12.2 |
+| Source evidence present | True |
+| Source evidence op records | 3046 |
+| Source evidence warnings | 0 |
+| CPU-supported dtype cases | 203620 |
+| CPU-unsupported dtype cases | 69863 |
+| CPU-pending dtype cases | 7066 |
+| CPU-unknown dtype cases | 40 |
 | Oracle-supported dtype cases | 0 |
-| Source-expected ops | 2104 |
-| Source-expected dtype entries | 34512 |
-| Source/probe mismatches | 8802 |
-| Local PyTorch source available | True |
-| Local PyTorch ufunc source entries | 1 |
+| Source-expected ops | 18797 |
+| Source-expected dtype entries | 287477 |
+| Source/probe mismatches | 78375 |
+| Local PyTorch source available | False |
+| Local PyTorch ufunc source entries | 0 |
 
 ## CPU Dtype Contract Last Run Probe Counts
 
-| Name | Count |
-| --- | --- |
-| generated_pending | 787 |
-| generated_supported | 16254 |
-| generated_total | 24830 |
-| generated_unsupported | 7789 |
-| opinfo_backward_supported | 2656 |
-| opinfo_backward_total | 2663 |
-| opinfo_backward_unsupported | 7 |
-| opinfo_forward_supported | 5894 |
-| opinfo_forward_total | 5918 |
-| opinfo_forward_unsupported | 24 |
-| pytorch_src_ufunc_seeded_ops | 1 |
-| source_seeded_ops | 1795 |
+No entries.
 
 ## CPU Dtype Contract Version Rules
 
 | Name | Count |
 | --- | --- |
-| 2.12 | 3053 |
+| 2.7.0..2.12.1 | 2966 |
+| 2.11.0..2.12.1 | 36 |
+| 2.7.0..2.10.0 | 33 |
+| 2.8.0..2.12.1 | 12 |
+| 2.10.0..2.12.1 | 11 |
+| 2.9.0..2.12.1 | 10 |
+| 2.12.1..2.12.1 | 9 |
+| 2.7.0..2.8.0 | 7 |
+| 2.12.0..2.12.1 | 2 |
+| 2.7.0..2.11.0 | 2 |
+| 2.7.0..2.7.1 | 2 |
+| 2.7.0..2.9.1 | 1 |
 
 ## CPU Dtype Contract Buckets By Dtype
 
 | Name | Count |
 | --- | --- |
-| cpu_supported:torch.float32 | 2717 |
-| cpu_supported:torch.float64 | 2700 |
-| cpu_supported:torch.float16 | 2256 |
-| cpu_supported:torch.bfloat16 | 2254 |
-| cpu_supported:torch.int64 | 1565 |
-| cpu_supported:torch.uint8 | 1564 |
-| cpu_supported:torch.complex128 | 1562 |
-| cpu_supported:torch.complex64 | 1560 |
-| cpu_supported:torch.int32 | 1547 |
-| cpu_supported:torch.int16 | 1545 |
-| cpu_supported:torch.int8 | 1545 |
-| cpu_unsupported:torch.complex32 | 1308 |
-| cpu_supported:torch.bool | 1223 |
-| cpu_unsupported:torch.complex64 | 880 |
-| cpu_unsupported:torch.complex128 | 878 |
-| cpu_unsupported:torch.bool | 861 |
-| cpu_supported:torch.complex32 | 719 |
-| cpu_unsupported:torch.int16 | 621 |
-| cpu_unsupported:torch.int32 | 621 |
-| cpu_unsupported:torch.int8 | 621 |
-| cpu_unsupported:torch.int64 | 614 |
-| cpu_unsupported:torch.uint8 | 592 |
-| cpu_unsupported:torch.bfloat16 | 339 |
-| cpu_unsupported:torch.float16 | 337 |
-| cpu_unsupported:torch.float64 | 78 |
-| cpu_unsupported:torch.float32 | 70 |
-| cpu_pending:torch.uint8 | 69 |
-| cpu_pending:torch.bool | 66 |
-| cpu_pending:torch.float64 | 66 |
-| cpu_pending:torch.bfloat16 | 62 |
-| cpu_pending:torch.float16 | 62 |
-| cpu_pending:torch.complex128 | 58 |
-| cpu_pending:torch.complex64 | 58 |
-| cpu_pending:torch.float32 | 58 |
-| cpu_pending:torch.int16 | 58 |
-| cpu_pending:torch.int32 | 58 |
-| cpu_pending:torch.int64 | 58 |
-| cpu_pending:torch.int8 | 58 |
-| cpu_pending:torch.complex32 | 56 |
+| cpu_supported:torch.float32 | 236 |
+| cpu_supported:torch.float64 | 230 |
+| cpu_supported:torch.bfloat16 | 177 |
+| cpu_supported:torch.float16 | 177 |
+| cpu_supported:torch.complex128 | 122 |
+| cpu_supported:torch.complex64 | 121 |
+| cpu_supported:torch.int64 | 106 |
+| cpu_supported:torch.int32 | 99 |
+| cpu_supported:torch.int16 | 98 |
+| cpu_supported:torch.int8 | 98 |
+| cpu_supported:torch.uint8 | 97 |
+| cpu_unsupported:torch.complex32 | 84 |
+| cpu_unsupported:torch.bool | 74 |
+| cpu_supported:torch.bool | 69 |
+| cpu_unsupported:torch.complex64 | 63 |
+| cpu_unsupported:torch.complex128 | 62 |
+| cpu_unsupported:torch.int16 | 57 |
+| cpu_unsupported:torch.int32 | 57 |
+| cpu_unsupported:torch.int8 | 57 |
+| cpu_unsupported:torch.int64 | 54 |
+| cpu_unsupported:torch.uint8 | 53 |
+| cpu_supported:torch.complex32 | 48 |
+| cpu_unsupported:torch.bfloat16 | 32 |
+| cpu_unsupported:torch.float16 | 30 |
+| cpu_pending:torch.uint8 | 13 |
+| cpu_pending:torch.float64 | 11 |
+| cpu_unsupported:torch.float64 | 11 |
+| cpu_pending:torch.bfloat16 | 10 |
+| cpu_pending:torch.bool | 10 |
+| cpu_pending:torch.float16 | 10 |
+| cpu_pending:torch.complex128 | 9 |
+| cpu_pending:torch.complex64 | 9 |
+| cpu_pending:torch.float32 | 9 |
+| cpu_pending:torch.int16 | 9 |
+| cpu_pending:torch.int32 | 9 |
+| cpu_pending:torch.int64 | 9 |
+| cpu_pending:torch.int8 | 9 |
+| cpu_pending:torch.complex32 | 8 |
+| cpu_unsupported:torch.float32 | 8 |
+| cpu_unknown:torch.complex128 | 1 |
+| cpu_unknown:torch.complex64 | 1 |
+| cpu_unknown:torch.int16 | 1 |
+| cpu_unknown:torch.int32 | 1 |
+| cpu_unknown:torch.int64 | 1 |
+| cpu_unknown:torch.int8 | 1 |
+| cpu_unknown:torch.uint8 | 1 |
 
 ## CPU Dtype Contract Source Conditions
 
 | Name | Count |
 | --- | --- |
-| * | 19080 |
-| forward:* | 13018 |
-| backward:* | 2414 |
+| forward:* | 1316 |
+| * | 1138 |
+| backward:* | 299 |
 
 ## CPU Dtype Contract Source Probe Mismatches
 
 | Name | Count |
 | --- | --- |
-| cpu_supported_but_missing_from_source | 8332 |
-| source_expected_but_cpu_unsupported | 470 |
+| cpu_supported_but_missing_from_source | 74145 |
+| source_expected_but_cpu_unsupported | 4220 |
+| source_declared_but_probe_unknown | 10 |
 
 ## Marker And Source Coverage Stats
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 635 |
-| Category markers discovered | 770 |
+| Coverage markers discovered | 670 |
+| Category markers discovered | 805 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2522,7 +2542,7 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| selftest | 290 |
+| selftest | 325 |
 | operators | 187 |
 | workloads | 57 |
 | strides | 40 |

@@ -364,7 +364,8 @@ def _coverage_stats(audit: dict) -> dict:
     status_counts = Counter(metadata.get("status_counts", {}))
     total = int(metadata.get("total_aten_overloads", len(entries)))
     not_backend_relevant = status_counts.get("not_backend_relevant", 0)
-    backend_relevant = total - not_backend_relevant
+    runtime_unavailable = status_counts.get("unavailable_in_pytorch_runtime", 0)
+    backend_relevant = total - not_backend_relevant - runtime_unavailable
     covered = sum(status_counts.get(status, 0) for status in COVERED_STATUSES)
     pending = sum(status_counts.get(status, 0) for status in PENDING_STATUSES)
     excluded = sum(status_counts.get(status, 0) for status in EXCLUDED_STATUSES)
@@ -375,6 +376,7 @@ def _coverage_stats(audit: dict) -> dict:
         "excluded": excluded,
         "unknown": unknown,
         "not_backend_relevant": not_backend_relevant,
+        "runtime_unavailable": runtime_unavailable,
     })
 
     variant_counts = Counter()
@@ -458,6 +460,7 @@ def _coverage_stats(audit: dict) -> dict:
         "covered": covered,
         "pending": pending,
         "excluded": excluded,
+        "runtime_unavailable": runtime_unavailable,
         "unknown": unknown,
         "coverage_pct": _pct(covered, backend_relevant),
         "status_family_counts": status_family_counts,
@@ -531,10 +534,69 @@ def _dtype_contract_stats() -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     contracts = data.get("contracts") or {}
     metadata = data.get("metadata") or {}
+    profiles = data.get("profiles") or {}
     bucket_dtype_counts = Counter()
     version_rule_counts = Counter()
     source_condition_counts = Counter()
     mismatch_counts = Counter()
+    evidence_path = REPO_ROOT / "data" / "pytorch-version-matrix" / "op_dtype_contract_evidence.jsonl"
+    evidence_records = 0
+    evidence_warnings = 0
+
+    if data.get("format") == "runtime_profile_ranges":
+        for ranges in contracts.values():
+            if not isinstance(ranges, list):
+                continue
+            for range_record in ranges:
+                if isinstance(range_record, list) and len(range_record) == 3:
+                    version_rule_counts[f"{range_record[0]}..{range_record[1]}"] += 1
+        for profile in profiles.values():
+            if not isinstance(profile, dict):
+                continue
+            for bucket in ("cpu_supported", "cpu_unsupported", "cpu_unknown", "cpu_pending", "oracle_supported"):
+                for dtypes in (profile.get(bucket) or {}).values():
+                    for dtype in dtypes or ():
+                        bucket_dtype_counts[f"{bucket}:{dtype}"] += 1
+            for condition, dtypes in (profile.get("source_expected") or {}).items():
+                source_condition_counts[str(condition)] += len(dtypes or ())
+        if evidence_path.exists():
+            for line in evidence_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if record.get("record_kind") == "op_contract_evidence":
+                    evidence_records += 1
+                    for version_entry in (record.get("versions") or {}).values():
+                        for mismatch in version_entry.get("source_probe_mismatches") or ():
+                            if isinstance(mismatch, dict):
+                                mismatch_counts[mismatch.get("kind") or "unknown"] += 1
+                            else:
+                                mismatch_counts[str(mismatch)] += 1
+                elif record.get("record_kind") == "warning":
+                    evidence_warnings += 1
+
+        return {
+            "exists": True,
+            "format": data.get("format"),
+            "metadata": metadata,
+            "contract_count": len(contracts),
+            "contract_counts": metadata.get("contract_counts") or {},
+            "last_run_probe_counts": metadata.get("last_run_probe_counts") or {},
+            "source_extraction": metadata.get("source_extraction") or {},
+            "version_rule_counts": version_rule_counts,
+            "bucket_dtype_counts": bucket_dtype_counts,
+            "source_condition_counts": source_condition_counts,
+            "mismatch_counts": mismatch_counts,
+            "profile_count": len(profiles),
+            "range_count": metadata.get("range_count", 0),
+            "artifact_size_bytes": path.stat().st_size,
+            "collected_versions": metadata.get("collected_versions") or [],
+            "max_validated_version": metadata.get("max_validated_version"),
+            "dependency_upper_bound": metadata.get("dependency_upper_bound"),
+            "evidence_exists": evidence_path.exists(),
+            "evidence_records": evidence_records,
+            "evidence_warnings": evidence_warnings,
+        }
 
     for versions in contracts.values():
         if not isinstance(versions, dict):
@@ -685,6 +747,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         ["Unknown tensor-touching surfaces", coverage["unknown"]],
         ["Pending surfaces", coverage["pending"]],
         ["Excluded surfaces", coverage["excluded"]],
+        ["Runtime-unavailable overloads", coverage["runtime_unavailable"]],
         ["Generated coverage surfaces", coverage["coverage_kind_counts"].get("generated", 0)],
         ["Generated dispatcher semantic cases", generated_depth.get("generated_semantic_cases", 0)],
         ["Required generated dispatcher semantic cases", generated_depth.get("required_generated_semantic_cases", 0)],
@@ -769,6 +832,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
             ["Coverage percent", coverage["coverage_pct"]],
             ["Pending surfaces", coverage["pending"]],
             ["Excluded surfaces", coverage["excluded"]],
+            ["Runtime-unavailable overloads", coverage["runtime_unavailable"]],
             ["Unknown surfaces", coverage["unknown"]],
         ],
     ))
@@ -824,6 +888,16 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
             ["Metric", "Value"],
             [
                 ["Contracted dispatcher entries", dtype_contracts["contract_count"]],
+                ["Runtime contract format", dtype_contracts.get("format", "expanded")],
+                ["Runtime contract artifact bytes", dtype_contracts.get("artifact_size_bytes", "unknown")],
+                ["Runtime dtype profiles", dtype_contracts.get("profile_count", "unknown")],
+                ["Runtime profile ranges", dtype_contracts.get("range_count", "unknown")],
+                ["Collected PyTorch versions", ", ".join(dtype_contracts.get("collected_versions") or [])],
+                ["Max validated PyTorch version", dtype_contracts.get("max_validated_version") or "unknown"],
+                ["PyTorch dependency upper bound", dtype_contracts.get("dependency_upper_bound") or "unknown"],
+                ["Source evidence present", dtype_contracts.get("evidence_exists", False)],
+                ["Source evidence op records", dtype_contracts.get("evidence_records", 0)],
+                ["Source evidence warnings", dtype_contracts.get("evidence_warnings", 0)],
                 ["CPU-supported dtype cases", contract_counts.get("cpu_supported", 0)],
                 ["CPU-unsupported dtype cases", contract_counts.get("cpu_unsupported", 0)],
                 ["CPU-pending dtype cases", contract_counts.get("cpu_pending", 0)],
