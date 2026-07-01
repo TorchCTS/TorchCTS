@@ -117,6 +117,68 @@ Promotion rule:
   compared against the value oracle. Shape-only, dtype-only, or finite-output
   checks are not enough.
 
+## MPS Autograd Backward Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::linear_backward`
+- `aten::linear_backward.out`
+- `aten::max_pool2d_backward`
+- `aten::max_pool2d_backward.out`
+
+Accepted evidence:
+
+- `torchcts/core/oracles.py` registers these surfaces with oracle ids
+  `linear_backward` and `max_pool2d_backward`.
+- The runners execute direct MPS dispatcher calls and compare gradients to CPU
+  public autograd references.
+- Out variants assert that returned tensors are the provided output tensors.
+
+Accepted contract:
+
+- Linear backward returns input, weight, and bias gradients requested by
+  `output_mask` and matches public `torch.nn.functional.linear` autograd for
+  the finite sample.
+- Max-pool backward returns the input gradient matching public
+  `torch.nn.functional.max_pool2d` autograd for the finite sample.
+- Out variants preserve output identity for every returned gradient tensor.
+
+Promotion rule:
+
+- These surfaces remain covered only while the direct MPS dispatcher paths
+  satisfy the CPU autograd reference and out-identity checks.
+
+## CPU Flash Attention Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::_scaled_dot_product_flash_attention_for_cpu`
+- `aten::_scaled_dot_product_flash_attention_for_cpu_backward`
+
+Accepted evidence:
+
+- `torchcts/core/oracles.py` registers both surfaces with oracle id
+  `cpu_flash_attention_public_sdpa`.
+- The runner executes the exact CPU dispatcher helpers and compares forward
+  values and backward gradients to public CPU
+  `torch.nn.functional.scaled_dot_product_attention`.
+
+Accepted contract:
+
+- Forward output matches public CPU SDPA for the finite no-dropout sample within
+  the oracle tolerance.
+- Backward gradients for query, key, and value match public CPU SDPA autograd
+  for the same sample.
+
+Promotion rule:
+
+- These surfaces remain covered only while exact CPU helper execution matches
+  the public SDPA value and gradient references.
+
 ## CUDA Fused Dropout Backend Pack
 
 Status: `covered_backend_pack`
@@ -161,6 +223,191 @@ Promotion rule:
   registration alone is not enough.
 - This promotion does not cover cuDNN, CSLT, Triton, or semi-structured sparse
   backend-pack surfaces.
+
+## CUDA Semi-Structured Sparse Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::_sparse_semi_structured_addmm`
+- `aten::_sparse_semi_structured_linear`
+- `aten::_sparse_semi_structured_mm`
+- `aten::_to_sparse_semi_structured`
+
+Accepted evidence:
+
+- PyTorch's public `torch.sparse.to_sparse_semi_structured` wrapper documents
+  CUDA-only 2D semi-structured sparse tensors, dtype and shape restrictions, and
+  conversion from dense tensors into backend compressed representations.
+- `torchcts/core/oracles.py` registers a candidate direct-dispatch runner with
+  oracle id `semi_structured_sparse_backend_pack`.
+
+Accepted candidate contract:
+
+- The candidate runner constructs a small valid 2:4 CUDA `torch.float16` dense
+  matrix and calls `_to_sparse_semi_structured` to obtain PyTorch-created packed
+  values and metadata.
+- `_sparse_semi_structured_mm` must match dense `mat1 @ mat2`.
+- `_sparse_semi_structured_addmm` must match `beta * input + alpha * (mat1 @ mat2)`.
+- `_sparse_semi_structured_linear` must match `input @ dense_weight.T + bias`.
+- `_to_sparse_semi_structured` is validated through the packed/meta pair's
+  ability to reproduce dense matmul values; shape or dtype alone is not enough.
+
+Promotion rule:
+
+- These surfaces stay pending until a CUDA build executes the candidate runner
+  with `--run-pending-candidates --require-oracle-results
+  --fail-on-oracle-failure` and records passing evidence.
+
+## CUDA Semi-Structured Sparse Thread-Mask Helpers
+
+Status: `pending_backend_pack`
+
+Blocked surfaces:
+
+- `aten::_sparse_semi_structured_apply`
+- `aten::_sparse_semi_structured_apply_dense`
+- `aten::_sparse_semi_structured_tile`
+
+Accepted evidence:
+
+- These helpers expose lower-level tiling and thread-mask artifacts rather than
+  the public semi-structured sparse tensor contract.
+
+Accepted contract:
+
+- No accepted TorchCTS contract is documented for the thread-mask tensor layout,
+  mutation rules, or exact relationship between tile outputs and apply inputs.
+
+Promotion rule:
+
+- Promotion requires a source-derived thread-mask contract and a direct CUDA
+  runner that checks more than shape, dtype, or non-crashing execution.
+
+## MPS Convolution Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::_mps_convolution`
+- `aten::_mps_convolution.out`
+- `aten::_mps_convolution_transpose`
+- `aten::_mps_convolution_transpose.out`
+- `aten::mps_convolution_backward`
+- `aten::mps_convolution_transpose_backward`
+- `aten::mps_convolution_transpose_backward.out`
+
+Accepted evidence:
+
+- `torchcts/core/oracles.py` registers these surfaces with oracle id
+  `mps_convolution_cpu_reference`.
+- The runner executes direct MPS convolution and transpose-convolution helper
+  paths and compares values or gradients to CPU public convolution references.
+
+Accepted contract:
+
+- Forward convolution helpers match public CPU `conv2d` or `conv_transpose2d`
+  for the finite sample.
+- Backward helpers match public CPU autograd gradients for input, weight, and
+  bias where requested.
+- Out variants return the supplied output tensors and write reference-matching
+  values.
+
+Promotion rule:
+
+- These surfaces remain covered only while the direct MPS dispatcher paths
+  satisfy CPU reference values, gradients, and out-identity checks.
+
+## MPS SDPA Math Backend Pack
+
+Status: `covered_backend_pack`
+
+Surface:
+
+- `aten::_scaled_dot_product_attention_math_for_mps`
+
+Accepted evidence:
+
+- `torchcts/core/oracles.py` registers the surface with oracle id
+  `mps_sdpa_math_public_reference`.
+- The runner executes the direct MPS SDPA math helper and compares output to
+  public `torch.nn.functional.scaled_dot_product_attention`.
+
+Accepted contract:
+
+- Output matches public SDPA for the finite no-dropout sample within the oracle
+  tolerance.
+
+Promotion rule:
+
+- This surface remains covered only while exact MPS helper execution matches the
+  public SDPA reference.
+
+## MPS LSTM Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::_lstm_mps`
+- `aten::_lstm_mps.out`
+- `aten::lstm_mps_backward`
+- `aten::lstm_mps_backward.out`
+
+Accepted evidence:
+
+- `torchcts/core/oracles.py` registers these surfaces with oracle id
+  `mps_lstm_cpu_reference`.
+- The runner executes direct MPS LSTM helper paths and compares forward values
+  and backward gradients to public CPU LSTM references.
+
+Accepted contract:
+
+- Forward helpers match public LSTM output, hidden state, and cell state for the
+  finite sample.
+- Backward helpers match public CPU autograd gradients for requested tensors.
+- Out variants return the provided output tensors and write reference-matching
+  values.
+
+Promotion rule:
+
+- These surfaces remain covered only while exact MPS helper execution matches
+  the public LSTM value, gradient, and out-identity references.
+
+## MPS Philox RNG Backend Pack
+
+Status: `pending_backend_pack`
+
+Surfaces:
+
+- `aten::_philox_key_fold_in`
+- `aten::_philox_key_split`
+- `aten::_philox_normal`
+- `aten::_philox_normal.out`
+- `aten::_philox_normal_`
+- `aten::_philox_uniform`
+- `aten::_philox_uniform.out`
+- `aten::_philox_uniform_`
+
+Accepted evidence:
+
+- The schemas exist in PyTorch `2.12.1` and report MPS/Meta availability.
+- Local direct-dispatch probing on 2026-07-01 with MPS available reported that
+  the operator is not currently supported on MPS and then failed through CPU
+  fallback for key and distribution helpers.
+
+Accepted contract:
+
+- No accepted TorchCTS value contract is documented yet for the MPS Philox key
+  protocol or distribution helpers.
+
+Promotion rule:
+
+- Promotion requires a PyTorch/MPS build that executes the exact direct
+  dispatcher paths, plus a source-derived contract for key split/fold,
+  determinism, distribution bounds, in-place mutation, and out identity.
 
 ## Explicit Scale/Zero Int4 Matmul
 

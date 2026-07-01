@@ -63,14 +63,30 @@ class OracleSpec:
     backend_gate: str = "any"
     semantic_level: int = 5
     reason: str = ""
+    contract_status: str | None = None
+    contract_ref: str = ""
+    promotion_evidence: str = ""
+    promotion_backend: str | None = None
 
     def metadata(self) -> dict:
+        contract_status = self.contract_status
+        if contract_status is None:
+            if self.coverage_status.startswith("covered_"):
+                contract_status = "accepted"
+            elif self.runner == "backend_property":
+                contract_status = "blocked"
+            else:
+                contract_status = "candidate"
         return {
             "oracle_id": self.oracle_id,
             "coverage_kind": self.coverage_kind,
             "backend_gate": self.backend_gate,
             "reason": self.reason,
             "runner": self.runner,
+            "contract_status": contract_status,
+            "contract_ref": self.contract_ref,
+            "promotion_evidence": self.promotion_evidence,
+            "promotion_backend": self.promotion_backend or self.backend_gate,
         }
 
 
@@ -2146,6 +2162,75 @@ def _run_cuda_fused_dropout(spec: OracleSpec, device: str) -> None:
     raise AssertionError(f"No CUDA fused-dropout oracle implementation for {spec.surface}")
 
 
+def _semi_structured_dense_sample(device_obj: torch.device) -> torch.Tensor:
+    rows = 32
+    cols = 64
+    base = torch.arange(rows * cols, device=device_obj, dtype=torch.float16).reshape(rows, cols)
+    base = (base.remainder(17) + 1.0) / 17.0
+    mask = torch.tensor([0.0, 0.0, 1.0, 1.0], device=device_obj, dtype=torch.float16).repeat(rows, cols // 4)
+    return (base * mask).contiguous()
+
+
+def _semi_structured_pair(dense: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    packed, meta = torch.ops.aten._to_sparse_semi_structured(dense)
+    if packed.device != dense.device or meta.device != dense.device:
+        raise AssertionError("_to_sparse_semi_structured returned tensors on the wrong device")
+    if packed.dtype != dense.dtype:
+        raise AssertionError("_to_sparse_semi_structured packed dtype mismatch")
+    if meta.dtype not in {torch.int16, torch.int32}:
+        raise AssertionError(f"_to_sparse_semi_structured metadata dtype mismatch: {meta.dtype}")
+    return packed, meta
+
+
+def _run_cuda_semi_structured_sparse(spec: OracleSpec, device: str) -> None:
+    _check_backend_gate(spec, device)
+    device_obj = torch.device(device)
+    dense = _semi_structured_dense_sample(device_obj)
+    packed, meta = _semi_structured_pair(dense)
+    rhs = torch.linspace(-0.75, 0.75, steps=dense.shape[1] * 8, device=device_obj, dtype=torch.float16).reshape(
+        dense.shape[1],
+        8,
+    )
+    input_for_linear = torch.linspace(
+        -0.5,
+        0.5,
+        steps=4 * dense.shape[1],
+        device=device_obj,
+        dtype=torch.float16,
+    ).reshape(4, dense.shape[1])
+
+    try:
+        if spec.surface == "aten::_to_sparse_semi_structured":
+            actual = torch.ops.aten._sparse_semi_structured_mm(packed, meta, rhs)
+            expected = dense @ rhs
+            _assert_close_tensor(actual, expected, spec.surface, rtol=2e-2, atol=2e-2)
+            return
+
+        if spec.surface == "aten::_sparse_semi_structured_mm":
+            actual = torch.ops.aten._sparse_semi_structured_mm(packed, meta, rhs)
+            expected = dense @ rhs
+            _assert_close_tensor(actual, expected, spec.surface, rtol=2e-2, atol=2e-2)
+            return
+
+        if spec.surface == "aten::_sparse_semi_structured_addmm":
+            bias = torch.full((dense.shape[0], rhs.shape[1]), 0.25, device=device_obj, dtype=torch.float16)
+            actual = torch.ops.aten._sparse_semi_structured_addmm(bias, packed, meta, rhs, alpha=0.5, beta=2.0)
+            expected = 2.0 * bias + 0.5 * (dense @ rhs)
+            _assert_close_tensor(actual, expected, spec.surface, rtol=2e-2, atol=2e-2)
+            return
+
+        if spec.surface == "aten::_sparse_semi_structured_linear":
+            bias = torch.linspace(-0.2, 0.2, steps=dense.shape[0], device=device_obj, dtype=torch.float16)
+            actual = torch.ops.aten._sparse_semi_structured_linear(input_for_linear, packed, meta, bias=bias)
+            expected = input_for_linear @ dense.T + bias
+            _assert_close_tensor(actual, expected, spec.surface, rtol=2e-2, atol=2e-2)
+            return
+    except Exception as exc:
+        _raise_backend_unavailable_if_applicable(spec, exc)
+
+    raise AssertionError(f"No CUDA semi-structured sparse oracle implementation for {spec.surface}")
+
+
 def _run_backend_property(spec: OracleSpec, device: str) -> None:
     _check_backend_gate(spec, device)
     raise OracleUnavailable(f"coverage_strategy_pending: {spec.surface} backend-pack runner is not implemented yet")
@@ -2178,6 +2263,7 @@ _RUNNERS: dict[str, Callable[[OracleSpec, str], None]] = {
     "mps_sdpa_math": _run_mps_sdpa_math,
     "mps_lstm": _run_mps_lstm,
     "cuda_fused_dropout": _run_cuda_fused_dropout,
+    "cuda_semi_structured_sparse": _run_cuda_semi_structured_sparse,
     "backend_property": _run_backend_property,
 }
 
@@ -2248,6 +2334,10 @@ for _surface, _runner, _reason in (
         backend_gate="mps",
         semantic_level=4,
         reason=_reason,
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#mps-autograd-backward-backend-pack",
+        promotion_evidence="reviewed-local-mps-generated-autograd-backward-run-2026-06-29",
+        promotion_backend="mps",
     ))
 
 for _surface in (
@@ -2356,15 +2446,16 @@ for _surface in (
         backend_gate="cuda",
         semantic_level=5,
         reason="CUDA fused-dropout internals are validated with direct dispatcher calls for mask/output contracts, out identity, and memory-efficient mask-fill identity/determinism.",
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#cuda-fused-dropout-backend-pack",
+        promotion_evidence="scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz",
+        promotion_backend="cuda",
     ))
 
 for _surface in (
     "aten::_sparse_semi_structured_addmm",
-    "aten::_sparse_semi_structured_apply",
-    "aten::_sparse_semi_structured_apply_dense",
     "aten::_sparse_semi_structured_linear",
     "aten::_sparse_semi_structured_mm",
-    "aten::_sparse_semi_structured_tile",
     "aten::_to_sparse_semi_structured",
 ):
     _register(OracleSpec(
@@ -2372,10 +2463,41 @@ for _surface in (
         oracle_id="semi_structured_sparse_backend_pack",
         coverage_status="pending_backend_pack",
         coverage_kind="backend_pack",
+        runner="cuda_semi_structured_sparse",
+        backend_gate="cuda",
+        semantic_level=5,
+        reason=(
+            "Semi-structured sparse conversion/mm/addmm/linear internals are "
+            "candidate-covered by a CUDA direct-dispatch runner using "
+            "PyTorch-created 2:4 compressed values and dense references; "
+            "promotion requires matching CUDA evidence."
+        ),
+        contract_status="candidate",
+        contract_ref="docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack",
+        promotion_backend="cuda",
+    ))
+
+for _surface in (
+    "aten::_sparse_semi_structured_apply",
+    "aten::_sparse_semi_structured_apply_dense",
+    "aten::_sparse_semi_structured_tile",
+):
+    _register(OracleSpec(
+        surface=_surface,
+        oracle_id="semi_structured_sparse_thread_mask_backend_pack",
+        coverage_status="pending_backend_pack",
+        coverage_kind="backend_pack",
         runner="backend_property",
         backend_gate="cuda",
         semantic_level=5,
-        reason="Semi-structured sparse internals require encoded metadata and accelerator-specific kernels, so they need a CUDA backend-pack oracle instead of generic CPU direct invocation.",
+        reason=(
+            "Semi-structured sparse tile/apply internals require a reviewed "
+            "thread-mask contract before TorchCTS can build a meaningful "
+            "direct dispatcher runner."
+        ),
+        contract_status="blocked",
+        contract_ref="docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers",
+        promotion_backend="cuda",
     ))
 
 for _surface in (
@@ -2406,6 +2528,10 @@ for _surface in (
         backend_gate="cpu",
         semantic_level=5,
         reason="CPU flash-attention helper is validated against public CPU scaled_dot_product_attention forward/backward.",
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#cpu-flash-attention-backend-pack",
+        promotion_evidence="torchcts/selftest/test_harness_reporting.py::test_oracle_runner_executes_cpu_oracle_surfaces",
+        promotion_backend="cpu_build",
     ))
 
 for _surface in (
@@ -2552,6 +2678,10 @@ for _surface in (
         backend_gate="mps",
         semantic_level=5,
         reason="MPS convolution helpers are validated against CPU conv2d/conv_transpose2d forward and gradient references.",
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#mps-convolution-backend-pack",
+        promotion_evidence="reviewed-local-mps-convolution-backend-pack-run",
+        promotion_backend="mps",
     ))
 
 _register(OracleSpec(
@@ -2563,6 +2693,10 @@ _register(OracleSpec(
     backend_gate="mps",
     semantic_level=5,
     reason="MPS SDPA math helper is validated against public scaled_dot_product_attention output.",
+    contract_status="accepted",
+    contract_ref="docs/coverage/contract-evidence.md#mps-sdpa-math-backend-pack",
+    promotion_evidence="reviewed-local-mps-sdpa-backend-pack-run",
+    promotion_backend="mps",
 ))
 
 for _surface in (
@@ -2580,6 +2714,10 @@ for _surface in (
         backend_gate="mps",
         semantic_level=5,
         reason="MPS LSTM helpers are validated against public LSTM forward and autograd backward references.",
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#mps-lstm-backend-pack",
+        promotion_evidence="reviewed-local-mps-lstm-backend-pack-run",
+        promotion_backend="mps",
     ))
 
 for _surface in (
@@ -2676,6 +2814,10 @@ for _surface in (
         backend_gate="mps",
         semantic_level=5,
         reason="Generic MPS int4 packed-weight helpers are validated with TinyGEMM byte packing, per-group scale/zero dequantization, and CPU matmul reference values.",
+        contract_status="accepted",
+        contract_ref="docs/coverage/contract-evidence.md#mps-tinygemm-int4-pack-and-matmul-helpers",
+        promotion_evidence="reviewed-local-mps-int4-backend-pack-run",
+        promotion_backend="mps",
     ))
 
 _register(OracleSpec(
@@ -2707,7 +2849,15 @@ for _surface in (
         runner="backend_property",
         backend_gate="mps",
         semantic_level=5,
-        reason="Philox helpers are MPS/Meta-only in this PyTorch build and need an MPS backend-pack oracle.",
+        reason=(
+            "Philox helpers are MPS/Meta-only in this PyTorch build, but local "
+            "MPS 2.12.1 probing reports runtime unsupported CPU fallback for "
+            "direct dispatcher calls; promotion needs runtime support plus a "
+            "source-derived RNG contract."
+        ),
+        contract_status="blocked",
+        contract_ref="docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack",
+        promotion_backend="mps",
     ))
 
 

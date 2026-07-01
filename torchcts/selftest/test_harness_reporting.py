@@ -4357,6 +4357,17 @@ def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
         runner="backend_property",
         backend_gate="cuda",
     )
+    candidate = OracleSpec(
+        surface="aten::candidate_cuda",
+        oracle_id="candidate",
+        coverage_status="pending_backend_pack",
+        coverage_kind="backend_pack",
+        runner="cuda_fused_dropout",
+        backend_gate="cuda",
+        contract_status="candidate",
+        contract_ref="docs/coverage/contract-evidence.md#candidate",
+        promotion_backend="cuda",
+    )
     wrong_device = OracleSpec(
         surface="aten::mps_only",
         oracle_id="mps",
@@ -4380,6 +4391,19 @@ def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
         pending,
         run_oracles=True,
     )["reason"] == "oracle runner not implemented"
+    assert evidence_pack_module._oracle_result(
+        "aten::candidate_cuda",
+        "cuda",
+        candidate,
+        run_oracles=True,
+    )["reason"] == "pending candidate oracle not requested"
+    assert evidence_pack_module._oracle_result(
+        "aten::candidate_cuda",
+        "cuda",
+        candidate,
+        run_oracles=True,
+        run_pending_candidates=True,
+    )["ok"] is True
     assert "does not run on device" in evidence_pack_module._oracle_result(
         "aten::mps_only",
         "cuda",
@@ -4392,7 +4416,7 @@ def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
         runnable,
         run_oracles=True,
     )["ok"] is True
-    assert calls == [("aten::cuda_ok", "cuda")]
+    assert calls == [("aten::candidate_cuda", "cuda"), ("aten::cuda_ok", "cuda")]
 
 
 def test_cli_routes_coverage_evidence_pack(monkeypatch):
@@ -4413,6 +4437,9 @@ def test_cli_routes_coverage_evidence_pack(monkeypatch):
         backend_gate=["cuda+rocm"],
         no_run_oracles=True,
         include_all_backend_packs=True,
+        run_pending_candidates=True,
+        require_oracle_results=True,
+        fail_on_oracle_failure=True,
         strict_unknowns=False,
     )
 
@@ -4423,8 +4450,125 @@ def test_cli_routes_coverage_evidence_pack(monkeypatch):
         "surfaces": ["aten::_fused_dropout"],
         "backend_gates": ["cuda+rocm"],
         "run_oracles": False,
+        "run_pending_candidates": True,
         "include_all_backend_packs": True,
+        "require_oracle_results": True,
+        "fail_on_oracle_failure": True,
     }]
+
+
+def test_backend_pack_feasibility_ledger_buckets_pending_rows():
+    audit = {
+        "metadata": {
+            "pytorch_version": "test",
+            "generated_at": "2026-07-01T00:00:00Z",
+        },
+        "entries": [
+            {
+                "name": "aten::covered_cuda",
+                "status": "covered_backend_pack",
+                "coverage_kind": "backend_pack",
+                "oracle": {
+                    "oracle_id": "covered",
+                    "runner": "cuda_runner",
+                    "contract_status": "accepted",
+                    "contract_ref": "docs/coverage/contract-evidence.md#covered",
+                    "promotion_evidence": "scratch/evidence.tar.gz",
+                    "promotion_backend": "cuda",
+                    "backend_gate": "cuda",
+                },
+            },
+            {
+                "name": "aten::candidate_cuda",
+                "status": "pending_backend_pack",
+                "coverage_kind": "backend_pack",
+                "oracle": {
+                    "oracle_id": "candidate",
+                    "runner": "cuda_runner",
+                    "contract_status": "candidate",
+                    "contract_ref": "docs/coverage/contract-evidence.md#candidate",
+                    "promotion_backend": "cuda",
+                    "backend_gate": "cuda",
+                },
+                "pending_review": {
+                    "backend_gate": "cuda",
+                    "required_closure": "implement_backend_gated_runner",
+                },
+            },
+            {
+                "name": "aten::contract_missing",
+                "status": "pending_backend_pack",
+                "coverage_kind": "backend_pack",
+                "oracle": None,
+                "pending_review": {
+                    "backend_gate": "cuda",
+                    "required_closure": "implement_backend_gated_runner",
+                },
+            },
+            {
+                "name": "aten::mps_convolution_backward.out",
+                "status": "pending_backend_pack",
+                "coverage_kind": "backend_pack",
+                "oracle": None,
+                "pending_review": {
+                    "backend_gate": "mps",
+                    "required_closure": "implement_backend_gated_runner",
+                },
+            },
+        ],
+    }
+
+    artifact = coverage_module.build_backend_pack_feasibility_artifact(audit)
+    assert artifact["metadata"]["bucket_counts"]["promote_now"] == 1
+    assert artifact["metadata"]["bucket_counts"]["candidate_only"] == 1
+    assert artifact["metadata"]["bucket_counts"]["blocked_contract"] == 1
+    assert artifact["metadata"]["bucket_counts"]["blocked_schema"] == 1
+
+    pending_names = {
+        entry["name"]
+        for entry in audit["entries"]
+        if entry["status"] == "pending_backend_pack"
+    }
+    bucketed_pending_names = {
+        record["name"]
+        for record in artifact["records"]
+        if record["status"] == "pending_backend_pack"
+    }
+    assert bucketed_pending_names == pending_names
+
+
+def test_coverage_check_rejects_covered_backend_pack_without_contract_metadata():
+    audit = {
+        "entries": [
+            {
+                "name": "aten::bad_backend_pack",
+                "status": "covered_backend_pack",
+                "coverage_kind": "backend_pack",
+                "surface_kind": "functional_data",
+                "has_tensor_args": True,
+                "has_tensor_returns": True,
+                "semantic_level": 5,
+                "semantic_levels": [5],
+                "level_reason": "unit",
+                "level_source": "unit",
+                "oracle": {
+                    "oracle_id": "bad",
+                    "coverage_kind": "backend_pack",
+                    "backend_gate": "cuda",
+                    "runner": "cuda_runner",
+                    "contract_status": "candidate",
+                    "contract_ref": "",
+                    "promotion_evidence": "",
+                    "promotion_backend": "cuda",
+                },
+            }
+        ]
+    }
+
+    errors = coverage_module._validate_audit_consistency(audit)
+    assert any("without an accepted contract" in error for error in errors)
+    assert any("without contract_ref" in error for error in errors)
+    assert any("without promotion_evidence" in error for error in errors)
 
 
 def test_coverage_materializes_generated_cases(tmp_path, monkeypatch):
@@ -4863,6 +5007,7 @@ def test_coverage_audit_uses_oracle_status_and_metadata():
     quantized_legacy = by_name["aten::quantized_lstm.input_legacy"]
     empty_quantized = by_name["aten::_empty_affine_quantized"]
     dynamic_int4 = by_name["aten::_dyn_quant_matmul_4bit"]
+    semi_structured_mm = by_name["aten::_sparse_semi_structured_mm"]
 
     assert sobol["status"] == "covered_oracle"
     assert sobol["coverage_kind"] == "oracle"
@@ -4874,6 +5019,9 @@ def test_coverage_audit_uses_oracle_status_and_metadata():
     assert quantized_legacy["status"] == "excluded_deprecated_or_removed"
     assert dynamic_int4["status"] == "covered_oracle"
     assert dynamic_int4["oracle"]["oracle_id"] == "dynamic_int4_pack_matmul_value_oracle"
+    assert semi_structured_mm["status"] == "pending_backend_pack"
+    assert semi_structured_mm["oracle"]["runner"] == "cuda_semi_structured_sparse"
+    assert semi_structured_mm["oracle"]["contract_status"] == "candidate"
     assert audit["metadata"]["status_counts"]["covered_oracle"] >= 13
     assert audit["metadata"]["status_counts"].get("pending_oracle", 0) == 0
 
@@ -5022,6 +5170,9 @@ def test_cuda_fused_dropout_oracle_surfaces_require_cuda():
 
     with pytest.raises(OracleUnavailable, match="requires CUDA"):
         run_oracle_for_surface("aten::_fill_mem_eff_dropout_mask_", "cpu")
+
+    with pytest.raises(OracleUnavailable, match="requires CUDA"):
+        run_oracle_for_surface("aten::_sparse_semi_structured_mm", "cpu")
 
 
 def test_mps_int4_oracle_dimension_guard():

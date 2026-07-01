@@ -59,6 +59,7 @@ DEFAULT_SUMMARY_PATH = DEFAULT_OUTPUT_DIR / "summary.md"
 DEFAULT_SEMANTIC_LEVELS_PATH = DEFAULT_OUTPUT_DIR / "semantic_levels.md"
 DEFAULT_PENDING_REVIEW_PATH = DEFAULT_OUTPUT_DIR / "pending_review.json"
 DEFAULT_PENDING_REVIEW_MD_PATH = DEFAULT_OUTPUT_DIR / "pending_review.md"
+DEFAULT_BACKEND_PACK_FEASIBILITY_PATH = Path("docs") / "coverage" / "backend-pack-feasibility.json"
 PACKAGE_EXCLUSIONS_PATH = PACKAGE_ROOT / "coverage_exclusions.json"
 DEFAULT_GENERATED_CASES_MODULE_PATH = PACKAGE_ROOT / "generated" / "generated_cases.py"
 
@@ -143,6 +144,27 @@ PENDING_BLOCKER_TYPES = frozenset({
     "python_binding_uninvokable",
     "out_of_backend_conformance_scope",
 })
+
+ORACLE_CONTRACT_STATUSES = frozenset({"accepted", "candidate", "blocked"})
+ORACLE_PROMOTION_BACKENDS = frozenset({
+    "any",
+    "cpu",
+    "cpu_build",
+    "cuda",
+    "fbgemm",
+    "mps",
+    "rocm",
+    "xla",
+})
+
+BACKEND_PACK_FEASIBILITY_BUCKETS = (
+    "promote_now",
+    "candidate_only",
+    "blocked_contract",
+    "blocked_schema",
+    "blocked_hardware",
+    "blocked_runtime",
+)
 
 SURFACE_KINDS = frozenset({
     "autograd_backward",
@@ -3611,6 +3633,94 @@ def build_pending_review_artifact(audit: dict) -> dict:
     }
 
 
+def _backend_pack_feasibility_bucket(entry: dict) -> str | None:
+    if entry.get("coverage_kind") != "backend_pack":
+        return None
+
+    status = entry.get("status")
+    oracle = entry.get("oracle") or {}
+    pending_review = entry.get("pending_review") or {}
+    backend_gate = pending_review.get("backend_gate") or oracle.get("promotion_backend") or oracle.get("backend_gate")
+    name = entry.get("name", "")
+    reason = " ".join(
+        str(value)
+        for value in (
+            pending_review.get("reason"),
+            oracle.get("reason"),
+            entry.get("level_reason"),
+        )
+        if value
+    ).lower()
+
+    if status == "covered_backend_pack":
+        return "promote_now"
+    if status != "pending_backend_pack":
+        return None
+    if name == "aten::mps_convolution_backward.out":
+        return "blocked_schema"
+    if (
+        "oom" in reason
+        or "out of memory" in reason
+        or "runtime unsupported" in reason
+        or "not currently supported" in reason
+    ):
+        return "blocked_runtime"
+    if not oracle:
+        return "blocked_contract"
+    if oracle.get("runner") == "backend_property":
+        contract_status = oracle.get("contract_status")
+        if contract_status in {"accepted", "candidate"} and backend_gate in {"rocm", "xla"}:
+            return "blocked_hardware"
+        return "blocked_contract"
+    if oracle.get("contract_status") in {"accepted", "candidate"}:
+        return "candidate_only"
+    if backend_gate in {"rocm", "xla"}:
+        return "blocked_hardware"
+    return "blocked_contract"
+
+
+def build_backend_pack_feasibility_artifact(audit: dict) -> dict:
+    buckets = {bucket: [] for bucket in BACKEND_PACK_FEASIBILITY_BUCKETS}
+    records = []
+    for entry in audit.get("entries", []):
+        bucket = _backend_pack_feasibility_bucket(entry)
+        if bucket is None:
+            continue
+        oracle = entry.get("oracle") or {}
+        pending_review = entry.get("pending_review") or {}
+        record = {
+            "bucket": bucket,
+            "name": entry.get("name"),
+            "status": entry.get("status"),
+            "backend_gate": pending_review.get("backend_gate") or oracle.get("promotion_backend") or oracle.get("backend_gate"),
+            "oracle_id": oracle.get("oracle_id"),
+            "runner": oracle.get("runner"),
+            "contract_status": oracle.get("contract_status"),
+            "contract_ref": oracle.get("contract_ref"),
+            "promotion_evidence": oracle.get("promotion_evidence"),
+            "promotion_backend": oracle.get("promotion_backend"),
+            "required_closure": pending_review.get("required_closure"),
+            "reason": pending_review.get("reason") or oracle.get("reason") or "",
+        }
+        records.append(record)
+        buckets[bucket].append(record)
+
+    for bucket in buckets:
+        buckets[bucket] = sorted(buckets[bucket], key=lambda item: item["name"] or "")
+
+    return {
+        "metadata": {
+            "version": 1,
+            "pytorch_version": audit.get("metadata", {}).get("pytorch_version"),
+            "generated_at": audit.get("metadata", {}).get("generated_at"),
+            "record_count": len(records),
+            "bucket_counts": {bucket: len(buckets[bucket]) for bucket in BACKEND_PACK_FEASIBILITY_BUCKETS},
+        },
+        "buckets": buckets,
+        "records": sorted(records, key=lambda item: (item["bucket"], item["name"] or "")),
+    }
+
+
 def render_pending_review_markdown(audit: dict) -> str:
     artifact = build_pending_review_artifact(audit)
     metadata = artifact["metadata"]
@@ -4032,6 +4142,11 @@ def write_audit_artifacts(audit: dict) -> None:
         encoding="utf-8",
     )
     DEFAULT_PENDING_REVIEW_MD_PATH.write_text(render_pending_review_markdown(audit), encoding="utf-8")
+    DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.write_text(
+        json.dumps(build_backend_pack_feasibility_artifact(audit), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def run_inventory_command() -> int:
@@ -4059,6 +4174,7 @@ def run_audit_command() -> int:
     print(f"Wrote coverage summary: {DEFAULT_SUMMARY_PATH}")
     print(f"Wrote semantic-level review: {DEFAULT_SEMANTIC_LEVELS_PATH}")
     print(f"Wrote pending coverage review: {DEFAULT_PENDING_REVIEW_PATH}")
+    print(f"Wrote backend-pack feasibility ledger: {DEFAULT_BACKEND_PACK_FEASIBILITY_PATH}")
     _print_audit_warning(audit)
     if audit["errors"]:
         for error in audit["errors"]:
@@ -4163,6 +4279,37 @@ def _validate_audit_consistency(audit: dict) -> list[str]:
             errors.append(f"entries[{index}] {entry.get('name')} is covered_generated without marker metadata")
         if status in {"covered_oracle", "covered_backend_pack", "covered_property"} and not entry.get("oracle"):
             errors.append(f"entries[{index}] {entry.get('name')} is {status} without oracle metadata")
+        oracle = entry.get("oracle")
+        if entry.get("coverage_kind") == "backend_pack" and oracle:
+            contract_status = oracle.get("contract_status")
+            if contract_status not in ORACLE_CONTRACT_STATUSES:
+                errors.append(
+                    f"entries[{index}] {entry.get('name')} has invalid oracle contract_status "
+                    f"{contract_status!r}"
+                )
+            promotion_backend = oracle.get("promotion_backend")
+            if promotion_backend not in ORACLE_PROMOTION_BACKENDS:
+                errors.append(
+                    f"entries[{index}] {entry.get('name')} has invalid oracle promotion_backend "
+                    f"{promotion_backend!r}"
+                )
+            if status == "covered_backend_pack":
+                if contract_status != "accepted":
+                    errors.append(
+                        f"entries[{index}] {entry.get('name')} is covered_backend_pack without an accepted contract"
+                    )
+                if not oracle.get("contract_ref"):
+                    errors.append(
+                        f"entries[{index}] {entry.get('name')} is covered_backend_pack without contract_ref"
+                    )
+                if not oracle.get("promotion_evidence"):
+                    errors.append(
+                        f"entries[{index}] {entry.get('name')} is covered_backend_pack without promotion_evidence"
+                    )
+                if oracle.get("runner") == "backend_property":
+                    errors.append(
+                        f"entries[{index}] {entry.get('name')} is covered_backend_pack with placeholder runner"
+                    )
         if status != "not_backend_relevant":
             level = entry.get("semantic_level")
             try:
