@@ -303,6 +303,8 @@ def skip_until_strategy_exists(entry: dict | None, strategy_name: str) -> None:
         pytest.skip("coverage_unknown")
     if status == "excluded":
         pytest.skip("coverage_excluded")
+    if status == "unavailable_in_pytorch_runtime":
+        pytest.skip("unavailable_in_pytorch_runtime")
     if status in EXCLUDED_OR_PENDING_STATUSES:
         pytest.skip(status)
 
@@ -321,6 +323,8 @@ def run_oracle_strategy(entry: dict | None, device: str) -> None:
         pytest.skip("coverage_unknown")
     if status == "excluded":
         pytest.skip("coverage_excluded")
+    if status == "unavailable_in_pytorch_runtime":
+        pytest.skip("unavailable_in_pytorch_runtime")
     if status in EXCLUDED_OR_PENDING_STATUSES:
         pytest.skip(status)
     if status not in {"covered_oracle", "covered_backend_pack", "covered_property"}:

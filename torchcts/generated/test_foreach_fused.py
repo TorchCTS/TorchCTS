@@ -54,5 +54,6 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.mark.covers_category("generated_foreach_fused")
+@pytest.mark.cpu_contract_exempt("no-audit fallback has no dispatcher dtype contract")
 def test_generated_foreach_or_fused(entry, dtype, device, compare, manifest):
     run_manual_foreach_strategy(entry, device, compare, manifest, dtype=dtype)

@@ -25,7 +25,12 @@ from typing import Any
 
 import torch
 
-from torchcts.core.version_rules import iter_version_rule_entries
+from torchcts.core.pytorch_compat import (
+    is_runtime_version_validated,
+    normalize_torch_version,
+    unvalidated_version_message,
+)
+from torchcts.core.version_rules import parse_torch_version
 from torchcts.op_metadata import get_op_metadata
 
 
@@ -41,6 +46,7 @@ NOT_RECORDED = "not_recorded"
 SOURCE_EXPECTED_BUT_CPU_UNSUPPORTED = "source_expected_but_cpu_unsupported"
 CPU_SUPPORTED_BUT_MISSING_FROM_SOURCE = "cpu_supported_but_missing_from_source"
 SOURCE_DECLARED_BUT_PROBE_UNKNOWN = "source_declared_but_probe_unknown"
+COMPACT_FORMAT = "runtime_profile_ranges"
 
 _ALIASES = {
     "f16": "torch.float16",
@@ -131,18 +137,21 @@ def load_dtype_contracts() -> dict:
         data = {}
     if not isinstance(data, dict):
         return {}
-    data.setdefault("version", 1)
+    if data.get("version") != 2 or data.get("format") != COMPACT_FORMAT:
+        return {}
     data.setdefault("contracts", {})
+    data.setdefault("profiles", {})
+    data.setdefault("metadata", {})
     return data
 
 
-def _op_contract_versions(dispatcher_name: str | None) -> dict:
+def _op_contract_ranges(dispatcher_name: str | None) -> list:
     name = _normalize_op_name(dispatcher_name)
     if name is None:
-        return {}
+        return []
     contracts = load_dtype_contracts().get("contracts", {})
     entry = contracts.get(name, {})
-    return entry if isinstance(entry, dict) else {}
+    return entry if isinstance(entry, list) else []
 
 
 def _merge_condition_map(target: dict[str, set[str]], source: Any) -> None:
@@ -152,34 +161,60 @@ def _merge_condition_map(target: dict[str, set[str]], source: Any) -> None:
         target.setdefault(str(condition), set()).update(_normalize_dtype_sequence(dtypes))
 
 
-def _merged_contract(dispatcher_name: str | None, runtime_version: str | None = None) -> dict:
-    runtime_version = runtime_version or torch.__version__
-    merged = {
+def _empty_merged_contract() -> dict:
+    return {
         "cpu_supported": {},
         "cpu_unsupported": {},
         "cpu_unknown": {},
         "cpu_pending": {},
         "oracle_supported": {},
         "source_expected": {},
-        "source_probe_mismatches": [],
         "evidence": [],
-        "probe_details": {},
+        "runtime_status": {},
     }
-    for version_key, value in iter_version_rule_entries(_op_contract_versions(dispatcher_name), runtime_version):
-        if not isinstance(value, dict):
+
+
+def _version_in_inclusive_range(runtime_version: str, start: str, end: str) -> bool:
+    runtime = parse_torch_version(runtime_version)
+    minimum = parse_torch_version(start)
+    maximum = parse_torch_version(end)
+    if runtime is None or minimum is None or maximum is None:
+        return False
+    return minimum <= runtime <= maximum
+
+
+def _merged_contract(dispatcher_name: str | None, runtime_version: str | None = None) -> dict:
+    merged = _empty_merged_contract()
+    data = load_dtype_contracts()
+    metadata = data.get("metadata") or {}
+    normalized_version = normalize_torch_version(runtime_version)
+    status = {
+        "runtime_version": str(runtime_version or torch.__version__),
+        "normalized_runtime_version": normalized_version,
+        "validated": is_runtime_version_validated(metadata, runtime_version),
+    }
+    merged["runtime_status"] = status
+    if not status["validated"] or normalized_version is None:
+        return merged
+
+    profiles = data.get("profiles") or {}
+    for range_record in _op_contract_ranges(dispatcher_name):
+        if not isinstance(range_record, list) or len(range_record) != 3:
+            continue
+        start, end, profile_id = (str(range_record[0]), str(range_record[1]), str(range_record[2]))
+        if not _version_in_inclusive_range(normalized_version, start, end):
+            continue
+        profile = profiles.get(profile_id)
+        if not isinstance(profile, dict):
             continue
         for key in ("cpu_supported", "cpu_unsupported", "cpu_unknown", "cpu_pending", "oracle_supported", "source_expected"):
-            _merge_condition_map(merged[key], value.get(key))
-        for mismatch in value.get("source_probe_mismatches", ()) or ():
-            if mismatch not in merged["source_probe_mismatches"]:
-                merged["source_probe_mismatches"].append(mismatch)
-        for condition, records in (value.get("probe_details") or {}).items():
-            if not isinstance(records, dict):
-                continue
-            merged["probe_details"].setdefault(str(condition), {}).update(records)
-        evidence = dict(value.get("evidence", {}) or {})
-        evidence.setdefault("version_rule", version_key)
-        merged["evidence"].append(evidence)
+            _merge_condition_map(merged[key], profile.get(key))
+        merged["evidence"].append({
+            "contract_authority": metadata.get("contract_authority"),
+            "profile_id": profile_id,
+            "range": [start, end],
+            "runtime_version": normalized_version,
+        })
     return merged
 
 
@@ -187,11 +222,15 @@ def source_expected_dtypes(dispatcher_name: str | None, *, opinfo_dtypes: Any = 
     values = set(_normalize_dtype_sequence(opinfo_dtypes))
     name = _normalize_op_name(dispatcher_name)
     if name is not None:
-        metadata = get_op_metadata(name)
-        values.update(_normalize_dtype_sequence(metadata.get("pytorch_dtypes")))
         contract = _merged_contract(name)
+        contract_values = set()
         for dtypes in contract.get("source_expected", {}).values():
-            values.update(dtypes)
+            contract_values.update(dtypes)
+        if contract_values:
+            values.update(contract_values)
+        else:
+            metadata = get_op_metadata(name)
+            values.update(_normalize_dtype_sequence(metadata.get("pytorch_dtypes")))
     return tuple(sorted(values))
 
 
@@ -212,23 +251,6 @@ def _contains_dtype(condition_map: dict[str, set[str]], dtype_str: str, input_co
 
 
 def _probe_detail(contract: dict, dtype_str: str, input_condition: str, phase: str) -> str:
-    keys = (
-        phase_condition_key(input_condition, phase),
-        input_condition,
-        f"{phase}:*",
-        "*",
-        phase_condition_key("clean", phase),
-        "clean",
-    )
-    details = contract.get("probe_details") or {}
-    for key in keys:
-        records = details.get(key)
-        if isinstance(records, dict):
-            record = records.get(dtype_str)
-            if isinstance(record, dict) and record.get("detail"):
-                return str(record["detail"])
-            if isinstance(record, str):
-                return record
     return ""
 
 
@@ -246,7 +268,11 @@ def contract_disposition(
         return ContractDisposition(False, CPU_UNKNOWN, "cpu_contract_unknown", "dtype could not be normalized")
 
     contract = _merged_contract(dispatcher_name)
-    evidence = {"source_expected": list(source_expected)}
+    evidence = {
+        "source_expected": list(source_expected),
+        "runtime_status": contract.get("runtime_status") or {},
+        "contract_profiles": list(contract.get("evidence") or ()),
+    }
     probe_detail = _probe_detail(contract, dtype_str, input_condition, phase)
 
     if _contains_dtype(contract["oracle_supported"], dtype_str, input_condition, phase):
@@ -282,6 +308,17 @@ def contract_disposition(
             CPU_PENDING,
             "cpu_contract_pending",
             probe_detail or f"{dtype_str} has pending PyTorch CPU contract probe evidence for {dispatcher_name}",
+            source_expected=source_expected,
+            evidence=evidence,
+        )
+
+    runtime_status = contract.get("runtime_status") or {}
+    if runtime_status and not runtime_status.get("validated"):
+        return ContractDisposition(
+            False,
+            NOT_RECORDED,
+            "cpu_contract_unknown",
+            unvalidated_version_message(load_dtype_contracts().get("metadata") or {}, runtime_status.get("runtime_version")),
             source_expected=source_expected,
             evidence=evidence,
         )
@@ -390,26 +427,11 @@ def disposition_from_cpu_probe(
 
 
 def mismatch_counts() -> dict[str, int]:
-    counts = {
+    return {
         SOURCE_EXPECTED_BUT_CPU_UNSUPPORTED: 0,
         CPU_SUPPORTED_BUT_MISSING_FROM_SOURCE: 0,
         SOURCE_DECLARED_BUT_PROBE_UNKNOWN: 0,
     }
-    contracts = load_dtype_contracts().get("contracts", {})
-    for versioned in contracts.values():
-        if not isinstance(versioned, dict):
-            continue
-        for value in versioned.values():
-            if not isinstance(value, dict):
-                continue
-            for mismatch in value.get("source_probe_mismatches", ()) or ():
-                if isinstance(mismatch, dict):
-                    key = mismatch.get("kind")
-                else:
-                    key = mismatch
-                if key in counts:
-                    counts[key] += 1
-    return counts
 
 
 __all__ = [

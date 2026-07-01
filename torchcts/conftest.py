@@ -92,6 +92,7 @@ from torchcts.core.opinfo_adapter import (
     dtype_to_str,
 )
 from torchcts.core.dtype_contracts import NOT_RECORDED, contract_disposition, load_dtype_contracts
+from torchcts.core.pytorch_compat import is_runtime_version_validated, unvalidated_version_message
 from torchcts.core.comparer import clear_metrics, get_metrics
 from torchcts.core.input_gen import refresh_shared_data
 from torchcts.core.runtime_evidence import (
@@ -717,6 +718,8 @@ def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
         return "coverage_excluded"
     if "backend_not_available" in err_msg:
         return "backend_not_available"
+    if "unavailable_in_pytorch_runtime" in err_msg:
+        return "unavailable_in_pytorch_runtime"
     if "coverage_strategy_pending" in err_msg:
         return "coverage_strategy_pending"
     return "runtime_skip"
@@ -1222,14 +1225,19 @@ def _contract_surface_has_executable_evidence(surface):
     name = str(surface)
     if not name.startswith("aten::"):
         name = f"aten::{name}"
-    versions = load_dtype_contracts().get("contracts", {}).get(name, {})
-    if not isinstance(versions, dict):
+    data = load_dtype_contracts()
+    ranges = data.get("contracts", {}).get(name, {})
+    profiles = data.get("profiles", {})
+    if not isinstance(ranges, list):
         return False
-    for version_entry in versions.values():
-        if not isinstance(version_entry, dict):
+    for range_record in ranges:
+        if not isinstance(range_record, list) or len(range_record) != 3:
+            continue
+        profile = profiles.get(str(range_record[2]))
+        if not isinstance(profile, dict):
             continue
         if any(
-            version_entry.get(bucket)
+            profile.get(bucket)
             for bucket in (
                 "cpu_supported",
                 "cpu_unsupported",
@@ -1653,6 +1661,12 @@ def pytest_configure(config):
     os.environ["TORCHCTS_HARDWARE_KEY"] = str(_HARDWARE_KEY)
     os.environ["TORCHCTS_DEVICE_NAME"] = str(_DEVICE_NAME)
     os.environ["TORCHCTS_PYTORCH_VERSION"] = str(torch.__version__)
+    dtype_contract_metadata = (load_dtype_contracts().get("metadata") or {})
+    if dtype_contract_metadata and not is_runtime_version_validated(dtype_contract_metadata, torch.__version__):
+        print(
+            "Warning: " + unvalidated_version_message(dtype_contract_metadata, torch.__version__),
+            file=sys.stderr,
+        )
 
     _SHOW_SKIPS = config.getoption("--show-skips")
     _REPORT_SKIPS = config.getoption("--report-skips")
