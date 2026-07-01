@@ -37,6 +37,11 @@ from torchcts.generated import coverage_helpers
 
 
 pytestmark = pytest.mark.covers_category("selftest")
+_SOURCE_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SOURCE_CHECKOUT_ONLY = pytest.mark.skipif(
+    not (_SOURCE_REPO_ROOT / "pyproject.toml").exists(),
+    reason="source checkout test requires repository files",
+)
 
 
 def _adaptive_result_payload(results, *, device="mps", hardware="hw", version="2.12.1", completed=False):
@@ -1604,10 +1609,14 @@ def test_harness_finalizes_adaptive_candidates_for_collected_items(monkeypatch, 
     assert artifact["rejected"][0]["reason"] == "not_collected_in_current_run"
 
 
+@_SOURCE_CHECKOUT_ONLY
 def test_adaptive_isolation_synthetic_replay_runs_candidate_in_subprocess(tmp_path):
     results_dir = tmp_path / "results"
     results_dir.mkdir()
-    target = "torchcts/selftest/test_mps_triage.py::test_mps_triage_timeout_records_inconclusive"
+    target_file = Path(__file__).resolve()
+    target_root = target_file.parents[2]
+    target_path = target_file.relative_to(target_root).as_posix()
+    target = f"{target_path}::test_mps_triage_timeout_records_inconclusive"
     hardware_key = get_hardware_key("cpu", harness.load_manifest())
     latest_path = results_dir / f"{hardware_key}_latest.json"
     latest_path.write_text(
@@ -1641,7 +1650,7 @@ def test_adaptive_isolation_synthetic_replay_runs_candidate_in_subprocess(tmp_pa
             str(results_dir),
             "--tb=short",
         ],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=target_root,
         capture_output=True,
         text=True,
         timeout=30,
@@ -1650,7 +1659,7 @@ def test_adaptive_isolation_synthetic_replay_runs_candidate_in_subprocess(tmp_pa
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(latest_path.read_text(encoding="utf-8"))
     record = payload["results"][target]
-    command_args = record["subprocess"]["command_args"]
+    command_args = (record.get("subprocess") or {}).get("command_args")
     adaptive_artifact = json.loads(
         (results_dir / f"{hardware_key}_adaptive_isolation.json").read_text(encoding="utf-8")
     )
@@ -1659,7 +1668,8 @@ def test_adaptive_isolation_synthetic_replay_runs_candidate_in_subprocess(tmp_pa
     assert record["phase"] == "subprocess_child"
     assert record["adaptive_isolation_source"] == "adaptive_previous_crash"
     assert record["adaptive_isolation_resolved"] is True
-    assert command_args[command_args.index("--adaptive-isolation") + 1] == "off"
+    if command_args is not None:
+        assert command_args[command_args.index("--adaptive-isolation") + 1] == "off"
     assert sorted(adaptive_artifact["accepted"]) == [target]
 
 

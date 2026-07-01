@@ -146,6 +146,66 @@ def test_no_gpu_signal_selects_cpu_without_warning():
     assert plan.warning == ""
 
 
+def test_torch_dependency_floor_is_27():
+    assert install_plan.TORCH_MIN_VERSION == "2.7.0"
+    assert install_plan.TORCH_SPEC == "torch>=2.7.0"
+    assert install_plan.torch_version_satisfies("2.7.0")
+    assert install_plan.torch_version_satisfies("2.7.1+cpu")
+    assert install_plan.torch_version_satisfies("2.12.1")
+    assert not install_plan.torch_version_satisfies("2.6.9")
+
+
+def test_valid_torch_install_is_kept_without_upgrade():
+    status = install_plan.TorchInstallStatus(
+        "valid",
+        "2.7.0",
+        install_plan.TORCH_MIN_VERSION,
+        "already valid",
+    )
+
+    assert install_plan.torch_install_action(status, upgrade_requested=False) == "keep"
+
+
+def test_missing_torch_install_is_installed():
+    status = install_plan.TorchInstallStatus(
+        "missing",
+        "",
+        install_plan.TORCH_MIN_VERSION,
+        "missing",
+    )
+
+    assert install_plan.torch_install_action(status, upgrade_requested=False) == "install"
+
+
+def test_old_or_broken_torch_install_fails_without_upgrade():
+    too_old = install_plan.TorchInstallStatus(
+        "too_old",
+        "2.6.0",
+        install_plan.TORCH_MIN_VERSION,
+        "too old",
+    )
+    broken = install_plan.TorchInstallStatus(
+        "broken",
+        "",
+        install_plan.TORCH_MIN_VERSION,
+        "broken",
+    )
+
+    assert install_plan.torch_install_action(too_old, upgrade_requested=False) == "fail"
+    assert install_plan.torch_install_action(broken, upgrade_requested=False) == "fail"
+
+
+def test_upgrade_request_installs_even_when_torch_is_valid():
+    status = install_plan.TorchInstallStatus(
+        "valid",
+        "2.7.0",
+        install_plan.TORCH_MIN_VERSION,
+        "already valid",
+    )
+
+    assert install_plan.torch_install_action(status, upgrade_requested=True) == "install"
+
+
 def test_intel_vendor_only_is_weak_and_defaults_to_cpu_without_prompt():
     ctx = make_context(
         pci_entries={
