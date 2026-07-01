@@ -28,6 +28,9 @@ pytestmark = pytest.mark.covers_category("selftest")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_README = REPO_ROOT / "README.md"
 
+if not PACKAGE_README.exists() or not (REPO_ROOT / "docs").is_dir() or not (REPO_ROOT / "pyproject.toml").exists():
+    pytest.skip("public docs checks require a source checkout", allow_module_level=True)
+
 PUBLIC_DOCS = [
     PACKAGE_README,
     REPO_ROOT / "docs" / "README.md",

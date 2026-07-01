@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchcts"
-version = "0.3.3"
+version = "0.3.4"
 description = "A manifest-driven PyTorch backend validation and reporting suite"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "torch>=2.12.0",
+    "torch>=2.7.0,<2.12.2",
     "pytest>=7.0.0",
     "psutil>=5.0.0",
     "numpy",

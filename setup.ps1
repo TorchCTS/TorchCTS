@@ -32,7 +32,8 @@ $VenvDir = ".venv"
 $MinMajor = 3
 $MinMinor = 10
 $PlanFile = Join-Path "site_scripts" "install_plan.py"
-$TorchSpec = "torch>=2.12.0"
+$TorchMinVersion = "2.7.0"
+$TorchSpec = "torch>=$TorchMinVersion"
 
 function Read-InstallPlan {
     param([string[]]$Lines)
@@ -150,13 +151,36 @@ $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 Write-Host "[..] Upgrading pip, setuptools, wheel..." -ForegroundColor Cyan
 & $Pip install --upgrade pip setuptools wheel --quiet
 
-Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
-$torchInstallArgs = @("install", "--upgrade", $TorchSpec)
-if ($TorchIndexUrl) {
-    $torchInstallArgs += @("--index-url", $TorchIndexUrl)
+Write-Host "[..] Checking PyTorch install..." -ForegroundColor Cyan
+$torchStatusOutput = & $VenvPython $PlanFile --torch-status --format key-value
+if ($LASTEXITCODE -ne 0) {
+    throw "PyTorch status check failed."
 }
-$torchInstallArgs += "--quiet"
-& $Pip @torchInstallArgs
+$torchStatusPlan = Read-InstallPlan -Lines $torchStatusOutput
+$TorchStatus = $torchStatusPlan["status"]
+$TorchVersion = $torchStatusPlan["version"]
+$TorchDetail = $torchStatusPlan["detail"]
+$UpgradeTorch = $env:TORCHCTS_UPGRADE_TORCH -eq "1"
+
+if ($TorchStatus -eq "valid" -and -not $UpgradeTorch) {
+    Write-Host "[OK] Keeping existing PyTorch ${TorchVersion}." -ForegroundColor Green
+} elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch) {
+    throw "$TorchDetail Install a PyTorch ${TorchMinVersion}+ build manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup upgrade it."
+} elseif ($TorchStatus -eq "broken" -and -not $UpgradeTorch) {
+    throw "$TorchDetail Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
+} else {
+    Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
+    $torchInstallArgs = @("install")
+    if ($UpgradeTorch) {
+        $torchInstallArgs += "--upgrade"
+    }
+    $torchInstallArgs += $TorchSpec
+    if ($TorchIndexUrl) {
+        $torchInstallArgs += @("--index-url", $TorchIndexUrl)
+    }
+    $torchInstallArgs += "--quiet"
+    & $Pip @torchInstallArgs
+}
 
 Write-Host "[..] Installing TorchCTS in editable mode..." -ForegroundColor Cyan
 & $Pip install -e . --quiet

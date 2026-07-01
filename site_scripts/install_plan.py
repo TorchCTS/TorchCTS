@@ -39,7 +39,8 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, Mapping, Sequence
 
 
-TORCH_SPEC = "torch>=2.12.0"
+TORCH_MIN_VERSION = "2.7.0"
+TORCH_SPEC = f"torch>={TORCH_MIN_VERSION}"
 INDEX_URLS = {
     "cpu": "https://download.pytorch.org/whl/cpu",
     "cuda": "https://download.pytorch.org/whl/cu128",
@@ -80,6 +81,22 @@ class InstallPlan:
             "device_hint": self.device_hint,
             "reason": self.reason,
             "warning": self.warning,
+        }
+
+
+@dataclass(frozen=True)
+class TorchInstallStatus:
+    status: str
+    version: str
+    minimum: str
+    detail: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "status": self.status,
+            "version": self.version,
+            "minimum": self.minimum,
+            "detail": self.detail,
         }
 
 
@@ -132,6 +149,47 @@ def _normalize_variant(value: str) -> str:
         valid = ", ".join(sorted(INDEX_URLS))
         raise ValueError(f"Invalid TORCHCTS_TORCH_VARIANT={value!r}; expected one of: {valid}")
     return variant
+
+
+def _parse_version_tuple(value: str | None) -> tuple[int, int, int] | None:
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(value or ""))
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def torch_version_satisfies(version: str | None, minimum: str = TORCH_MIN_VERSION) -> bool:
+    parsed_version = _parse_version_tuple(version)
+    parsed_minimum = _parse_version_tuple(minimum)
+    if parsed_version is None or parsed_minimum is None:
+        return False
+    return parsed_version >= parsed_minimum
+
+
+def inspect_torch_install(minimum: str = TORCH_MIN_VERSION) -> TorchInstallStatus:
+    try:
+        import torch  # type: ignore[import-not-found]
+    except ModuleNotFoundError as exc:
+        if exc.name == "torch":
+            return TorchInstallStatus("missing", "", minimum, "PyTorch is not installed")
+        return TorchInstallStatus("broken", "", minimum, f"PyTorch import dependency is missing: {exc}")
+    except Exception as exc:
+        return TorchInstallStatus("broken", "", minimum, f"PyTorch import failed: {exc}")
+
+    version = str(getattr(torch, "__version__", "unknown"))
+    if torch_version_satisfies(version, minimum):
+        return TorchInstallStatus("valid", version, minimum, f"PyTorch {version} satisfies torch>={minimum}")
+    return TorchInstallStatus("too_old", version, minimum, f"PyTorch {version} is older than torch>={minimum}")
+
+
+def torch_install_action(status: TorchInstallStatus, *, upgrade_requested: bool = False) -> str:
+    if upgrade_requested:
+        return "install"
+    if status.status == "missing":
+        return "install"
+    if status.status == "valid":
+        return "keep"
+    return "fail"
 
 
 def _plan_for_variant(
@@ -374,6 +432,15 @@ def emit_plan(plan: InstallPlan, output_format: str) -> None:
         print(f"{key}={_sanitize_value(data[key])}")
 
 
+def emit_torch_status(status: TorchInstallStatus, output_format: str) -> None:
+    data = status.as_dict()
+    if output_format == "json":
+        print(json.dumps(data, sort_keys=True))
+        return
+    for key in ("status", "version", "minimum", "detail"):
+        print(f"{key}={_sanitize_value(data[key])}")
+
+
 def _torch_cuda_available(torch_module) -> bool:
     cuda = getattr(torch_module, "cuda", None)
     is_available = getattr(cuda, "is_available", None)
@@ -453,8 +520,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan TorchCTS PyTorch installation.")
     parser.add_argument("--format", choices=("key-value", "json"), default="key-value")
     parser.add_argument("--prompt", action="store_true", help="Prompt for weak or ambiguous detections.")
+    parser.add_argument("--torch-status", action="store_true", help="Inspect whether installed torch satisfies TorchCTS.")
     parser.add_argument("--verify", choices=sorted(INDEX_URLS), help="Verify an installed PyTorch build.")
     args = parser.parse_args(argv)
+
+    if args.torch_status:
+        emit_torch_status(inspect_torch_install(), args.format)
+        return 0
 
     if args.verify:
         return verify_torch_install(args.verify)

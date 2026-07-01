@@ -33,7 +33,8 @@ VENV_DIR=".venv"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
 PLAN_FILE="site_scripts/install_plan.py"
-TORCH_SPEC="torch>=2.12.0"
+TORCH_MIN_VERSION="2.7.0"
+TORCH_SPEC="torch>=${TORCH_MIN_VERSION}"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -169,11 +170,47 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
 info "Upgrading pip and wheel..."
 "$PIP" install --upgrade pip setuptools wheel --quiet
 
-info "Installing PyTorch (${TORCH_VARIANT})..."
-if [ -n "$TORCH_INDEX_URL" ]; then
-    "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
+info "Checking PyTorch install..."
+TORCH_STATUS_OUTPUT=$("$VENV_PYTHON" "$PLAN_FILE" --torch-status --format key-value)
+TORCH_STATUS=""
+TORCH_VERSION=""
+TORCH_DETAIL=""
+while IFS='=' read -r key value; do
+    case "$key" in
+        status) TORCH_STATUS=$value ;;
+        version) TORCH_VERSION=$value ;;
+        detail) TORCH_DETAIL=$value ;;
+    esac
+done <<EOF
+$TORCH_STATUS_OUTPUT
+EOF
+
+TORCH_UPGRADE_REQUESTED="${TORCHCTS_UPGRADE_TORCH:-0}"
+if [ "$TORCH_STATUS" = "valid" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+    ok "Keeping existing PyTorch ${TORCH_VERSION}."
+elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+    err "$TORCH_DETAIL"
+    echo "  Install a PyTorch ${TORCH_MIN_VERSION}+ build manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup upgrade it."
+    exit 1
+elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+    err "$TORCH_DETAIL"
+    echo "  Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
+    exit 1
 else
-    "$PIP" install --upgrade "$TORCH_SPEC" --quiet
+    info "Installing PyTorch (${TORCH_VARIANT})..."
+    if [ "$TORCH_UPGRADE_REQUESTED" = "1" ]; then
+        if [ -n "$TORCH_INDEX_URL" ]; then
+            "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
+        else
+            "$PIP" install --upgrade "$TORCH_SPEC" --quiet
+        fi
+    else
+        if [ -n "$TORCH_INDEX_URL" ]; then
+            "$PIP" install "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
+        else
+            "$PIP" install "$TORCH_SPEC" --quiet
+        fi
+    fi
 fi
 
 info "Installing TorchCTS in editable mode..."

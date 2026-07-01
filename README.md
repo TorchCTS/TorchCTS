@@ -47,7 +47,7 @@ coverage gaps OpInfo does not dynamically generate.
 
 ### 1. Install
 
-TorchCTS requires Python >= 3.10 and PyTorch >= 2.12.
+TorchCTS requires Python >= 3.10 and PyTorch >= 2.7.
 
 ```bash
 pip install torchcts
