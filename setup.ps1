@@ -31,7 +31,7 @@ $ErrorActionPreference = "Stop"
 $VenvDir = ".venv"
 $MinMajor = 3
 $MinMinor = 10
-$PlanFile = Join-Path "site_scripts" "install_plan.py"
+$PlanFile = Join-Path (Join-Path "torchcts" "site_scripts") "install_plan.py"
 $TorchMinVersion = "2.7.0"
 $TorchSpec = "torch>=$TorchMinVersion"
 

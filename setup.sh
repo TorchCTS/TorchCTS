@@ -32,7 +32,7 @@ set -euo pipefail
 VENV_DIR=".venv"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
-PLAN_FILE="site_scripts/install_plan.py"
+PLAN_FILE="torchcts/site_scripts/install_plan.py"
 TORCH_MIN_VERSION="2.7.0"
 TORCH_SPEC="torch>=${TORCH_MIN_VERSION}"
 

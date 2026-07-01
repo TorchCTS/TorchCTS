@@ -250,10 +250,6 @@ def _contains_dtype(condition_map: dict[str, set[str]], dtype_str: str, input_co
     return any(dtype_str in condition_map.get(key, set()) for key in keys)
 
 
-def _probe_detail(contract: dict, dtype_str: str, input_condition: str, phase: str) -> str:
-    return ""
-
-
 def contract_disposition(
     dispatcher_name: str | None,
     dtype: torch.dtype | str,
@@ -273,7 +269,6 @@ def contract_disposition(
         "runtime_status": contract.get("runtime_status") or {},
         "contract_profiles": list(contract.get("evidence") or ()),
     }
-    probe_detail = _probe_detail(contract, dtype_str, input_condition, phase)
 
     if _contains_dtype(contract["oracle_supported"], dtype_str, input_condition, phase):
         return ContractDisposition(True, ORACLE_SUPPORTED, source_expected=source_expected, evidence=evidence)
@@ -286,7 +281,7 @@ def contract_disposition(
             False,
             CPU_UNSUPPORTED,
             "cpu_contract_unsupported",
-            probe_detail or f"{dtype_str} is not supported by the PyTorch CPU contract for {dispatcher_name}",
+            f"{dtype_str} is not supported by the PyTorch CPU contract for {dispatcher_name}",
             source_expected=source_expected,
             mismatches=mismatches,
             evidence=evidence,
@@ -297,7 +292,7 @@ def contract_disposition(
             False,
             CPU_UNKNOWN,
             "cpu_contract_unknown",
-            probe_detail or f"{dtype_str} has unknown PyTorch CPU contract status for {dispatcher_name}",
+            f"{dtype_str} has unknown PyTorch CPU contract status for {dispatcher_name}",
             source_expected=source_expected,
             mismatches=mismatches,
             evidence=evidence,
@@ -307,7 +302,7 @@ def contract_disposition(
             False,
             CPU_PENDING,
             "cpu_contract_pending",
-            probe_detail or f"{dtype_str} has pending PyTorch CPU contract probe evidence for {dispatcher_name}",
+            f"{dtype_str} has pending PyTorch CPU contract probe evidence for {dispatcher_name}",
             source_expected=source_expected,
             evidence=evidence,
         )

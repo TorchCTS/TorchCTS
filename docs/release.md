@@ -47,8 +47,14 @@ installs the exact PyTorch version, collects dispatcher and dtype evidence,
 regenerates `torchcts/op_metadata.json`, regenerates compact
 `torchcts/op_dtype_contracts.json`, regenerates source evidence under
 `data/pytorch-version-matrix/`, updates the `torch` dependency upper bound in
-`pyproject.toml`, runs artifact verification, runs selftests, builds package
-artifacts, and verifies wheel/sdist contents.
+`pyproject.toml`, runs artifact verification, runs release hygiene checks,
+checks diff whitespace, runs validation selftests, builds package artifacts,
+and verifies wheel/sdist contents.
+
+Raw version-matrix collection outputs in the local collection workspace are
+transient. The reduced evidence under `data/pytorch-version-matrix/` is tracked
+source evidence for recomputing and verifying the compact runtime contract
+artifact, but it is pruned from package artifacts.
 
 If the raw matrix artifacts were already collected and only the tracked
 artifacts need to be regenerated and verified, use:
