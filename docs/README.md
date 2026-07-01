@@ -13,7 +13,8 @@ hand-maintained documentation.
   authoring rules, backend-pack rules, exclusion policy, and accepted contract
   evidence.
 - [Release Checklist](release.md): release validation commands, PyPI package
-  README validation, backend hardware checks, and repository hygiene.
+  README validation, PyTorch compatibility updates, backend hardware checks,
+  and repository hygiene.
 - [Site Stats](site-stats.md): generated current-checkout statistics intended
   as source material for website copy and AI-assisted site updates.
 

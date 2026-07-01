@@ -20,6 +20,52 @@ Run backend hardware jobs on the hosts that support the corresponding backend
 families. Backend-pack coverage is only accepted from a build that can execute
 the direct dispatcher path.
 
+## Updating PyTorch Compatibility
+
+TorchCTS only claims compatibility with PyTorch versions that are collected,
+reduced, verified, and reflected in package dependency metadata. Do not add a
+new PyTorch version by manually editing reduced JSON artifacts.
+
+To add a new stable PyTorch patch release, run the compatibility updater from
+the repository root. For example, if PyTorch `2.12.2` becomes available:
+
+```bash
+source .venv/bin/activate
+
+python scripts/update_pytorch_compatibility.py \
+  --add-version 2.12.2 \
+  --family cpu \
+  --update-tracked \
+  --verify \
+  --max-runtime-bytes 2000000
+```
+
+The updater is the source of truth for PyTorch compatibility updates. It adds
+the version to `scripts/pytorch_version_matrix.json`, checks for missing stable
+patch releases inside the claimed range, creates isolated collection venvs,
+installs the exact PyTorch version, collects dispatcher and dtype evidence,
+regenerates `torchcts/op_metadata.json`, regenerates compact
+`torchcts/op_dtype_contracts.json`, regenerates source evidence under
+`data/pytorch-version-matrix/`, updates the `torch` dependency upper bound in
+`pyproject.toml`, runs artifact verification, runs selftests, builds package
+artifacts, and verifies wheel/sdist contents.
+
+If the raw matrix artifacts were already collected and only the tracked
+artifacts need to be regenerated and verified, use:
+
+```bash
+python scripts/update_pytorch_compatibility.py \
+  --selection torch-2.7-through-2.12-cpu \
+  --update-tracked \
+  --verify \
+  --skip-collection \
+  --max-runtime-bytes 2000000
+```
+
+After a successful update, confirm the summary reports the expected version
+set, no unresolved version holes, runtime contracts under the 2 MB ceiling, and
+the next-patch `torch` dependency upper bound.
+
 ## Package Build And PyPI README Validation
 
 Build release artifacts into a temporary output directory:

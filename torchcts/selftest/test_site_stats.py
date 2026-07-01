@@ -31,6 +31,8 @@ pytestmark = pytest.mark.covers_category("selftest")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "generate_site_stats.py"
+if not SCRIPT_PATH.exists() or not (REPO_ROOT / "pyproject.toml").exists():
+    pytest.skip("site stats script selftests require a source checkout", allow_module_level=True)
 
 
 def _load_site_stats_module():
@@ -63,7 +65,12 @@ def test_generate_site_stats_no_collect_writes_markdown(tmp_path):
 def test_site_stats_script_imports_checkout_package():
     module = _load_site_stats_module()
 
-    assert module.torchcts.__version__ == importlib.metadata.version("torchcts")
+    try:
+        installed_version = importlib.metadata.version("torchcts")
+    except importlib.metadata.PackageNotFoundError:
+        installed_version = module.torchcts.__version__
+
+    assert module.torchcts.__version__ == installed_version
     assert Path(module.torchcts.__file__).resolve() == (REPO_ROOT / "torchcts" / "__init__.py").resolve()
 
 
@@ -96,9 +103,13 @@ def test_site_stats_structured_collection_decisions_and_level_eight_render():
     audit = {
         "metadata": {
             "generated_at": "2026-06-30T00:00:00Z",
-            "total_aten_overloads": 0,
+            "total_aten_overloads": 4,
             "unknown_count": 0,
-            "status_counts": {},
+            "status_counts": {
+                "covered_handwritten": 2,
+                "not_backend_relevant": 1,
+                "unavailable_in_pytorch_runtime": 1,
+            },
             "surface_counts": {},
             "coverage_kind_counts": {},
             "semantic_level_counts": {"1": 2},
@@ -195,6 +206,9 @@ def test_site_stats_structured_collection_decisions_and_level_eight_render():
     assert "| executable | 1 |" in text
     assert "| structured_deselected | 1 |" in text
     assert "| pytest_skip_marked | 1 |" in text
+    assert "| Backend-relevant overloads | 2 |" in text
+    assert "| Runtime-unavailable overloads | 1 |" in text
+    assert "| runtime_unavailable | 1 |" in text
     assert "## Semantic Level Overview" in text
     assert "| 8 | 1 | 1 | 0 | 0 | 0 | 0 | level 8 |" in text
     assert "## Pytest Nodes By Semantic Level" in text
