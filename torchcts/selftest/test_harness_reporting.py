@@ -4205,12 +4205,8 @@ def test_coverage_evidence_pack_writes_portable_archive(tmp_path, monkeypatch):
                 "pending_review": None,
             },
             {
-                "name": "aten::cudnn_convolution",
-                "schema": (
-                    "aten::cudnn_convolution(Tensor self, Tensor weight, SymInt[] padding, "
-                    "SymInt[] stride, SymInt[] dilation, SymInt groups, bool benchmark, "
-                    "bool deterministic, bool allow_tf32) -> Tensor"
-                ),
+                    "name": "aten::unit_unregistered_cuda_backend_pack",
+                    "schema": "aten::unit_unregistered_cuda_backend_pack(Tensor self) -> Tensor",
                 "status": "pending_backend_pack",
                 "coverage_kind": "backend_pack",
                 "surface_kind": "functional_data",
@@ -4267,9 +4263,9 @@ def test_coverage_evidence_pack_writes_portable_archive(tmp_path, monkeypatch):
     assert evidence["metadata"]["record_count"] == 2
     by_surface = {record["surface"]: record for record in evidence["records"]}
     assert by_surface["aten::_fused_dropout"]["oracle_result"]["skipped"] is True
-    assert by_surface["aten::cudnn_convolution"]["oracle"] is None
-    assert by_surface["aten::cudnn_convolution"]["backend_gate"] == "cuda"
-    assert by_surface["aten::cudnn_convolution"]["oracle_result"]["reason"] == "no oracle spec registered"
+    assert by_surface["aten::unit_unregistered_cuda_backend_pack"]["oracle"] is None
+    assert by_surface["aten::unit_unregistered_cuda_backend_pack"]["backend_gate"] == "cuda"
+    assert by_surface["aten::unit_unregistered_cuda_backend_pack"]["oracle_result"]["reason"] == "no oracle spec registered"
 
 
 def test_coverage_evidence_pack_selects_explicit_backend_gates():
@@ -4417,6 +4413,42 @@ def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
         run_oracles=True,
     )["ok"] is True
     assert calls == [("aten::candidate_cuda", "cuda"), ("aten::cuda_ok", "cuda")]
+
+
+def test_coverage_evidence_pack_records_oracle_unavailable_as_skip(monkeypatch):
+    from torchcts.core import evidence_pack as evidence_pack_module
+    from torchcts.core.oracles import OracleSpec, OracleUnavailable
+
+    spec = OracleSpec(
+        surface="aten::candidate_cuda",
+        oracle_id="candidate",
+        coverage_status="pending_backend_pack",
+        coverage_kind="backend_pack",
+        runner="cuda_runner",
+        backend_gate="cuda",
+        contract_status="candidate",
+        contract_ref="docs/coverage/contract-evidence.md#candidate",
+        promotion_backend="cuda",
+    )
+
+    def raise_unavailable(surface, device):
+        raise OracleUnavailable(f"backend_not_available: {surface} requires a different CUDA runtime")
+
+    monkeypatch.setattr(evidence_pack_module, "run_oracle_for_surface", raise_unavailable)
+
+    result = evidence_pack_module._oracle_result(
+        "aten::candidate_cuda",
+        "cuda",
+        spec,
+        run_oracles=True,
+        run_pending_candidates=True,
+    )
+
+    assert result == {
+        "ok": None,
+        "skipped": True,
+        "reason": "backend_not_available: aten::candidate_cuda requires a different CUDA runtime",
+    }
 
 
 def test_cli_routes_coverage_evidence_pack(monkeypatch):
@@ -5019,9 +5051,10 @@ def test_coverage_audit_uses_oracle_status_and_metadata():
     assert quantized_legacy["status"] == "excluded_deprecated_or_removed"
     assert dynamic_int4["status"] == "covered_oracle"
     assert dynamic_int4["oracle"]["oracle_id"] == "dynamic_int4_pack_matmul_value_oracle"
-    assert semi_structured_mm["status"] == "pending_backend_pack"
+    assert semi_structured_mm["status"] == "covered_backend_pack"
     assert semi_structured_mm["oracle"]["runner"] == "cuda_semi_structured_sparse"
-    assert semi_structured_mm["oracle"]["contract_status"] == "candidate"
+    assert semi_structured_mm["oracle"]["contract_status"] == "accepted"
+    assert semi_structured_mm["oracle"]["promotion_evidence"]
     assert audit["metadata"]["status_counts"]["covered_oracle"] >= 13
     assert audit["metadata"]["status_counts"].get("pending_oracle", 0) == 0
 

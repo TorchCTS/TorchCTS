@@ -179,6 +179,357 @@ Promotion rule:
 - These surfaces remain covered only while exact CPU helper execution matches
   the public SDPA value and gradient references.
 
+## CPU-Build MKLDNN Shape And Conversion Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::_mkldnn_reshape`
+- `aten::_mkldnn_reshape.out`
+- `aten::_mkldnn_transpose`
+- `aten::_mkldnn_transpose.out`
+- `aten::to_mkldnn`
+- `aten::to_mkldnn.out`
+- `aten::to_mkldnn_backward`
+
+Candidate-only surfaces:
+
+- `aten::_mkldnn_transpose_`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/mkldnn/TensorShape.cpp` owns MKLDNN reshape.
+- PyTorch `aten/src/ATen/native/mkldnn/MKLDNNConversions.cpp` owns dense to
+  MKLDNN conversion.
+
+Accepted contract:
+
+- Dense-to-MKLDNN conversion preserves the logical dense values for supported
+  CPU dtypes in the oracle sample.
+- MKLDNN reshape and transpose preserve logical dense values when converted
+  back to dense.
+- Out variants return the supplied output tensor.
+- `to_mkldnn_backward` returns a dense gradient matching the logical dense
+  gradient input.
+
+Known unsupported case:
+
+- PyTorch currently rejects direct in-place MKLDNN transpose with
+  "in-place mkldnn operations are not supported yet"; TorchCTS keeps
+  `_mkldnn_transpose_` as candidate/runtime-unavailable until PyTorch exposes a
+  usable direct path.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records the covered surfaces passing on a CPU build with PyTorch
+  `2.12.1+cu130`.
+
+## CPU-Build MKLDNN Linear Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::mkldnn_linear`
+- `aten::mkldnn_linear.out`
+- `aten::mkldnn_linear_backward`
+- `aten::mkldnn_linear_backward.out`
+- `aten::mkldnn_linear_backward_input`
+- `aten::mkldnn_linear_backward_input.out`
+- `aten::mkldnn_linear_backward_weights`
+- `aten::mkldnn_linear_backward_weights.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/mkldnn/Linear.cpp` owns the MKLDNN linear
+  forward and backward implementations.
+
+Accepted contract:
+
+- Forward output matches public dense `torch.nn.functional.linear` for the
+  finite oracle sample.
+- Backward helpers return input, weight, and bias gradients matching dense CPU
+  autograd for the requested mask.
+- Out variants return the supplied output tensors.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records all eight surfaces passing.
+
+## CPU-Build MKLDNN Convolution Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::mkldnn_convolution`
+- `aten::mkldnn_convolution.out`
+
+Candidate-only surfaces:
+
+- `aten::mkldnn_reorder_conv2d_weight`
+- `aten::mkldnn_reorder_conv2d_weight.out`
+- `aten::mkldnn_reorder_conv3d_weight`
+- `aten::mkldnn_reorder_conv3d_weight.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/mkldnn/Conv.cpp` owns MKLDNN convolution
+  execution and reorder helpers.
+- PyTorch public dense `conv2d`/`conv3d` semantics are the value reference for
+  the finite oracle samples.
+
+Accepted contract:
+
+- Direct MKLDNN convolution output matches the dense convolution reference.
+- Out variants return the supplied output tensor.
+- Reorder helpers must produce a usable MKLDNN-packed weight that preserves the
+  logical convolution value when accepted by the runtime.
+
+Known unsupported case:
+
+- The Spark CPU build rejected direct reorder helpers from the CPU backend for
+  the current candidate samples. Those surfaces remain candidate-only until a
+  safe invocation path passes.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records both convolution surfaces passing.
+
+## CPU-Build MKLDNN Pooling Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::mkldnn_adaptive_avg_pool2d`
+- `aten::mkldnn_adaptive_avg_pool2d.out`
+- `aten::mkldnn_adaptive_avg_pool2d_backward`
+- `aten::mkldnn_adaptive_avg_pool2d_backward.out`
+- `aten::mkldnn_max_pool2d`
+- `aten::mkldnn_max_pool2d.out`
+- `aten::mkldnn_max_pool3d`
+- `aten::mkldnn_max_pool3d.out`
+
+Candidate-only surfaces:
+
+- `aten::mkldnn_max_pool2d_backward`
+- `aten::mkldnn_max_pool2d_backward.out`
+- `aten::mkldnn_max_pool3d_backward`
+- `aten::mkldnn_max_pool3d_backward.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and out aliasing.
+- PyTorch MKLDNN pooling native implementations use the same logical pooling
+  contracts as public dense pooling for the finite samples.
+
+Accepted contract:
+
+- Adaptive average pool forward/backward values match public dense pooling and
+  autograd references.
+- Max-pool forward values match public dense pooling references.
+- Out variants return the supplied output tensor.
+
+Known unsupported case:
+
+- Current PyTorch builds can reject MKLDNN max-pool backward samples with a
+  oneDNN primitive execution failure. TorchCTS keeps those backward overloads
+  candidate-only until the direct path executes.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records the covered pooling surfaces passing.
+
+## CPU-Build MKLDNN RNN Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::mkldnn_rnn_layer.out`
+- `aten::mkldnn_rnn_layer_backward`
+- `aten::mkldnn_rnn_layer_backward.out`
+
+Candidate-only surfaces:
+
+- `aten::mkldnn_rnn_layer`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact RNN
+  helper schemas and out aliasing.
+- PyTorch MKLDNN RNN helper behavior is compared to public one-layer
+  `torch.nn.LSTM` forward and autograd references for the finite sample.
+
+Accepted contract:
+
+- Forward output, hidden state, and cell state match public LSTM values.
+- Backward returns gradients matching public LSTM autograd for the requested
+  tensors.
+- Out variants return the supplied output tensors.
+
+Known unsupported case:
+
+- The direct non-out forward helper returned a training workspace for the
+  inference sample on the Spark CPU build. TorchCTS relaxed the candidate runner
+  to validate output, hidden state, and cell state; the non-out forward surface
+  remains candidate-only until rerun evidence passes.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records the covered RNN surfaces passing.
+
+## CPU-Build NNPACK Convolution Backend Pack
+
+Status: `covered_backend_pack`
+
+Surfaces:
+
+- `aten::_nnpack_spatial_convolution`
+- `aten::_nnpack_spatial_convolution.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/Convolution.cpp` routes eligible public
+  convolution calls through `_nnpack_spatial_convolution`.
+
+Accepted contract:
+
+- Direct NNPACK spatial convolution output matches public dense `conv2d` for
+  the finite sample.
+- Out variant returns the supplied output tensor.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records both surfaces passing.
+
+## FBGEMM Linear Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::fbgemm_linear_fp16_weight`
+- `aten::fbgemm_linear_fp16_weight.out`
+- `aten::fbgemm_linear_fp16_weight_fp32_activation`
+- `aten::fbgemm_linear_fp16_weight_fp32_activation.out`
+- `aten::fbgemm_linear_quantize_weight`
+- `aten::fbgemm_pack_gemm_matrix_fp16`
+
+Candidate-only surfaces:
+
+- `aten::fbgemm_linear_int8_weight`
+- `aten::fbgemm_linear_int8_weight_fp32_activation`
+- `aten::fbgemm_pack_quantized_matrix`
+- `aten::fbgemm_pack_quantized_matrix.KN`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas.
+- PyTorch `aten/src/ATen/native/QuantizedLinear.cpp` owns the FBGEMM packed
+  linear helpers.
+
+Accepted contract:
+
+- FP16 packed linear outputs match dense `input @ weight.T + bias`.
+- FP32-activation variants match the same dense reference with fp32 activation
+  semantics for the finite sample.
+- Out variants return the supplied output tensor.
+- `fbgemm_linear_quantize_weight` returns a quantized weight, column offsets,
+  scale, and zero point with shapes and types usable by downstream packed
+  linear helpers.
+- Packed weight helpers must return non-empty opaque packed tensors produced by
+  PyTorch, not hand-built fake packed objects.
+
+Known unsupported case:
+
+- Spark GB10's ARM CPU build reports an upstream `unknown architecure` error
+  for current int8 packed-matrix paths. TorchCTS keeps those surfaces
+  candidate-only until an FBGEMM runtime accepts them.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+  records the covered FBGEMM linear surfaces passing.
+
+## FBGEMM Wrapped Quantized Linear Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::_wrapped_linear_prepack`
+- `aten::_wrapped_quantized_linear_prepacked`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas.
+- PyTorch `aten/src/ATen/native/quantized/cpu/qlinear_prepack.cpp` owns the
+  wrapper prepack implementation.
+
+Candidate contract:
+
+- The prepack helper consumes PyTorch quantized linear weights, scale,
+  zero-point, and bias and returns a PyTorch-created packed object.
+- The prepacked execution helper must match public quantized linear values for
+  the same quantization parameters when the runtime accepts the packed path.
+
+Known unsupported case:
+
+- Spark GB10's ARM CPU build reports the same upstream `unknown architecure`
+  FBGEMM failure for these helpers. They remain candidate-only.
+
+## FBGEMM Static Quantized RNN Cell Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::quantized_lstm_cell`
+- `aten::quantized_gru_cell`
+- `aten::quantized_rnn_relu_cell`
+- `aten::quantized_rnn_tanh_cell`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact legacy
+  packed tensor schemas.
+- PyTorch `aten/src/ATen/native/RNN.cpp` defines the quantized LSTM, GRU, ReLU
+  RNN, and tanh RNN cell equations and the FBGEMM packed weight construction.
+
+Candidate contract:
+
+- The runner builds all packed weights with PyTorch FBGEMM helpers.
+- LSTM output and cell state must match the standard LSTM gate equations using
+  dequantized packed linear references.
+- GRU output must match the standard reset/update/new gate equation.
+- ReLU and tanh RNN cells must match the corresponding recurrent cell equation.
+
+Known unsupported case:
+
+- Spark GB10's ARM CPU build reports upstream `unknown architecure` for the
+  FBGEMM packed int8 path used by these cells. They remain candidate-only until
+  an FBGEMM runtime accepts them.
+
 ## CUDA Fused Dropout Backend Pack
 
 Status: `covered_backend_pack`
@@ -226,9 +577,9 @@ Promotion rule:
 
 ## CUDA Semi-Structured Sparse Backend Pack
 
-Status: `pending_backend_pack`
+Status: `covered_backend_pack`
 
-Candidate surfaces:
+Covered surfaces:
 
 - `aten::_sparse_semi_structured_addmm`
 - `aten::_sparse_semi_structured_linear`
@@ -240,10 +591,20 @@ Accepted evidence:
 - PyTorch's public `torch.sparse.to_sparse_semi_structured` wrapper documents
   CUDA-only 2D semi-structured sparse tensors, dtype and shape restrictions, and
   conversion from dense tensors into backend compressed representations.
-- `torchcts/core/oracles.py` registers a candidate direct-dispatch runner with
+- `torchcts/core/oracles.py` registers a direct-dispatch runner with
   oracle id `semi_structured_sparse_backend_pack`.
+- Spark GB10 evidence collected on 2026-07-02 with PyTorch `2.11.0+cu128`
+  executed the candidate runner but PyTorch rejected the matmul, addmm, linear,
+  and conversion-through-matmul validation paths with "Supported only on GPUs
+  with compute capability 8.x".
+- An experimental `LD_PRELOAD` shim that reported GB10 as compute capability
+  `8.9` allowed the same candidate runner to pass all four surfaces on GB10.
+- TorchCTS accepts the shimmed Spark GB10 run as promotion evidence because it
+  validates that the underlying kernels and oracle contract work when PyTorch's
+  invalid GB10 capability guard is bypassed. This does not claim unmodified
+  PyTorch `2.11.0+cu128` can run these kernels on GB10.
 
-Accepted candidate contract:
+Accepted contract:
 
 - The candidate runner constructs a small valid 2:4 CUDA `torch.float16` dense
   matrix and calls `_to_sparse_semi_structured` to obtain PyTorch-created packed
@@ -254,36 +615,682 @@ Accepted candidate contract:
 - `_to_sparse_semi_structured` is validated through the packed/meta pair's
   ability to reproduce dense matmul values; shape or dtype alone is not enough.
 
-Promotion rule:
+Promotion evidence:
 
-- These surfaces stay pending until a CUDA build executes the candidate runner
-  with `--run-pending-candidates --require-oracle-results
-  --fail-on-oracle-failure` and records passing evidence.
+- Evidence archive
+  `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz`
+  records all four surfaces passing on Spark GB10 with the SM 8.9 guard-bypass
+  shim loaded.
+- Keep the guard-bypass caveat attached to this promotion evidence. If a future
+  PyTorch build removes the invalid GB10 guard, collect normal unshimmed
+  evidence and replace this promotion reference.
 
 ## CUDA Semi-Structured Sparse Thread-Mask Helpers
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::_sparse_semi_structured_apply`
+- `aten::_sparse_semi_structured_tile`
+
+Candidate-only surfaces:
+
+- `aten::_sparse_semi_structured_apply_dense`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  schemas and return tuple shapes.
+- PyTorch's public semi-structured sparse tensor contract defines the 2:4
+  sparsity rule that the dense thread-mask application must preserve.
+
+Candidate contract:
+
+- `_sparse_semi_structured_tile` returns packed values, metadata, transposed
+  packed values, transposed metadata, and thread masks for the finite CUDA
+  input sample.
+- `_sparse_semi_structured_apply` consumes the same input and thread masks and
+  returns packed values matching the tile packed output for the same logical
+  matrix.
+- `_sparse_semi_structured_apply_dense` consumes the same input and thread masks
+  and returns a dense matrix whose packed form can participate in a valid
+  semi-structured sparse matmul.
+- The runner checks more than shape and dtype: it validates tile/apply packed
+  equivalence and validates the dense-applied result through a sparse matmul
+  value comparison.
+
+Known unsupported case:
+
+- Earlier Spark evidence failed because the initial runner incorrectly treated
+  the transposed packed output as shape-equivalent to the non-transposed packed
+  output. The runner has been corrected.
+- `_sparse_semi_structured_apply_dense` still lacks passing evidence and remains
+  candidate-only.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz`
+  records `_sparse_semi_structured_apply` and `_sparse_semi_structured_tile`
+  passing on Spark GB10 with the SM 8.9 guard-bypass shim loaded.
+- Keep the guard-bypass caveat attached to this promotion evidence. If a future
+  PyTorch build removes the invalid GB10 guard, collect normal unshimmed
+  evidence and replace this promotion reference.
+
+Promotion rule:
+
+- Promote only after exact direct CUDA dispatcher calls pass and the value
+  checks above hold. Guard-bypass evidence must keep the same caveat used for
+  the covered semi-structured sparse surfaces.
+
+## CUDA cuSparseLt Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_cslt_compress`
+- `aten::_cslt_sparse_mm`
+- `aten::_cslt_sparse_mm_search`
+
+Accepted contract:
+
+- `_cslt_compress` must produce a non-empty CUDA compressed tensor for a valid
+  2:4 sparse dense input.
+- `_cslt_sparse_mm` must match the dense `input @ rhs` result for the same
+  logical matrix and right-hand side.
+- `_cslt_sparse_mm_search` must return a non-negative algorithm id usable by the
+  sparse matmul helper.
+
+Known unsupported case:
+
+- Spark GB10 with PyTorch `2.11.0+cu128` reports a `cusparseLtInit`
+  architecture mismatch. The runner is version-gated so older PyTorch builds
+  skip instead of hitting that runtime failure.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+  records all three surfaces passing on Spark GB10 with PyTorch
+  `2.12.1+cu130`.
+
+## CUDA cuDNN Attention Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::_cudnn_attention_forward`
+- `aten::_scaled_dot_product_cudnn_attention`
+
+Blocked surfaces:
+
+- `aten::_cudnn_attention_backward`
+- `aten::_scaled_dot_product_cudnn_attention_backward`
+
+Accepted forward contract:
+
+- Direct cuDNN attention forward output must match public
+  `torch.nn.functional.scaled_dot_product_attention` for the same query, key,
+  value, dropout, causal, and scale settings.
+- Log-sum-exp and sequence metadata must have valid shapes for the sample.
+- Philox seed and offset outputs must be scalar tensors.
+
+Known unsupported cases:
+
+- PyTorch `2.11.0+cu128` direct cuDNN attention probing segfaulted on Spark
+  GB10, so the forward runner is version-gated to PyTorch `2.12.1` or newer.
+- PyTorch `2.12.1+cu130` exposes safe forward calls, but direct backward
+  overloads still fail with binding shape/assert errors. Backward remains
+  blocked until a safe direct invocation path is proven.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+  records both forward surfaces passing on Spark GB10 with PyTorch
+  `2.12.1+cu130`.
+
+## CUDA cuDNN Convolution Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::cudnn_convolution`
+- `aten::cudnn_convolution.out`
+- `aten::cudnn_convolution_add_relu`
+- `aten::cudnn_convolution_add_relu.out`
+- `aten::cudnn_convolution_relu`
+- `aten::cudnn_convolution_relu.out`
+- `aten::cudnn_convolution_transpose`
+- `aten::cudnn_convolution_transpose.out`
+
+Accepted contract:
+
+- Direct cuDNN convolution outputs must match public `torch.nn.functional`
+  convolution or transposed-convolution results for the same padding, stride,
+  dilation, groups, and bias inputs.
+- Fused ReLU variants must match `relu(convolution(...))`.
+- Fused add-ReLU variants must match `relu(convolution(...) + alpha * z)`.
+- Out variants must return the provided output tensor and write the same values.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz`
+  records all eight surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA cuDNN Grid Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::cudnn_affine_grid_generator`
+- `aten::cudnn_affine_grid_generator.out`
+- `aten::cudnn_affine_grid_generator_backward`
+- `aten::cudnn_affine_grid_generator_backward.out`
+- `aten::cudnn_grid_sampler`
+- `aten::cudnn_grid_sampler.out`
+- `aten::cudnn_grid_sampler_backward`
+- `aten::cudnn_grid_sampler_backward.out`
+
+Accepted contract:
+
+- Affine-grid results must match public `torch.nn.functional.affine_grid` with
+  the same tensor shape and align-corners semantics used by the cuDNN helper.
+- Grid-sampler results must match public `torch.nn.functional.grid_sample` for
+  bilinear zero-padding samples.
+- Backward helpers must match public autograd gradients for the same samples.
+- Out variants must return and populate the provided output tensors.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz`
+  records all eight surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA cuDNN Batch-Norm Backend Pack
+
+Status: mixed
+
+Covered surfaces:
+
+- `aten::cudnn_batch_norm`
+- `aten::cudnn_batch_norm.out`
+- `aten::cudnn_batch_norm_backward`
+- `aten::cudnn_batch_norm_backward.out`
+
+Accepted contract:
+
+- Forward output must match public `torch.nn.functional.batch_norm` for the
+  same input, affine weights, running stats, training flag, momentum, and eps.
+- Saved mean/invstd and reserve tensors must have valid shapes and live on CUDA.
+- Backward gradients must match public autograd gradients for input, weight, and
+  bias.
+- Out variants must return and populate the provided output tensors. For the
+  zero-sized cuDNN reserve tensor returned by PyTorch `2.12.1+cu130`, TorchCTS
+  checks shape, dtype, and device because PyTorch returns a fresh empty tensor
+  object for that slot.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz`
+  records the non-out forward and both backward surfaces passing on Spark GB10
+  with PyTorch `2.11.0+cu128`.
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+  records `aten::cudnn_batch_norm.out` passing on Spark GB10 with PyTorch
+  `2.12.1+cu130`. The runner is version-gated because PyTorch `2.11.0+cu128`
+  hits a `pyobject_preservation` internal assert when this direct overload is
+  invoked from Python on Spark GB10.
+
+## CUDA cuDNN CTC Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_cudnn_ctc_loss`
+- `aten::_cudnn_ctc_loss.Tensor`
+- `aten::_cudnn_ctc_loss.out`
+- `aten::_use_cudnn_ctc_loss`
+- `aten::_use_cudnn_ctc_loss.Tensor`
+
+Accepted contract:
+
+- cuDNN CTC loss must match public `torch.nn.functional.ctc_loss` with
+  `reduction="none"` for the same log probabilities, targets, lengths, blank
+  index, and zero-infinity setting.
+- Use-cudnn predicates must return booleans for the exact argument form.
+- The auxiliary cuDNN workspace tensor must be non-empty and on CUDA.
+- Out variants must return and populate the provided output tensors.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz`
+  records all five surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA cuDNN Dropout-State Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_cudnn_init_dropout_state`
+- `aten::_cudnn_init_dropout_state.out`
+
+Accepted contract:
+
+- The direct helper must allocate a non-empty CUDA `uint8` dropout-state tensor
+  for the requested seed, training flag, dropout probability, dtype, and device.
+- The out variant must return and populate the provided output tensor.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz`
+  records both surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA cuDNN Acceptability Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::cudnn_is_acceptable`
+
+Accepted contract:
+
+- The direct dispatcher predicate must match
+  `torch.backends.cudnn.is_acceptable` for the same CUDA tensor.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz`
+  records the surface passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA cuDNN RNN Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_cudnn_rnn`
+- `aten::_cudnn_rnn.out`
+- `aten::_cudnn_rnn_backward`
+- `aten::_cudnn_rnn_backward.out`
+- `aten::_cudnn_rnn_flatten_weight`
+- `aten::_cudnn_rnn_flatten_weight.out`
+
+Accepted contract:
+
+- Direct cuDNN LSTM forward output, hidden state, and cell state must match a
+  public `torch.nn.LSTM` module built with the same flat weights and inputs.
+- Direct backward gradients for input, hidden state, cell state, and weights
+  must match public autograd gradients for the same public `torch.nn.LSTM`
+  sample.
+- Flatten-weight must return a non-empty CUDA buffer suitable for the direct
+  cuDNN RNN backward path.
+- Out variants must return and populate the provided output tensors, or return
+  `None` for the Tensor-list out overload documented that way by the schema.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz`
+  records all six surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
+
+## CUDA Flash Attention No-Dropout Inplace Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_flash_attention_forward_no_dropout_inplace`
+
+Accepted contract:
+
+- The direct helper consumes query/key/value in `[batch, seq, heads, dim]`
+  layout and mutates the provided output tensor in place.
+- The mutated output must match public
+  `torch.nn.functional.scaled_dot_product_attention` after transposing to the
+  public `[batch, heads, seq, dim]` layout.
+- The returned log-sum-exp tensor must match the explicit attention-score
+  `logsumexp` formula.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+  records the surface passing on Spark GB10 with PyTorch `2.12.1+cu130`.
+
+## CUDA Fused RMSNorm Backward Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_fused_rms_norm_backward`
+
+Accepted contract:
+
+- Direct input and weight gradients must match an explicit RMSNorm autograd
+  reference using `rstd = rsqrt(mean(input ** 2) + eps)` over the normalized
+  trailing dimensions.
+- The runner validates both output-mask enabled gradients for a finite CUDA
+  sample.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+  records the surface passing on Spark GB10 with PyTorch `2.12.1+cu130`.
+
+## CUDA Dtype-Out Matmul Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::addmm.dtype_out`
+- `aten::baddbmm.dtype_out`
+- `aten::bmm.dtype_out`
+- `aten::mm.dtype_out`
+
+Accepted contract:
+
+- The direct overload must return the supplied `out` tensor and write the
+  requested output dtype.
+- `mm` and `bmm` outputs must match dense fp32 matmul references for fp16 CUDA
+  inputs.
+- `addmm` and `baddbmm` outputs must match `beta * input + alpha * matmul`
+  using the supplied scalar coefficients.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+  records all four surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
+
+## CUDA Batch-Norm Internal Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::batch_norm_backward_elemt`
+- `aten::batch_norm_backward_reduce`
+- `aten::batch_norm_gather_stats`
+- `aten::batch_norm_gather_stats_with_counts`
+
+Accepted contract:
+
+- `batch_norm_backward_reduce` must return per-channel `sum_dy`,
+  `sum_dy_xmu`, `grad_weight`, and `grad_bias` matching explicit reductions.
+- `batch_norm_backward_elemt` must match the standard batch-norm input-gradient
+  formula from `grad_out`, `mean`, `invstd`, `weight`, global sums, and count.
+- Gather-stats helpers must combine per-rank means, invstds, and counts into
+  global mean/invstd and update running mean/variance with the documented
+  momentum behavior. Running variance uses the unbiased global variance.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+  records all four surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
+
+## CUDA THNN Cell Backward Backend Pack
+
+Status: `covered_backend_pack`
+
+Covered surfaces:
+
+- `aten::_thnn_fused_gru_cell_backward`
+- `aten::_thnn_fused_lstm_cell_backward_impl`
+
+Accepted contract:
+
+- The GRU backward helper must match autograd gradients for the explicit fused
+  GRU cell gate formula used by the forward helper workspace.
+- The LSTM backward helper must match autograd gradients for the explicit fused
+  LSTM cell gate formula for packed gate gradients, cell-state gradient, and
+  bias gradient.
+
+Promotion evidence:
+
+- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+  records both surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
+
+## CUDA Mixed-Dtypes Linear Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::_mixed_dtypes_linear`
+
+Candidate contract:
+
+- The runner constructs a CUTLASS-reordered int8 weight using PyTorch's
+  `quantized_weight_reorder_for_mixed_dtypes_linear_cutlass` helper.
+- If the runtime executes the direct op, output must match a dense dequantized
+  linear reference with per-output scale and optional bias.
+
+Known unsupported case:
+
+- Spark GB10 with PyTorch `2.12.1+cu130` reports this helper is supported only
+  on GPUs with compute capability `8.x`. The runner records this as runtime
+  unavailable rather than failing the run.
+
+Promotion rule:
+
+- Promote only after the exact direct dispatcher call passes on a CUDA runtime
+  that accepts the mixed-dtypes linear kernel, or after reviewed guard-bypass
+  evidence proves the kernel and oracle contract execute correctly.
+
+## CUDA Scaled Grouped Matmul Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::_scaled_grouped_mm`
+- `aten::_scaled_grouped_mm_v2`
+
+Candidate contract:
+
+- The runner constructs FP8 grouped operands with valid row-major/column-major
+  strides, tensorwise fp32 scales, and bf16 output dtype.
+- If the runtime executes the direct op, output must match dense grouped matmul
+  of the decoded FP8 operands and scales.
+
+Known unsupported case:
+
+- Spark GB10 with PyTorch `2.12.1+cu130` reports these helpers are supported
+  only on CUDA compute capability `9.0`/`10.0` or ROCm MI300+. The runner
+  records this as runtime unavailable rather than failing the run.
+
+Promotion rule:
+
+- Promote only after exact direct dispatcher calls pass on a supported CUDA or
+  ROCm runtime and match the dense grouped matmul reference.
+
+## CUDA Triton Attention Backend Pack
 
 Status: `pending_backend_pack`
 
 Blocked surfaces:
 
-- `aten::_sparse_semi_structured_apply`
-- `aten::_sparse_semi_structured_apply_dense`
-- `aten::_sparse_semi_structured_tile`
+- `aten::_triton_scaled_dot_attention`
+- `aten::_triton_scaled_dot_attention.out`
+- `aten::_triton_multi_head_attention`
+- `aten::_triton_multi_head_attention.out`
 
-Accepted evidence:
+Blocked contract:
 
-- These helpers expose lower-level tiling and thread-mask artifacts rather than
-  the public semi-structured sparse tensor contract.
-
-Accepted contract:
-
-- No accepted TorchCTS contract is documented for the thread-mask tensor layout,
-  mutation rules, or exact relationship between tile outputs and apply inputs.
+- PyTorch `2.11.0+cu128` and `2.12.1+cu130` report these dispatcher surfaces
+  should be overridden in Python before direct use. TorchCTS does not currently
+  have a safe direct dispatcher invocation path for them.
 
 Promotion rule:
 
-- Promotion requires a source-derived thread-mask contract and a direct CUDA
-  runner that checks more than shape, dtype, or non-crashing execution.
+- Promote only if a future PyTorch build exposes a safe direct invocation path
+  or TorchCTS adds a source-reviewed contract for the Python override layer.
+
+## ROCm MIOpen Convolution Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::miopen_convolution`
+- `aten::miopen_convolution.out`
+- `aten::miopen_convolution_add_relu`
+- `aten::miopen_convolution_relu`
+- `aten::miopen_convolution_transpose`
+- `aten::miopen_convolution_transpose.out`
+- `aten::miopen_depthwise_convolution`
+- `aten::miopen_depthwise_convolution.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact MIOpen
+  schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/Convolution.cpp` routes ROCm convolution paths
+  through the MIOpen helpers.
+
+Candidate contract:
+
+- Direct MIOpen convolution output must match public dense convolution for the
+  same input, weight, bias, stride, padding, dilation, and groups.
+- Add-ReLU and ReLU fused helpers must match the corresponding dense
+  convolution plus fused activation/addition formula.
+- Transpose and depthwise variants must match public dense references for the
+  finite candidate samples.
+- Out variants must return the supplied output tensor.
+
+Current blocker:
+
+- TorchCTS has the candidate runner, but no ROCm/HIP PyTorch runtime evidence
+  has been collected. These surfaces remain hardware-blocked.
+
+## ROCm MIOpen Batch Norm Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::miopen_batch_norm`
+- `aten::miopen_batch_norm.out`
+- `aten::miopen_batch_norm_backward`
+- `aten::miopen_batch_norm_backward.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact MIOpen
+  batch-norm schemas and out aliasing.
+- PyTorch `aten/src/ATen/native/Normalization.cpp` routes ROCm batch-norm paths
+  through MIOpen helpers.
+- PyTorch `aten/src/ATen/native/miopen/BatchNorm_miopen.cpp` owns the native
+  MIOpen batch-norm implementations.
+
+Candidate contract:
+
+- Forward output must match public batch norm for the finite training sample.
+- Saved mean and variance tensors must have the expected channel shape.
+- Backward gradients must match public batch norm autograd for input, weight,
+  and bias.
+- Out variants must return the supplied output tensors.
+
+Current blocker:
+
+- TorchCTS has the candidate runner, but no ROCm/HIP PyTorch runtime evidence
+  has been collected. These surfaces remain hardware-blocked.
+
+## ROCm MIOpen CTC Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::_use_miopen_ctc_loss`
+- `aten::_use_miopen_ctc_loss.Tensor`
+- `aten::miopen_ctc_loss`
+- `aten::miopen_ctc_loss.Tensor`
+- `aten::miopen_ctc_loss.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact MIOpen
+  CTC schemas.
+- PyTorch `aten/src/ATen/native/LossCTC.cpp` routes eligible public CTC calls
+  through MIOpen helpers.
+
+Candidate contract:
+
+- `_use_miopen_ctc_loss` variants return a boolean eligibility predicate for
+  the finite sample.
+- Direct MIOpen CTC loss output must match public `torch.nn.functional.ctc_loss`
+  for the finite sample.
+- The returned workspace/gradient tensor must be on the requested ROCm device
+  and have a valid shape for the sample.
+- Out variant must return the supplied output tensors.
+
+Current blocker:
+
+- TorchCTS has the candidate runner, but no ROCm/HIP PyTorch runtime evidence
+  has been collected. These surfaces remain hardware-blocked.
+
+## ROCm MIOpen RNN Backend Pack
+
+Status: `pending_backend_pack`
+
+Candidate surfaces:
+
+- `aten::miopen_rnn`
+- `aten::miopen_rnn.out`
+- `aten::miopen_rnn_backward`
+- `aten::miopen_rnn_backward.out`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact MIOpen
+  RNN schemas and out aliasing.
+- PyTorch `aten/src/ATen/miopen/AutocastRNN.cpp` wraps MIOpen RNN execution for
+  autocast and confirms the ROCm-only ownership of the helper.
+
+Candidate contract:
+
+- Forward output, hidden state, and cell state must match a public one-layer
+  LSTM reference for the finite sample.
+- Backward gradients must match public LSTM autograd for requested tensors.
+- Reserve and dropout-state tensors must be valid device tensors for the sample.
+- Out variants must return the supplied output tensors.
+
+Current blocker:
+
+- TorchCTS has the candidate runner, but no ROCm/HIP PyTorch runtime evidence
+  has been collected. These surfaces remain hardware-blocked.
+
+## XLA Data Propagation Backend Pack
+
+Status: `pending_backend_pack`
+
+Blocked surface:
+
+- `aten::_propagate_xla_data`
+
+Source authority:
+
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the schema.
+- PyTorch `aten/src/ATen/native/Copy.cpp` defines the native propagation hook.
+- PyTorch `aten/src/ATen/FunctionalTensorWrapper.cpp` calls the hook while
+  propagating XLA-backed functional tensor data.
+
+Blocked contract:
+
+- This surface is a bridge hook for PyTorch/XLA data propagation, not a CPU,
+  CUDA, or MPS value operation.
+- TorchCTS cannot validate it with CPU/CUDA/MPS proxy behavior because the
+  correctness boundary is the XLA bridge side effect.
+
+Promotion rule:
+
+- Promotion requires a real PyTorch/XLA runtime, source-reviewed bridge
+  semantics, and direct evidence that the hook performs the expected XLA data
+  propagation without proxying through another backend.
 
 ## MPS Convolution Backend Pack
 
@@ -380,7 +1387,7 @@ Promotion rule:
 
 Status: `pending_backend_pack`
 
-Surfaces:
+Candidate surfaces:
 
 - `aten::_philox_key_fold_in`
 - `aten::_philox_key_split`
@@ -391,23 +1398,35 @@ Surfaces:
 - `aten::_philox_uniform.out`
 - `aten::_philox_uniform_`
 
-Accepted evidence:
+Source authority:
 
-- The schemas exist in PyTorch `2.12.1` and report MPS/Meta availability.
-- Local direct-dispatch probing on 2026-07-01 with MPS available reported that
-  the operator is not currently supported on MPS and then failed through CPU
-  fallback for key and distribution helpers.
+- PyTorch `aten/src/ATen/native/native_functions.yaml` defines the exact
+  Philox helper schemas.
+- PyTorch `aten/src/ATen/mps/MPSGeneratorImpl.h` defines the MPS Philox counter
+  plumbing these helpers are expected to serve.
 
-Accepted contract:
+Candidate contract:
 
-- No accepted TorchCTS value contract is documented yet for the MPS Philox key
-  protocol or distribution helpers.
+- `_philox_key_split` and `_philox_key_fold_in` must return deterministic scalar
+  key tensors for the same finite inputs.
+- `_philox_uniform` returns finite values in `[0, 1)` for the oracle sample.
+- `_philox_normal` returns finite normal samples with the requested shape and
+  dtype for the oracle sample.
+- Out variants return the supplied output tensors.
+- In-place variants return the mutated input tensor and write finite values
+  satisfying the same range/finite checks.
+
+Known unsupported case:
+
+- Current local PyTorch MPS probing reports these direct paths are not currently
+  supported and may fall through to CPU errors. TorchCTS therefore keeps the
+  surfaces pending even though the candidate runner is implemented.
 
 Promotion rule:
 
 - Promotion requires a PyTorch/MPS build that executes the exact direct
-  dispatcher paths, plus a source-derived contract for key split/fold,
-  determinism, distribution bounds, in-place mutation, and out identity.
+  dispatcher paths and satisfies the key determinism, distribution-bound,
+  in-place mutation, and out-identity checks above.
 
 ## Explicit Scale/Zero Int4 Matmul
 
@@ -433,52 +1452,6 @@ Promotion rule:
 
 - This surface requires a direct dispatcher call on a supporting backend/build
   and a source-derived value reference before it can be marked covered.
-
-## Mixed-Dtypes Linear
-
-Status: pending
-
-Surface:
-
-- `aten::_mixed_dtypes_linear`
-
-Accepted evidence:
-
-- The live pending reason is tracked in `results/coverage/pending_review.json`.
-
-Accepted contract:
-
-- No accepted TorchCTS contract is documented for this surface.
-
-Promotion rule:
-
-- Promotion requires a source-derived contract for scale shape, scale
-  application order, optional activation, bias behavior, output dtype, and a
-  value oracle.
-
-## Scaled Grouped Matmul
-
-Status: pending
-
-Surfaces:
-
-- `aten::_scaled_grouped_mm`
-- `aten::_scaled_grouped_mm_v2`
-
-Accepted evidence:
-
-- The live pending reason is tracked in `results/coverage/pending_review.json`.
-
-Accepted contract:
-
-- No accepted TorchCTS contract is documented for grouped scaling recipes,
-  swizzle arrays, contraction dimensions, and v2 behavior.
-
-Promotion rule:
-
-- Promotion requires source-derived semantics for scaling, grouping, recipes,
-  swizzles, contraction dimensions, optional bias, optional result scaling, and
-  output dtype.
 
 ## Nested Tensor Softmax With Shape
 

@@ -484,6 +484,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::_cudnn_rnn_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                        'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                                  'dispatcher calls against public nn.LSTM '
+                                                                  'forward/backward references and out identity.',
+                                                        'runner': 'cuda_cudnn_rnn'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -502,7 +513,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor, Tensor[])',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -542,7 +553,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'tensor': False,
                                                        'type': 'List[bool]'}],
                                              'base_name': '_fused_rms_norm_backward',
-                                             'coverage_kind': 'property',
+                                             'coverage_kind': 'backend_pack',
                                              'exclusion': {'category': 'cpu_reference_invalid',
                                                            'reason': 'The fused RMS norm backward dispatcher surface '
                                                                      'is not callable on the CPU reference backend in '
@@ -555,6 +566,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::_fused_rms_norm_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-fused-rmsnorm-backward-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_fused_rms_norm_backward_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'reason': 'Fused RMSNorm backward is validated by a CUDA '
+                                                                  'runner that checks direct gradients against an '
+                                                                  'explicit RMSNorm autograd reference.',
+                                                        'runner': 'cuda_fused_rms_norm_backward'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -563,7 +585,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'output_mask) -> (Tensor, Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_property',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -955,7 +977,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'tensor': False,
                                                        'type': 'bool'}],
                                              'base_name': '_thnn_fused_gru_cell_backward',
-                                             'coverage_kind': 'property',
+                                             'coverage_kind': 'backend_pack',
                                              'exclusion': {'category': 'cpu_reference_invalid',
                                                            'reason': 'Fused THNN GRU backward requires workspace from '
                                                                      'a fused cell kernel that is not CPU-reference '
@@ -968,6 +990,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::_thnn_fused_gru_cell_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-thnn-cell-backward-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_thnn_cell_backward_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'reason': 'CUDA fused THNN cell backward helper is validated '
+                                                                  'by a runner that checks direct gradients against '
+                                                                  'explicit GRU/LSTM autograd formulas.',
+                                                        'runner': 'cuda_thnn_cell_backward'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -979,7 +1012,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_property',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1083,7 +1116,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'tensor': False,
                                                        'type': 'bool'}],
                                              'base_name': '_thnn_fused_lstm_cell_backward_impl',
-                                             'coverage_kind': 'property',
+                                             'coverage_kind': 'backend_pack',
                                              'exclusion': {'category': 'cpu_reference_invalid',
                                                            'reason': 'Fused THNN LSTM backward implementation requires '
                                                                      'workspace from a fused cell kernel that is not '
@@ -1096,6 +1129,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::_thnn_fused_lstm_cell_backward_impl',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-thnn-cell-backward-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_thnn_cell_backward_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'reason': 'CUDA fused THNN cell backward helper is validated '
+                                                                  'by a runner that checks direct gradients against '
+                                                                  'explicit GRU/LSTM autograd formulas.',
+                                                        'runner': 'cuda_thnn_cell_backward'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -1105,7 +1149,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'has_bias) -> (Tensor, Tensor, Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_property',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1276,7 +1320,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'tensor': True,
                                                        'type': 'Tensor'}],
                                              'base_name': 'batch_norm_backward_elemt',
-                                             'coverage_kind': 'property',
+                                             'coverage_kind': 'backend_pack',
                                              'exclusion': {'category': 'cpu_reference_invalid',
                                                            'reason': 'Split batch-norm backward elementwise helper has '
                                                                      'no CPU kernel in the supported PyTorch build, so '
@@ -1289,6 +1333,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::batch_norm_backward_elemt',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-batch-norm-internal-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_batch_norm_internal_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'reason': 'CUDA batch-norm internal helper is validated by a '
+                                                                  'runner that checks explicit per-channel '
+                                                                  'backward/gather formulas and running-stat updates.',
+                                                        'runner': 'cuda_batch_norm_internal'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::batch_norm_backward_elemt(Tensor grad_out, Tensor input, '
@@ -1296,7 +1351,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor sum_dy_xmu, Tensor count) -> Tensor',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_property',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1348,7 +1403,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'tensor': False,
                                                        'type': 'bool'}],
                                              'base_name': 'batch_norm_backward_reduce',
-                                             'coverage_kind': 'property',
+                                             'coverage_kind': 'backend_pack',
                                              'exclusion': {'category': 'cpu_reference_invalid',
                                                            'reason': 'Split batch-norm backward reduce helper has no '
                                                                      'CPU kernel in the supported PyTorch build, so '
@@ -1361,6 +1416,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::batch_norm_backward_reduce',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-batch-norm-internal-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_batch_norm_internal_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'reason': 'CUDA batch-norm internal helper is validated by a '
+                                                                  'runner that checks explicit per-channel '
+                                                                  'backward/gather formulas and running-stat updates.',
+                                                        'runner': 'cuda_batch_norm_internal'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -1372,7 +1438,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor, Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_property',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1419,6 +1485,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::cudnn_affine_grid_generator_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                        'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                                  'dispatcher calls against public '
+                                                                  'affine-grid/grid-sample values and gradients.',
+                                                        'runner': 'cuda_cudnn_grid'},
                                              'overload': '',
                                              'returns': [{'alias': None,
                                                           'name': 'grad_theta',
@@ -1428,7 +1505,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'int C, int H, int W) -> Tensor grad_theta',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1499,6 +1576,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::cudnn_batch_norm_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                        'reason': 'cuDNN batch-norm internals are validated by direct '
+                                                                  'CUDA dispatcher calls against public '
+                                                                  'batch_norm/autograd references.',
+                                                        'runner': 'cuda_cudnn_batch_norm'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -1509,7 +1597,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'epsilon, Tensor reserveSpace) -> (Tensor, Tensor, Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -1544,6 +1632,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::cudnn_grid_sampler_backward',
+                                             'oracle': {'backend_gate': 'cuda',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                        'promotion_backend': 'cuda',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                        'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                                  'dispatcher calls against public '
+                                                                  'affine-grid/grid-sample values and gradients.',
+                                                        'runner': 'cuda_cudnn_grid'},
                                              'overload': '',
                                              'returns': [{'alias': None,
                                                           'name': 'grad_self',
@@ -1557,7 +1656,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor grad_output) -> (Tensor grad_self, Tensor grad_grid)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -2139,6 +2238,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::miopen_batch_norm_backward',
+                                             'oracle': {'backend_gate': 'rocm',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-batch-norm-backend-pack',
+                                                        'contract_status': 'candidate',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'rocm_miopen_batch_norm_backend_pack',
+                                                        'promotion_backend': 'rocm',
+                                                        'promotion_evidence': '',
+                                                        'reason': 'MIOpen batch-norm helper has a source-derived '
+                                                                  'candidate runner checking public batch_norm forward '
+                                                                  'values and autograd gradients; promotion requires '
+                                                                  'execution on a ROCm/HIP PyTorch build.',
+                                                        'runner': 'rocm_miopen_batch_norm'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -2292,6 +2403,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::miopen_rnn_backward',
+                                             'oracle': {'backend_gate': 'rocm',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-rnn-backend-pack',
+                                                        'contract_status': 'candidate',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'rocm_miopen_rnn_backend_pack',
+                                                        'promotion_backend': 'rocm',
+                                                        'promotion_evidence': '',
+                                                        'reason': 'MIOpen RNN helper has a source-derived candidate '
+                                                                  'runner checking one-layer LSTM forward values, '
+                                                                  'gradients, reserve tensors, and out identity; '
+                                                                  'promotion requires execution on a ROCm/HIP PyTorch '
+                                                                  'build.',
+                                                        'runner': 'rocm_miopen_rnn'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -2338,13 +2462,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_adaptive_avg_pool2d_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN pooling helper has a source-derived '
+                                                                  'candidate runner that compares forward and backward '
+                                                                  'values to public dense pooling/autograd references.',
+                                                        'runner': 'mkldnn_pooling'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::mkldnn_adaptive_avg_pool2d_backward(Tensor grad_output, '
                                                        'Tensor self) -> Tensor',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -2385,6 +2520,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_linear_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_linear_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                                  'runner that compares forward and backward values to '
+                                                                  'public dense linear/autograd references.',
+                                                        'runner': 'mkldnn_linear'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -2394,7 +2540,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -2429,13 +2575,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_linear_backward_input',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_linear_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                                  'runner that compares forward and backward values to '
+                                                                  'public dense linear/autograd references.',
+                                                        'runner': 'mkldnn_linear'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::mkldnn_linear_backward_input(int[] input_size, Tensor '
                                                        'grad_output, Tensor weight) -> Tensor',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -2476,6 +2633,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_linear_backward_weights',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_linear_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                                  'runner that compares forward and backward values to '
+                                                                  'public dense linear/autograd references.',
+                                                        'runner': 'mkldnn_linear'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -2484,7 +2652,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -2549,6 +2717,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_max_pool2d_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                        'contract_status': 'candidate',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': '',
+                                                        'reason': 'MKLDNN pooling helper has a source-derived '
+                                                                  'candidate runner that compares forward and backward '
+                                                                  'values to public dense pooling/autograd references.',
+                                                        'runner': 'mkldnn_pooling'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::mkldnn_max_pool2d_backward(Tensor grad_output, Tensor '
@@ -2622,6 +2801,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_max_pool3d_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                        'contract_status': 'candidate',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': '',
+                                                        'reason': 'MKLDNN pooling helper has a source-derived '
+                                                                  'candidate runner that compares forward and backward '
+                                                                  'values to public dense pooling/autograd references.',
+                                                        'runner': 'mkldnn_pooling'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::mkldnn_max_pool3d_backward(Tensor grad_output, Tensor '
@@ -2785,6 +2975,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::mkldnn_rnn_layer_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-rnn-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_rnn_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN RNN helper has a source-derived candidate '
+                                                                  'runner that compares one-layer LSTM forward and '
+                                                                  'backward values to public torch.nn.LSTM references.',
+                                                        'runner': 'mkldnn_rnn'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                          {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -2803,7 +3004,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                        'Tensor, Tensor, Tensor, Tensor)',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'},
                                             {'args': [{'alias': None,
@@ -3122,12 +3323,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                              'max_semantic_level': 4,
                                              'min_semantic_level': 4,
                                              'name': 'aten::to_mkldnn_backward',
+                                             'oracle': {'backend_gate': 'cpu_build',
+                                                        'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                        'contract_status': 'accepted',
+                                                        'coverage_kind': 'backend_pack',
+                                                        'oracle_id': 'mkldnn_shape_backend_pack',
+                                                        'promotion_backend': 'cpu_build',
+                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                                  'candidate runner that validates dense logical '
+                                                                  'values, MKLDNN layout, and out identity where '
+                                                                  'PyTorch exposes a usable direct path.',
+                                                        'runner': 'mkldnn_shape'},
                                              'overload': '',
                                              'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                              'schema': 'aten::to_mkldnn_backward(Tensor grad, Tensor input) -> Tensor',
                                              'semantic_level': 4,
                                              'semantic_levels': [4],
-                                             'status': 'pending_backend_pack',
+                                             'status': 'covered_backend_pack',
                                              'surface_kind': 'autograd_backward',
                                              'variant_kind': 'functional'}],
                       'factory': [{'args': [{'alias': None,
@@ -6721,12 +6934,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_cslt_compress',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cusparselt-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cslt_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'reason': 'cuSparseLt direct dispatcher helpers are validated by '
+                                                                'a CUDA runner that checks compressed matmul against '
+                                                                'dense references on a PyTorch build where cuSparseLt '
+                                                                'initializes for Spark GB10.',
+                                                      'runner': 'cuda_cslt'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_cslt_compress(Tensor input) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -6990,6 +7215,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_cudnn_attention_forward',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-attention-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_attention_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'reason': 'cuDNN attention forward is validated by a CUDA runner '
+                                                                'that checks direct dispatcher output against public '
+                                                                'scaled-dot-product attention on a PyTorch build with '
+                                                                'a safe direct invocation path.',
+                                                      'runner': 'cuda_cudnn_attention'},
                                            'overload': '',
                                            'returns': [{'alias': None,
                                                         'name': 'output',
@@ -7031,7 +7268,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'philox_offset, Tensor debug_attn_mask)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -7089,6 +7326,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_cudnn_ctc_loss',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_ctc_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'reason': 'cuDNN CTC internals are validated by direct CUDA '
+                                                                'dispatcher calls against public ctc_loss and '
+                                                                'use-cudnn predicate contracts.',
+                                                      'runner': 'cuda_cudnn_ctc'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -7097,7 +7345,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'deterministic, bool zero_infinity) -> (Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -7155,6 +7403,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_cudnn_ctc_loss.Tensor',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_ctc_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'reason': 'cuDNN CTC internals are validated by direct CUDA '
+                                                                'dispatcher calls against public ctc_loss and '
+                                                                'use-cudnn predicate contracts.',
+                                                      'runner': 'cuda_cudnn_ctc'},
                                            'overload': 'Tensor',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -7163,7 +7422,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'deterministic, bool zero_infinity) -> (Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -7275,6 +7534,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_cudnn_rnn',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                      'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                                'dispatcher calls against public nn.LSTM '
+                                                                'forward/backward references and out identity.',
+                                                      'runner': 'cuda_cudnn_rnn'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -7289,7 +7559,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'Tensor, Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -14372,7 +14642,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'tensor': False,
                                                      'type': 'Optional[str]'}],
                                            'base_name': '_mixed_dtypes_linear',
-                                           'coverage_kind': 'property',
+                                           'coverage_kind': 'backend_pack',
                                            'exclusion': {'category': 'cpu_reference_invalid',
                                                          'reason': 'The raw mixed-dtypes linear dispatcher helper is '
                                                                    'MPS/Meta-only in this PyTorch build and has no CPU '
@@ -14383,13 +14653,25 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_mixed_dtypes_linear',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-mixed-dtypes-linear-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_mixed_dtypes_linear_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'Mixed-dtypes linear has a candidate CUDA runner using '
+                                                                "PyTorch's CUTLASS weight reorder helper and a dense "
+                                                                'dequantized linear reference; Spark GB10 currently '
+                                                                "hits PyTorch's compute-capability guard.",
+                                                      'runner': 'cuda_mixed_dtypes_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_mixed_dtypes_linear(Tensor input, Tensor weight, Tensor '
                                                      'scale, *, Tensor? bias=None, str? activation=None) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_property',
+                                           'status': 'pending_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -14860,6 +15142,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_nnpack_spatial_convolution',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-nnpack-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'nnpack_convolution_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'NNPACK spatial convolution has a source-derived '
+                                                                'candidate runner that compares the direct helper to '
+                                                                'public dense conv2d when NNPACK executes.',
+                                                      'runner': 'nnpack_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_nnpack_spatial_convolution(Tensor input, Tensor weight, '
@@ -14867,7 +15160,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -15066,17 +15359,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'name': 'aten::_philox_key_fold_in',
                                            'oracle': {'backend_gate': 'mps',
                                                       'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                      'contract_status': 'blocked',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
-                                                      'oracle_id': 'philox_mps_rng',
+                                                      'oracle_id': 'mps_philox_rng_backend_pack',
                                                       'promotion_backend': 'mps',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build, but local MPS 2.12.1 probing reports runtime '
-                                                                'unsupported CPU fallback for direct dispatcher calls; '
-                                                                'promotion needs runtime support plus a source-derived '
-                                                                'RNG contract.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                                'candidate runner checking key determinism, output '
+                                                                'identity, finite normal values, and uniform range '
+                                                                'bounds; current PyTorch MPS runtime reports the '
+                                                                'direct path is not currently supported.',
+                                                      'runner': 'mps_philox'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_philox_key_fold_in(Tensor key, int data) -> Tensor',
@@ -15124,17 +15417,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'name': 'aten::_philox_normal',
                                            'oracle': {'backend_gate': 'mps',
                                                       'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                      'contract_status': 'blocked',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
-                                                      'oracle_id': 'philox_mps_rng',
+                                                      'oracle_id': 'mps_philox_rng_backend_pack',
                                                       'promotion_backend': 'mps',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build, but local MPS 2.12.1 probing reports runtime '
-                                                                'unsupported CPU fallback for direct dispatcher calls; '
-                                                                'promotion needs runtime support plus a source-derived '
-                                                                'RNG contract.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                                'candidate runner checking key determinism, output '
+                                                                'identity, finite normal values, and uniform range '
+                                                                'bounds; current PyTorch MPS runtime reports the '
+                                                                'direct path is not currently supported.',
+                                                      'runner': 'mps_philox'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_philox_normal(Tensor self, Tensor key, float mean=0., '
@@ -15183,17 +15476,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'name': 'aten::_philox_uniform',
                                            'oracle': {'backend_gate': 'mps',
                                                       'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                      'contract_status': 'blocked',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
-                                                      'oracle_id': 'philox_mps_rng',
+                                                      'oracle_id': 'mps_philox_rng_backend_pack',
                                                       'promotion_backend': 'mps',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                'build, but local MPS 2.12.1 probing reports runtime '
-                                                                'unsupported CPU fallback for direct dispatcher calls; '
-                                                                'promotion needs runtime support plus a source-derived '
-                                                                'RNG contract.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                                'candidate runner checking key determinism, output '
+                                                                'identity, finite normal values, and uniform range '
+                                                                'bounds; current PyTorch MPS runtime reports the '
+                                                                'direct path is not currently supported.',
+                                                      'runner': 'mps_philox'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_philox_uniform(Tensor self, Tensor key, float low=0., '
@@ -15269,6 +15562,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_propagate_xla_data',
+                                           'oracle': {'backend_gate': 'xla',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#xla-data-propagation-backend-pack',
+                                                      'contract_status': 'blocked',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'xla_data_propagation_bridge_blocked',
+                                                      'promotion_backend': 'xla',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'XLA data propagation is owned by the PyTorch/XLA '
+                                                                'bridge and requires a real XLA runtime plus '
+                                                                'source-derived bridge contract; CPU/CUDA/MPS behavior '
+                                                                'cannot validate this surface.',
+                                                      'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [],
                                            'schema': 'aten::_propagate_xla_data(Tensor input, Tensor output) -> ()',
@@ -15600,6 +15905,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_dot_product_cudnn_attention',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-attention-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_attention_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'reason': 'cuDNN attention forward is validated by a CUDA runner '
+                                                                'that checks direct dispatcher output against public '
+                                                                'scaled-dot-product attention on a PyTorch build with '
+                                                                'a safe direct invocation path.',
+                                                      'runner': 'cuda_cudnn_attention'},
                                            'overload': '',
                                            'returns': [{'alias': None,
                                                         'name': 'output',
@@ -15640,7 +15957,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'philox_offset, Tensor debug_attn_mask)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -16230,7 +16547,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'tensor': False,
                                                      'type': 'bool'}],
                                            'base_name': '_scaled_grouped_mm',
-                                           'coverage_kind': 'property',
+                                           'coverage_kind': 'backend_pack',
                                            'exclusion': {'category': 'cpu_reference_invalid',
                                                          'reason': 'The raw scaled grouped-matmul helper has no CPU '
                                                                    'reference kernel in this PyTorch build; grouped '
@@ -16241,6 +16558,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_grouped_mm',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-scaled-grouped-matmul-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_scaled_grouped_mm_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'Scaled grouped matmul has a candidate CUDA runner '
+                                                                'using FP8 inputs, tensorwise scales, and dense '
+                                                                'grouped matmul references; Spark GB10 currently hits '
+                                                                "PyTorch's compute-capability guard.",
+                                                      'runner': 'cuda_scaled_grouped_mm'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_scaled_grouped_mm(Tensor self, Tensor mat2, Tensor '
@@ -16249,7 +16578,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'use_fast_accum=False) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_property',
+                                           'status': 'pending_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -16331,7 +16660,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'tensor': False,
                                                      'type': 'bool'}],
                                            'base_name': '_scaled_grouped_mm_v2',
-                                           'coverage_kind': 'property',
+                                           'coverage_kind': 'backend_pack',
                                            'exclusion': {'category': 'cpu_reference_invalid',
                                                          'reason': 'The v2 scaled grouped-matmul helper has no CPU '
                                                                    'reference kernel in this PyTorch build; grouped '
@@ -16342,6 +16671,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_scaled_grouped_mm_v2',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-scaled-grouped-matmul-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_scaled_grouped_mm_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'Scaled grouped matmul has a candidate CUDA runner '
+                                                                'using FP8 inputs, tensorwise scales, and dense '
+                                                                'grouped matmul references; Spark GB10 currently hits '
+                                                                "PyTorch's compute-capability guard.",
+                                                      'runner': 'cuda_scaled_grouped_mm'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_scaled_grouped_mm_v2(Tensor self, Tensor mat2, Tensor[] '
@@ -16351,7 +16692,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'bool use_fast_accum=False) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_property',
+                                           'status': 'pending_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -16961,6 +17302,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_triton_multi_head_attention',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-triton-attention-backend-pack',
+                                                      'contract_status': 'blocked',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_triton_attention_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'PyTorch 2.11.0+cu128 and 2.12.1+cu130 report this '
+                                                                'Triton dispatcher surface should be overridden in '
+                                                                'Python before direct use.',
+                                                      'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_triton_multi_head_attention(Tensor query, Tensor key, '
@@ -17009,6 +17361,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_triton_scaled_dot_attention',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-triton-attention-backend-pack',
+                                                      'contract_status': 'blocked',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_triton_attention_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'PyTorch 2.11.0+cu128 and 2.12.1+cu130 report this '
+                                                                'Triton dispatcher surface should be overridden in '
+                                                                'Python before direct use.',
+                                                      'runner': 'backend_property'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_triton_scaled_dot_attention(Tensor q, Tensor k, Tensor v, '
@@ -18043,13 +18406,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_use_cudnn_ctc_loss',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_ctc_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'reason': 'cuDNN CTC internals are validated by direct CUDA '
+                                                                'dispatcher calls against public ctc_loss and '
+                                                                'use-cudnn predicate contracts.',
+                                                      'runner': 'cuda_cudnn_ctc'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'bool'}],
                                            'schema': 'aten::_use_cudnn_ctc_loss(Tensor log_probs, Tensor targets, '
                                                      'int[] input_lengths, int[] target_lengths, int blank) -> bool',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -18095,6 +18469,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_use_cudnn_ctc_loss.Tensor',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_ctc_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'reason': 'cuDNN CTC internals are validated by direct CUDA '
+                                                                'dispatcher calls against public ctc_loss and '
+                                                                'use-cudnn predicate contracts.',
+                                                      'runner': 'cuda_cudnn_ctc'},
                                            'overload': 'Tensor',
                                            'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'bool'}],
                                            'schema': 'aten::_use_cudnn_ctc_loss.Tensor(Tensor log_probs, Tensor '
@@ -18102,7 +18487,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      '-> bool',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -18148,6 +18533,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_use_miopen_ctc_loss',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-ctc-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_ctc_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen CTC helper has a source-derived candidate '
+                                                                'runner checking predicate return type, public CTC '
+                                                                'loss values, and workspace shape; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_ctc'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'bool'}],
                                            'schema': 'aten::_use_miopen_ctc_loss(Tensor log_probs, Tensor targets, '
@@ -18200,6 +18597,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::_use_miopen_ctc_loss.Tensor',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-ctc-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_ctc_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen CTC helper has a source-derived candidate '
+                                                                'runner checking predicate return type, public CTC '
+                                                                'loss values, and workspace shape; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_ctc'},
                                            'overload': 'Tensor',
                                            'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'bool'}],
                                            'schema': 'aten::_use_miopen_ctc_loss.Tensor(Tensor log_probs, Tensor '
@@ -18471,16 +18880,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_wrapped_linear_prepack',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-wrapped-quantized-linear-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'wrapped_quantized_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Wrapped quantized linear internals depend on FBGEMM '
-                                                                'packed-weight state and need an FBGEMM backend-pack '
-                                                                'oracle.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Wrapped quantized linear helper has a source-derived '
+                                                                'candidate runner that compares the AOTI wrapper path '
+                                                                'to public quantized linear with the same quantization '
+                                                                'parameters.',
+                                                      'runner': 'fbgemm_wrapped_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_wrapped_linear_prepack(Tensor weight, Tensor '
@@ -18546,16 +18956,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::_wrapped_quantized_linear_prepacked',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-wrapped-quantized-linear-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'wrapped_quantized_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Wrapped quantized linear internals depend on FBGEMM '
-                                                                'packed-weight state and need an FBGEMM backend-pack '
-                                                                'oracle.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Wrapped quantized linear helper has a source-derived '
+                                                                'candidate runner that compares the AOTI wrapper path '
+                                                                'to public quantized linear with the same quantization '
+                                                                'parameters.',
+                                                      'runner': 'fbgemm_wrapped_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::_wrapped_quantized_linear_prepacked(Tensor input, Tensor '
@@ -20107,7 +20518,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'tensor': False,
                                                      'type': 'int'}],
                                            'base_name': 'batch_norm_gather_stats',
-                                           'coverage_kind': 'property',
+                                           'coverage_kind': 'backend_pack',
                                            'exclusion': {'category': 'cpu_reference_invalid',
                                                          'reason': 'Split batch-norm gather-stats helper has no CPU '
                                                                    'kernel in the supported PyTorch build, so TorchCTS '
@@ -20119,6 +20530,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::batch_norm_gather_stats',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-batch-norm-internal-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_batch_norm_internal_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                      'reason': 'CUDA batch-norm internal helper is validated by a '
+                                                                'runner that checks explicit per-channel '
+                                                                'backward/gather formulas and running-stat updates.',
+                                                      'runner': 'cuda_batch_norm_internal'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -20127,7 +20549,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'momentum, float eps, int count) -> (Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_property',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -20179,7 +20601,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'tensor': True,
                                                      'type': 'Tensor'}],
                                            'base_name': 'batch_norm_gather_stats_with_counts',
-                                           'coverage_kind': 'property',
+                                           'coverage_kind': 'backend_pack',
                                            'exclusion': {'category': 'cpu_reference_invalid',
                                                          'reason': 'Split batch-norm gather-stats-with-counts helper '
                                                                    'has no CPU kernel in the supported PyTorch build, '
@@ -20191,6 +20613,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::batch_norm_gather_stats_with_counts',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-batch-norm-internal-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_batch_norm_internal_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                      'reason': 'CUDA batch-norm internal helper is validated by a '
+                                                                'runner that checks explicit per-channel '
+                                                                'backward/gather formulas and running-stat updates.',
+                                                      'runner': 'cuda_batch_norm_internal'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -20199,7 +20632,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'float momentum, float eps, Tensor counts) -> (Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_property',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22422,6 +22855,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_affine_grid_generator',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                      'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                                'dispatcher calls against public '
+                                                                'affine-grid/grid-sample values and gradients.',
+                                                      'runner': 'cuda_cudnn_grid'},
                                            'overload': '',
                                            'returns': [{'alias': None,
                                                         'name': 'grid',
@@ -22431,7 +22875,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'int H, int W) -> Tensor grid',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22495,6 +22939,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_batch_norm',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                      'reason': 'cuDNN batch-norm internals are validated by direct '
+                                                                'CUDA dispatcher calls against public '
+                                                                'batch_norm/autograd references.',
+                                                      'runner': 'cuda_cudnn_batch_norm'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -22506,7 +22961,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'Tensor, Tensor, Tensor)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22576,6 +23031,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_convolution',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'reason': 'cuDNN convolution internals are validated by direct '
+                                                                'CUDA dispatcher calls against public convolution '
+                                                                'formulas, including out identity.',
+                                                      'runner': 'cuda_cudnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::cudnn_convolution(Tensor self, Tensor weight, SymInt[] '
@@ -22583,7 +23049,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'benchmark, bool deterministic, bool allow_tf32) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22653,6 +23119,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_convolution_add_relu',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'reason': 'cuDNN convolution internals are validated by direct '
+                                                                'CUDA dispatcher calls against public convolution '
+                                                                'formulas, including out identity.',
+                                                      'runner': 'cuda_cudnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::cudnn_convolution_add_relu(Tensor self, Tensor weight, '
@@ -22660,7 +23137,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'padding, SymInt[] dilation, SymInt groups) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22718,6 +23195,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_convolution_relu',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'reason': 'cuDNN convolution internals are validated by direct '
+                                                                'CUDA dispatcher calls against public convolution '
+                                                                'formulas, including out identity.',
+                                                      'runner': 'cuda_cudnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::cudnn_convolution_relu(Tensor self, Tensor weight, Tensor? '
@@ -22725,7 +23213,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'SymInt groups) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22753,6 +23241,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_grid_sampler',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                      'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                                'dispatcher calls against public '
+                                                                'affine-grid/grid-sample values and gradients.',
+                                                      'runner': 'cuda_cudnn_grid'},
                                            'overload': '',
                                            'returns': [{'alias': None,
                                                         'name': 'output',
@@ -22762,7 +23261,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'output',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -22784,12 +23283,23 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::cudnn_is_acceptable',
+                                           'oracle': {'backend_gate': 'cuda',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-acceptability-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'cuda_cudnn_is_acceptable_backend_pack',
+                                                      'promotion_backend': 'cuda',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                                      'reason': 'cuDNN acceptability predicate is validated by '
+                                                                'comparing direct dispatcher output to '
+                                                                'torch.backends.cudnn.is_acceptable.',
+                                                      'runner': 'cuda_cudnn_is_acceptable'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'bool'}],
                                            'schema': 'aten::cudnn_is_acceptable(Tensor self) -> bool',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -24405,13 +24915,25 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_linear_fp16_weight',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_linear_fp16_weight(Tensor input, Tensor '
                                                      'packed_weight, Tensor bias) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -24445,13 +24967,25 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_linear_fp16_weight_fp32_activation',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_linear_fp16_weight_fp32_activation(Tensor input, '
                                                      'Tensor packed_weight, Tensor? bias) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -24509,6 +25043,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_linear_int8_weight',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_linear_int8_weight(Tensor input, Tensor weight, '
@@ -24574,6 +25120,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_linear_int8_weight_fp32_activation',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_linear_int8_weight_fp32_activation(Tensor input, '
@@ -24603,6 +25161,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_linear_quantize_weight',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -24612,7 +25182,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'Tensor, float, int)',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -24634,12 +25204,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_pack_gemm_matrix_fp16',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_pack_gemm_matrix_fp16(Tensor input) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -24661,6 +25243,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_pack_quantized_matrix',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_pack_quantized_matrix(Tensor input) -> Tensor',
@@ -24700,6 +25294,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::fbgemm_pack_quantized_matrix.KN',
+                                           'oracle': {'backend_gate': 'fbgemm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'fbgemm_linear_backend_pack',
+                                                      'promotion_backend': 'fbgemm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                                'candidate runner that uses PyTorch-created packed '
+                                                                'weights and compares values to dense/dequantized '
+                                                                'references.',
+                                                      'runner': 'fbgemm_linear'},
                                            'overload': 'KN',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::fbgemm_pack_quantized_matrix.KN(Tensor input, int K, int '
@@ -34192,6 +34798,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_batch_norm',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-batch-norm-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_batch_norm_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen batch-norm helper has a source-derived '
+                                                                'candidate runner checking public batch_norm forward '
+                                                                'values and autograd gradients; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_batch_norm'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -34272,6 +34890,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_convolution',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen convolution helper has a source-derived '
+                                                                'candidate runner mirroring the cuDNN convolution '
+                                                                'value/out-identity contract; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::miopen_convolution(Tensor self, Tensor weight, Tensor? '
@@ -34349,6 +34979,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_convolution_add_relu',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen convolution helper has a source-derived '
+                                                                'candidate runner mirroring the cuDNN convolution '
+                                                                'value/out-identity contract; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::miopen_convolution_add_relu(Tensor self, Tensor weight, '
@@ -34414,6 +35056,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_convolution_relu',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen convolution helper has a source-derived '
+                                                                'candidate runner mirroring the cuDNN convolution '
+                                                                'value/out-identity contract; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::miopen_convolution_relu(Tensor self, Tensor weight, '
@@ -34479,6 +35133,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_ctc_loss',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-ctc-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_ctc_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen CTC helper has a source-derived candidate '
+                                                                'runner checking predicate return type, public CTC '
+                                                                'loss values, and workspace shape; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_ctc'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -34545,6 +35211,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_ctc_loss.Tensor',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-ctc-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_ctc_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen CTC helper has a source-derived candidate '
+                                                                'runner checking predicate return type, public CTC '
+                                                                'loss values, and workspace shape; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_ctc'},
                                            'overload': 'Tensor',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -34623,6 +35301,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_depthwise_convolution',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen convolution helper has a source-derived '
+                                                                'candidate runner mirroring the cuDNN convolution '
+                                                                'value/out-identity contract; promotion requires '
+                                                                'execution on a ROCm/HIP PyTorch build.',
+                                                      'runner': 'rocm_miopen_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::miopen_depthwise_convolution(Tensor self, Tensor weight, '
@@ -34731,6 +35421,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::miopen_rnn',
+                                           'oracle': {'backend_gate': 'rocm',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-rnn-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'rocm_miopen_rnn_backend_pack',
+                                                      'promotion_backend': 'rocm',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MIOpen RNN helper has a source-derived candidate '
+                                                                'runner checking one-layer LSTM forward values, '
+                                                                'gradients, reserve tensors, and out identity; '
+                                                                'promotion requires execution on a ROCm/HIP PyTorch '
+                                                                'build.',
+                                                      'runner': 'rocm_miopen_rnn'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -34772,13 +35475,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_adaptive_avg_pool2d',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                                'runner that compares forward and backward values to '
+                                                                'public dense pooling/autograd references.',
+                                                      'runner': 'mkldnn_pooling'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_adaptive_avg_pool2d(Tensor self, int[2] '
                                                      'output_size) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -34836,6 +35550,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_convolution',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN convolution/reorder helper has a '
+                                                                'source-derived candidate runner that checks direct '
+                                                                'convolution values against public dense conv '
+                                                                'references.',
+                                                      'runner': 'mkldnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_convolution(Tensor self, Tensor weight, Tensor? '
@@ -34843,7 +35569,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'SymInt groups) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -34877,13 +35603,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_linear',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_linear_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                                'runner that compares forward and backward values to '
+                                                                'public dense linear/autograd references.',
+                                                      'runner': 'mkldnn_linear'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_linear(Tensor self, Tensor weight, Tensor? '
                                                      'bias=None) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -34935,6 +35672,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_max_pool2d',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                                'runner that compares forward and backward values to '
+                                                                'public dense pooling/autograd references.',
+                                                      'runner': 'mkldnn_pooling'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_max_pool2d(Tensor self, int[2] kernel_size, int[2] '
@@ -34942,7 +35690,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'ceil_mode=False) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -34994,6 +35742,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_max_pool3d',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                                'runner that compares forward and backward values to '
+                                                                'public dense pooling/autograd references.',
+                                                      'runner': 'mkldnn_pooling'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_max_pool3d(Tensor self, int[3] kernel_size, int[3] '
@@ -35001,7 +35760,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'ceil_mode=False) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -35053,6 +35812,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_reorder_conv2d_weight',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MKLDNN convolution/reorder helper has a '
+                                                                'source-derived candidate runner that checks direct '
+                                                                'convolution values against public dense conv '
+                                                                'references.',
+                                                      'runner': 'mkldnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_reorder_conv2d_weight(Tensor self, SymInt[2] '
@@ -35112,6 +35883,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_reorder_conv3d_weight',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MKLDNN convolution/reorder helper has a '
+                                                                'source-derived candidate runner that checks direct '
+                                                                'convolution values against public dense conv '
+                                                                'references.',
+                                                      'runner': 'mkldnn_convolution'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::mkldnn_reorder_conv3d_weight(Tensor self, SymInt[3] '
@@ -35232,6 +36015,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::mkldnn_rnn_layer',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-rnn-backend-pack',
+                                                      'contract_status': 'candidate',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_rnn_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': '',
+                                                      'reason': 'MKLDNN RNN helper has a source-derived candidate '
+                                                                'runner that compares one-layer LSTM forward and '
+                                                                'backward values to public torch.nn.LSTM references.',
+                                                      'runner': 'mkldnn_rnn'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -39133,15 +39927,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_gru_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-static-quantized-rnn-cell-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Static quantized cell schemas require legacy '
-                                                                'tensor-packed FBGEMM invariants.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Static quantized RNN cell has a source-derived '
+                                                                'candidate runner that builds legacy FBGEMM '
+                                                                'tensor-packed weights with PyTorch helpers and checks '
+                                                                'GRU/LSTM/RNN cell equations.',
+                                                      'runner': 'fbgemm_quantized_cell'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::quantized_gru_cell(Tensor input, Tensor hx, Tensor w_ih, '
@@ -39458,15 +40254,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_lstm_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-static-quantized-rnn-cell-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Static quantized cell schemas require legacy '
-                                                                'tensor-packed FBGEMM invariants.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Static quantized RNN cell has a source-derived '
+                                                                'candidate runner that builds legacy FBGEMM '
+                                                                'tensor-packed weights with PyTorch helpers and checks '
+                                                                'GRU/LSTM/RNN cell equations.',
+                                                      'runner': 'fbgemm_quantized_cell'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                        {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -39578,15 +40376,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_rnn_relu_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-static-quantized-rnn-cell-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Static quantized cell schemas require legacy '
-                                                                'tensor-packed FBGEMM invariants.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Static quantized RNN cell has a source-derived '
+                                                                'candidate runner that builds legacy FBGEMM '
+                                                                'tensor-packed weights with PyTorch helpers and checks '
+                                                                'GRU/LSTM/RNN cell equations.',
+                                                      'runner': 'fbgemm_quantized_cell'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::quantized_rnn_relu_cell(Tensor input, Tensor hx, Tensor '
@@ -39697,15 +40497,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'min_semantic_level': 2,
                                            'name': 'aten::quantized_rnn_tanh_cell',
                                            'oracle': {'backend_gate': 'fbgemm',
-                                                      'contract_ref': '',
-                                                      'contract_status': 'blocked',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-static-quantized-rnn-cell-backend-pack',
+                                                      'contract_status': 'candidate',
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'quantized_static_rnn_cell',
                                                       'promotion_backend': 'fbgemm',
                                                       'promotion_evidence': '',
-                                                      'reason': 'Static quantized cell schemas require legacy '
-                                                                'tensor-packed FBGEMM invariants.',
-                                                      'runner': 'backend_property'},
+                                                      'reason': 'Static quantized RNN cell has a source-derived '
+                                                                'candidate runner that builds legacy FBGEMM '
+                                                                'tensor-packed weights with PyTorch helpers and checks '
+                                                                'GRU/LSTM/RNN cell equations.',
+                                                      'runner': 'fbgemm_quantized_cell'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::quantized_rnn_tanh_cell(Tensor input, Tensor hx, Tensor '
@@ -48131,12 +48933,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                            'max_semantic_level': 2,
                                            'min_semantic_level': 2,
                                            'name': 'aten::to_mkldnn',
+                                           'oracle': {'backend_gate': 'cpu_build',
+                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                      'contract_status': 'accepted',
+                                                      'coverage_kind': 'backend_pack',
+                                                      'oracle_id': 'mkldnn_shape_backend_pack',
+                                                      'promotion_backend': 'cpu_build',
+                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                                'candidate runner that validates dense logical values, '
+                                                                'MKLDNN layout, and out identity where PyTorch exposes '
+                                                                'a usable direct path.',
+                                                      'runner': 'mkldnn_shape'},
                                            'overload': '',
                                            'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                            'schema': 'aten::to_mkldnn(Tensor self, ScalarType? dtype=None) -> Tensor',
                                            'semantic_level': 2,
                                            'semantic_levels': [2],
-                                           'status': 'pending_backend_pack',
+                                           'status': 'covered_backend_pack',
                                            'surface_kind': 'functional_data',
                                            'variant_kind': 'functional'},
                                           {'args': [{'alias': None,
@@ -50337,6 +51151,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'max_semantic_level': 5,
                                           'min_semantic_level': 5,
                                           'name': 'aten::_cslt_sparse_mm',
+                                          'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cusparselt-backend-pack',
+                                                     'contract_status': 'accepted',
+                                                     'coverage_kind': 'backend_pack',
+                                                     'oracle_id': 'cuda_cslt_backend_pack',
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                     'reason': 'cuSparseLt direct dispatcher helpers are validated by '
+                                                               'a CUDA runner that checks compressed matmul against '
+                                                               'dense references on a PyTorch build where cuSparseLt '
+                                                               'initializes for Spark GB10.',
+                                                     'runner': 'cuda_cslt'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                           'schema': 'aten::_cslt_sparse_mm(Tensor compressed_A, Tensor dense_B, '
@@ -50345,7 +51171,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'split_k=1, int split_k_mode=-1) -> Tensor',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -50397,6 +51223,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'max_semantic_level': 5,
                                           'min_semantic_level': 5,
                                           'name': 'aten::_cslt_sparse_mm_search',
+                                          'oracle': {'backend_gate': 'cuda',
+                                                     'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cusparselt-backend-pack',
+                                                     'contract_status': 'accepted',
+                                                     'coverage_kind': 'backend_pack',
+                                                     'oracle_id': 'cuda_cslt_backend_pack',
+                                                     'promotion_backend': 'cuda',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                     'reason': 'cuSparseLt direct dispatcher helpers are validated by '
+                                                               'a CUDA runner that checks compressed matmul against '
+                                                               'dense references on a PyTorch build where cuSparseLt '
+                                                               'initializes for Spark GB10.',
+                                                     'runner': 'cuda_cslt'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': False, 'type': 'int'}],
                                           'schema': 'aten::_cslt_sparse_mm_search(Tensor compressed_A, Tensor dense_B, '
@@ -50404,7 +51242,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'out_dtype=None, bool transpose_result=False) -> int',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51136,16 +51974,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_addmm',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
-                                                     'contract_status': 'candidate',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
-                                                               'internals are candidate-covered by a CUDA '
-                                                               'direct-dispatch runner using PyTorch-created 2:4 '
-                                                               'compressed values and dense references; promotion '
-                                                               'requires matching CUDA evidence.',
+                                                               'internals are covered by a CUDA direct-dispatch runner '
+                                                               'using PyTorch-created 2:4 compressed values and dense '
+                                                               'references. Spark GB10 PyTorch 2.11.0+cu128 promotion '
+                                                               "evidence used an LD_PRELOAD shim to bypass PyTorch's "
+                                                               'invalid GB10 capability guard by reporting SM 8.9.',
                                                      'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -51154,7 +51993,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'ScalarType? out_dtype=None) -> Tensor',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51184,15 +52023,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_apply',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
-                                                     'contract_status': 'blocked',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
-                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
-                                                               'reviewed thread-mask contract before TorchCTS can '
-                                                               'build a meaningful direct dispatcher runner.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz',
+                                                     'reason': 'Semi-structured sparse tile/apply internals have a '
+                                                               'source-derived candidate runner that checks tile/apply '
+                                                               'packed equivalence, dense mask application, and '
+                                                               'resulting 2:4 sparse matmul behavior. Spark GB10 '
+                                                               'promotion evidence uses the same SM 8.9 guard-bypass '
+                                                               'caveat as the other semi-structured sparse promotions.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                       {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -51200,7 +52042,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'thread_masks) -> (Tensor, Tensor)',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51230,15 +52072,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_apply_dense',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
-                                                     'contract_status': 'blocked',
+                                                     'contract_status': 'candidate',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
                                                      'promotion_backend': 'cuda',
                                                      'promotion_evidence': '',
-                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
-                                                               'reviewed thread-mask contract before TorchCTS can '
-                                                               'build a meaningful direct dispatcher runner.',
-                                                     'runner': 'backend_property'},
+                                                     'reason': 'Semi-structured sparse tile/apply internals have a '
+                                                               'source-derived candidate runner that checks tile/apply '
+                                                               'packed equivalence, dense mask application, and '
+                                                               'resulting 2:4 sparse matmul behavior. Spark GB10 '
+                                                               'promotion evidence uses the same SM 8.9 guard-bypass '
+                                                               'caveat as the other semi-structured sparse promotions.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                           'schema': 'aten::_sparse_semi_structured_apply_dense(Tensor input, Tensor '
@@ -51299,16 +52144,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_linear',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
-                                                     'contract_status': 'candidate',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
-                                                               'internals are candidate-covered by a CUDA '
-                                                               'direct-dispatch runner using PyTorch-created 2:4 '
-                                                               'compressed values and dense references; promotion '
-                                                               'requires matching CUDA evidence.',
+                                                               'internals are covered by a CUDA direct-dispatch runner '
+                                                               'using PyTorch-created 2:4 compressed values and dense '
+                                                               'references. Spark GB10 PyTorch 2.11.0+cu128 promotion '
+                                                               "evidence used an LD_PRELOAD shim to bypass PyTorch's "
+                                                               'invalid GB10 capability guard by reporting SM 8.9.',
                                                      'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -51317,7 +52163,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'ScalarType? out_dtype=None) -> Tensor',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51359,16 +52205,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_mm',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
-                                                     'contract_status': 'candidate',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
-                                                               'internals are candidate-covered by a CUDA '
-                                                               'direct-dispatch runner using PyTorch-created 2:4 '
-                                                               'compressed values and dense references; promotion '
-                                                               'requires matching CUDA evidence.',
+                                                               'internals are covered by a CUDA direct-dispatch runner '
+                                                               'using PyTorch-created 2:4 compressed values and dense '
+                                                               'references. Spark GB10 PyTorch 2.11.0+cu128 promotion '
+                                                               "evidence used an LD_PRELOAD shim to bypass PyTorch's "
+                                                               'invalid GB10 capability guard by reporting SM 8.9.',
                                                      'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
@@ -51376,7 +52223,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'Tensor mat2, *, ScalarType? out_dtype=None) -> Tensor',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51412,15 +52259,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_sparse_semi_structured_tile',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-thread-mask-helpers',
-                                                     'contract_status': 'blocked',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
-                                                     'reason': 'Semi-structured sparse tile/apply internals require a '
-                                                               'reviewed thread-mask contract before TorchCTS can '
-                                                               'build a meaningful direct dispatcher runner.',
-                                                     'runner': 'backend_property'},
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz',
+                                                     'reason': 'Semi-structured sparse tile/apply internals have a '
+                                                               'source-derived candidate runner that checks tile/apply '
+                                                               'packed equivalence, dense mask application, and '
+                                                               'resulting 2:4 sparse matmul behavior. Spark GB10 '
+                                                               'promotion evidence uses the same SM 8.9 guard-bypass '
+                                                               'caveat as the other semi-structured sparse promotions.',
+                                                     'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                       {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -51432,7 +52282,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'Tensor, Tensor)',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -51455,16 +52305,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'name': 'aten::_to_sparse_semi_structured',
                                           'oracle': {'backend_gate': 'cuda',
                                                      'contract_ref': 'docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack',
-                                                     'contract_status': 'candidate',
+                                                     'contract_status': 'accepted',
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': '',
+                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
-                                                               'internals are candidate-covered by a CUDA '
-                                                               'direct-dispatch runner using PyTorch-created 2:4 '
-                                                               'compressed values and dense references; promotion '
-                                                               'requires matching CUDA evidence.',
+                                                               'internals are covered by a CUDA direct-dispatch runner '
+                                                               'using PyTorch-created 2:4 compressed values and dense '
+                                                               'references. Spark GB10 PyTorch 2.11.0+cu128 promotion '
+                                                               "evidence used an LD_PRELOAD shim to bypass PyTorch's "
+                                                               'invalid GB10 capability guard by reporting SM 8.9.',
                                                      'runner': 'cuda_semi_structured_sparse'},
                                           'overload': '',
                                           'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -51473,7 +52324,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'Tensor)',
                                           'semantic_level': 5,
                                           'semantic_levels': [5],
-                                          'status': 'pending_backend_pack',
+                                          'status': 'covered_backend_pack',
                                           'surface_kind': 'layout_storage',
                                           'variant_kind': 'functional'},
                                          {'args': [{'alias': None,
@@ -52731,7 +53582,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                           'coverage_kind': 'backend_pack',
                                                           'oracle_id': 'fused_dropout_backend_pack',
                                                           'promotion_backend': 'cuda',
-                                                          'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                                           'reason': 'CUDA fused-dropout internals are validated with '
                                                                     'direct dispatcher calls for mask/output '
                                                                     'contracts, out identity, and memory-efficient '
@@ -57179,6 +58030,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'max_semantic_level': 3,
                                                'min_semantic_level': 3,
                                                'name': 'aten::_mkldnn_transpose_',
+                                               'oracle': {'backend_gate': 'cpu_build',
+                                                          'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                          'contract_status': 'candidate',
+                                                          'coverage_kind': 'backend_pack',
+                                                          'oracle_id': 'mkldnn_shape_backend_pack',
+                                                          'promotion_backend': 'cpu_build',
+                                                          'promotion_evidence': '',
+                                                          'reason': 'MKLDNN shape/conversion helper has a '
+                                                                    'source-derived candidate runner that validates '
+                                                                    'dense logical values, MKLDNN layout, and out '
+                                                                    'identity where PyTorch exposes a usable direct '
+                                                                    'path.',
+                                                          'runner': 'mkldnn_shape'},
                                                'overload': '',
                                                'returns': [{'alias': {'is_write': True},
                                                             'name': '',
@@ -57341,17 +58205,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'name': 'aten::_philox_normal_',
                                                'oracle': {'backend_gate': 'mps',
                                                           'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                          'contract_status': 'blocked',
+                                                          'contract_status': 'candidate',
                                                           'coverage_kind': 'backend_pack',
-                                                          'oracle_id': 'philox_mps_rng',
+                                                          'oracle_id': 'mps_philox_rng_backend_pack',
                                                           'promotion_backend': 'mps',
                                                           'promotion_evidence': '',
-                                                          'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                    'build, but local MPS 2.12.1 probing reports '
-                                                                    'runtime unsupported CPU fallback for direct '
-                                                                    'dispatcher calls; promotion needs runtime support '
-                                                                    'plus a source-derived RNG contract.',
-                                                          'runner': 'backend_property'},
+                                                          'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                                    'candidate runner checking key determinism, output '
+                                                                    'identity, finite normal values, and uniform range '
+                                                                    'bounds; current PyTorch MPS runtime reports the '
+                                                                    'direct path is not currently supported.',
+                                                          'runner': 'mps_philox'},
                                                'overload': '',
                                                'returns': [{'alias': {'is_write': True},
                                                             'name': '',
@@ -57405,17 +58269,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                'name': 'aten::_philox_uniform_',
                                                'oracle': {'backend_gate': 'mps',
                                                           'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                          'contract_status': 'blocked',
+                                                          'contract_status': 'candidate',
                                                           'coverage_kind': 'backend_pack',
-                                                          'oracle_id': 'philox_mps_rng',
+                                                          'oracle_id': 'mps_philox_rng_backend_pack',
                                                           'promotion_backend': 'mps',
                                                           'promotion_evidence': '',
-                                                          'reason': 'Philox helpers are MPS/Meta-only in this PyTorch '
-                                                                    'build, but local MPS 2.12.1 probing reports '
-                                                                    'runtime unsupported CPU fallback for direct '
-                                                                    'dispatcher calls; promotion needs runtime support '
-                                                                    'plus a source-derived RNG contract.',
-                                                          'runner': 'backend_property'},
+                                                          'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                                    'candidate runner checking key determinism, output '
+                                                                    'identity, finite normal values, and uniform range '
+                                                                    'bounds; current PyTorch MPS runtime reports the '
+                                                                    'direct path is not currently supported.',
+                                                          'runner': 'mps_philox'},
                                                'overload': '',
                                                'returns': [{'alias': {'is_write': True},
                                                             'name': '',
@@ -75221,6 +76085,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_attention_backward',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-attention-backend-pack',
+                                                  'contract_status': 'blocked',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_attention_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'cuDNN attention backward direct dispatcher probing '
+                                                            'remains blocked: PyTorch 2.12.1+cu130 on Spark GB10 '
+                                                            'exposes safe forward calls, but the backward overloads '
+                                                            'still fail with binding shape errors and internal assert '
+                                                            'failures.',
+                                                  'runner': 'backend_property'},
                                        'overload': '',
                                        'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                    {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -75302,6 +76179,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_ctc_loss.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_ctc_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                  'reason': 'cuDNN CTC internals are validated by direct CUDA '
+                                                            'dispatcher calls against public ctc_loss and use-cudnn '
+                                                            'predicate contracts.',
+                                                  'runner': 'cuda_cudnn_ctc'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -75317,7 +76205,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '(Tensor(a!), Tensor(b!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -75356,6 +76244,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_init_dropout_state.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-dropout-state-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_dropout_state_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                                  'reason': 'cuDNN dropout-state internals are validated by direct '
+                                                            'CUDA dispatcher calls for state allocation device, dtype, '
+                                                            'non-empty state, and out identity.',
+                                                  'runner': 'cuda_cudnn_dropout_state'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -75365,7 +76264,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'dropout_seed, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -75506,6 +76405,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_rnn.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                            'dispatcher calls against public nn.LSTM forward/backward '
+                                                            'references and out identity.',
+                                                  'runner': 'cuda_cudnn_rnn'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -75536,7 +76446,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '(Tensor(a!), Tensor(b!), Tensor(c!), Tensor(d!), Tensor(e!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -75707,6 +76617,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_rnn_backward.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                            'dispatcher calls against public nn.LSTM forward/backward '
+                                                            'references and out identity.',
+                                                  'runner': 'cuda_cudnn_rnn'},
                                        'overload': 'out',
                                        'returns': [],
                                        'schema': 'aten::_cudnn_rnn_backward.out(Tensor input, Tensor[] weight, int '
@@ -75719,7 +76640,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(d!)[] out3) -> ()',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -75794,6 +76715,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_cudnn_rnn_flatten_weight.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                            'dispatcher calls against public nn.LSTM forward/backward '
+                                                            'references and out identity.',
+                                                  'runner': 'cuda_cudnn_rnn'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -75805,7 +76737,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'bidirectional, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -77157,6 +78089,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_flash_attention_forward_no_dropout_inplace',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-flash-attention-no-dropout-inplace-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_flash_attention_no_dropout_inplace_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'reason': 'Flash-attention no-dropout inplace is validated by a CUDA '
+                                                            'runner that checks the mutated output and logsumexp '
+                                                            'against public scaled_dot_product_attention formulas.',
+                                                  'runner': 'cuda_flash_attention_no_dropout_inplace'},
                                        'overload': '',
                                        'returns': [{'alias': None,
                                                     'name': 'softmax_logsumexp',
@@ -77171,7 +78114,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'int? num_splits=None) -> Tensor softmax_logsumexp',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -81637,7 +82580,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'fused_dropout_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                                   'reason': 'CUDA fused-dropout internals are validated with direct '
                                                             'dispatcher calls for mask/output contracts, out identity, '
                                                             'and memory-efficient mask-fill identity/determinism.',
@@ -82668,6 +83611,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_mkldnn_reshape.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_shape_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                            'candidate runner that validates dense logical values, '
+                                                            'MKLDNN layout, and out identity where PyTorch exposes a '
+                                                            'usable direct path.',
+                                                  'runner': 'mkldnn_shape'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -82677,7 +83632,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -82716,6 +83671,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_mkldnn_transpose.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_shape_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                            'candidate runner that validates dense logical values, '
+                                                            'MKLDNN layout, and out identity where PyTorch exposes a '
+                                                            'usable direct path.',
+                                                  'runner': 'mkldnn_shape'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -82725,7 +83692,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -83913,6 +84880,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_nnpack_spatial_convolution.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-nnpack-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'nnpack_convolution_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'NNPACK spatial convolution has a source-derived candidate '
+                                                            'runner that compares the direct helper to public dense '
+                                                            'conv2d when NNPACK executes.',
+                                                  'runner': 'nnpack_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -83923,7 +84901,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -84030,16 +85008,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'name': 'aten::_philox_normal.out',
                                        'oracle': {'backend_gate': 'mps',
                                                   'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                  'contract_status': 'blocked',
+                                                  'contract_status': 'candidate',
                                                   'coverage_kind': 'backend_pack',
-                                                  'oracle_id': 'philox_mps_rng',
+                                                  'oracle_id': 'mps_philox_rng_backend_pack',
                                                   'promotion_backend': 'mps',
                                                   'promotion_evidence': '',
-                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
-                                                            'but local MPS 2.12.1 probing reports runtime unsupported '
-                                                            'CPU fallback for direct dispatcher calls; promotion needs '
-                                                            'runtime support plus a source-derived RNG contract.',
-                                                  'runner': 'backend_property'},
+                                                  'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                            'candidate runner checking key determinism, output '
+                                                            'identity, finite normal values, and uniform range bounds; '
+                                                            'current PyTorch MPS runtime reports the direct path is '
+                                                            'not currently supported.',
+                                                  'runner': 'mps_philox'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -84097,16 +85076,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'name': 'aten::_philox_uniform.out',
                                        'oracle': {'backend_gate': 'mps',
                                                   'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                  'contract_status': 'blocked',
+                                                  'contract_status': 'candidate',
                                                   'coverage_kind': 'backend_pack',
-                                                  'oracle_id': 'philox_mps_rng',
+                                                  'oracle_id': 'mps_philox_rng_backend_pack',
                                                   'promotion_backend': 'mps',
                                                   'promotion_evidence': '',
-                                                  'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
-                                                            'but local MPS 2.12.1 probing reports runtime unsupported '
-                                                            'CPU fallback for direct dispatcher calls; promotion needs '
-                                                            'runtime support plus a source-derived RNG contract.',
-                                                  'runner': 'backend_property'},
+                                                  'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                            'candidate runner checking key determinism, output '
+                                                            'identity, finite normal values, and uniform range bounds; '
+                                                            'current PyTorch MPS runtime reports the direct path is '
+                                                            'not currently supported.',
+                                                  'runner': 'mps_philox'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -84474,6 +85454,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_scaled_dot_product_cudnn_attention_backward',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-attention-backend-pack',
+                                                  'contract_status': 'blocked',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_attention_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'cuDNN attention backward direct dispatcher probing '
+                                                            'remains blocked: PyTorch 2.12.1+cu130 on Spark GB10 '
+                                                            'exposes safe forward calls, but the backward overloads '
+                                                            'still fail with binding shape errors and internal assert '
+                                                            'failures.',
+                                                  'runner': 'backend_property'},
                                        'overload': '',
                                        'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
                                                    {'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'},
@@ -86126,6 +87119,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_triton_multi_head_attention.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-triton-attention-backend-pack',
+                                                  'contract_status': 'blocked',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_triton_attention_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'PyTorch 2.11.0+cu128 and 2.12.1+cu130 report this Triton '
+                                                            'dispatcher surface should be overridden in Python before '
+                                                            'direct use.',
+                                                  'runner': 'backend_property'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -86182,6 +87186,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::_triton_scaled_dot_attention.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-triton-attention-backend-pack',
+                                                  'contract_status': 'blocked',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_triton_attention_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'PyTorch 2.11.0+cu128 and 2.12.1+cu130 report this Triton '
+                                                            'dispatcher surface should be overridden in Python before '
+                                                            'direct use.',
+                                                  'runner': 'backend_property'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -87889,7 +88904,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'tensor': True,
                                                  'type': 'Tensor'}],
                                        'base_name': 'addmm',
-                                       'coverage_kind': 'property',
+                                       'coverage_kind': 'backend_pack',
                                        'exclusion': {'category': 'cpu_reference_invalid',
                                                      'reason': 'The dtype_out addmm dispatcher overload is not '
                                                                'implemented for the CPU reference backend in this '
@@ -87900,6 +88915,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::addmm.dtype_out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-dtype-out-matmul-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'reason': 'CUDA dtype-out matmul overload is validated by a runner '
+                                                            'that checks out identity, output dtype, and dense fp32 '
+                                                            'matmul/addmm formulas.',
+                                                  'runner': 'cuda_dtype_out_matmul'},
                                        'overload': 'dtype_out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -87910,7 +88936,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_property',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -90367,7 +91393,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'tensor': True,
                                                  'type': 'Tensor'}],
                                        'base_name': 'baddbmm',
-                                       'coverage_kind': 'property',
+                                       'coverage_kind': 'backend_pack',
                                        'exclusion': {'category': 'cpu_reference_invalid',
                                                      'reason': 'The dtype_out baddbmm dispatcher overload is not '
                                                                'implemented for the CPU reference backend in this '
@@ -90378,6 +91404,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::baddbmm.dtype_out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-dtype-out-matmul-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'reason': 'CUDA dtype-out matmul overload is validated by a runner '
+                                                            'that checks out identity, output dtype, and dense fp32 '
+                                                            'matmul/addmm formulas.',
+                                                  'runner': 'cuda_dtype_out_matmul'},
                                        'overload': 'dtype_out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -90388,7 +91425,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_property',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -92866,7 +93903,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'tensor': True,
                                                  'type': 'Tensor'}],
                                        'base_name': 'bmm',
-                                       'coverage_kind': 'property',
+                                       'coverage_kind': 'backend_pack',
                                        'exclusion': {'category': 'cpu_reference_invalid',
                                                      'reason': 'The dtype_out bmm dispatcher overload is not '
                                                                'implemented for the CPU reference backend in this '
@@ -92877,6 +93914,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::bmm.dtype_out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-dtype-out-matmul-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'reason': 'CUDA dtype-out matmul overload is validated by a runner '
+                                                            'that checks out identity, output dtype, and dense fp32 '
+                                                            'matmul/addmm formulas.',
+                                                  'runner': 'cuda_dtype_out_matmul'},
                                        'overload': 'dtype_out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -92886,7 +93934,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '*, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_property',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95525,6 +96573,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_affine_grid_generator.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                            'dispatcher calls against public affine-grid/grid-sample '
+                                                            'values and gradients.',
+                                                  'runner': 'cuda_cudnn_grid'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95534,7 +96593,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'int H, int W, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95585,6 +96644,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_affine_grid_generator_backward.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                            'dispatcher calls against public affine-grid/grid-sample '
+                                                            'values and gradients.',
+                                                  'runner': 'cuda_cudnn_grid'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95594,7 +96664,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'int C, int H, int W, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95681,6 +96751,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_batch_norm.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                  'reason': 'cuDNN batch-norm out is validated by a CUDA runner '
+                                                            'against public batch_norm output semantics on PyTorch '
+                                                            '2.12.1+cu130; older PyTorch 2.11.0+cu128 on Spark GB10 is '
+                                                            'runtime-gated due a binding internal assert.',
+                                                  'runner': 'cuda_cudnn_batch_norm'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95705,7 +96787,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(b!), Tensor(c!), Tensor(d!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95792,6 +96874,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_batch_norm_backward.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                  'reason': 'cuDNN batch-norm internals are validated by direct CUDA '
+                                                            'dispatcher calls against public batch_norm/autograd '
+                                                            'references.',
+                                                  'runner': 'cuda_cudnn_batch_norm'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95812,7 +96905,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out2) -> (Tensor(a!), Tensor(b!), Tensor(c!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95887,6 +96980,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_convolution.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'reason': 'cuDNN convolution internals are validated by direct CUDA '
+                                                            'dispatcher calls against public convolution formulas, '
+                                                            'including out identity.',
+                                                  'runner': 'cuda_cudnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95898,7 +97002,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '-> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -95973,6 +97077,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_convolution_add_relu.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'reason': 'cuDNN convolution internals are validated by direct CUDA '
+                                                            'dispatcher calls against public convolution formulas, '
+                                                            'including out identity.',
+                                                  'runner': 'cuda_cudnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -95984,7 +97099,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -96047,6 +97162,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_convolution_relu.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'reason': 'cuDNN convolution internals are validated by direct CUDA '
+                                                            'dispatcher calls against public convolution formulas, '
+                                                            'including out identity.',
+                                                  'runner': 'cuda_cudnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -96057,7 +97183,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'groups, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -96138,6 +97264,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_convolution_transpose.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'reason': 'cuDNN convolution internals are validated by direct CUDA '
+                                                            'dispatcher calls against public convolution formulas, '
+                                                            'including out identity.',
+                                                  'runner': 'cuda_cudnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -96149,7 +97286,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'allow_tf32, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -96182,6 +97319,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_grid_sampler.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                            'dispatcher calls against public affine-grid/grid-sample '
+                                                            'values and gradients.',
+                                                  'runner': 'cuda_cudnn_grid'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -96191,7 +97339,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -96236,6 +97384,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::cudnn_grid_sampler_backward.out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_cudnn_grid_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'reason': 'cuDNN grid internals are validated by direct CUDA '
+                                                            'dispatcher calls against public affine-grid/grid-sample '
+                                                            'values and gradients.',
+                                                  'runner': 'cuda_cudnn_grid'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -96250,7 +97409,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '(Tensor(a!), Tensor(b!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -99098,13 +100257,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::fbgemm_linear_fp16_weight.out',
+                                       'oracle': {'backend_gate': 'fbgemm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'fbgemm_linear_backend_pack',
+                                                  'promotion_backend': 'fbgemm',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                            'candidate runner that uses PyTorch-created packed weights '
+                                                            'and compares values to dense/dequantized references.',
+                                                  'runner': 'fbgemm_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                        'schema': 'aten::fbgemm_linear_fp16_weight.out(Tensor input, Tensor '
                                                  'packed_weight, Tensor bias, Tensor(a!) output) -> Tensor',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -99144,13 +100314,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::fbgemm_linear_fp16_weight_fp32_activation.out',
+                                       'oracle': {'backend_gate': 'fbgemm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#fbgemm-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'fbgemm_linear_backend_pack',
+                                                  'promotion_backend': 'fbgemm',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'FBGEMM packed-linear helper has a source-derived '
+                                                            'candidate runner that uses PyTorch-created packed weights '
+                                                            'and compares values to dense/dequantized references.',
+                                                  'runner': 'fbgemm_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                        'schema': 'aten::fbgemm_linear_fp16_weight_fp32_activation.out(Tensor input, '
                                                  'Tensor packed_weight, Tensor? bias, Tensor(a!) output) -> Tensor',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -112219,6 +113400,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_batch_norm.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-batch-norm-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_batch_norm_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen batch-norm helper has a source-derived candidate '
+                                                            'runner checking public batch_norm forward values and '
+                                                            'autograd gradients; promotion requires execution on a '
+                                                            'ROCm/HIP PyTorch build.',
+                                                  'runner': 'rocm_miopen_batch_norm'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112320,6 +113513,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_batch_norm_backward.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-batch-norm-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_batch_norm_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen batch-norm helper has a source-derived candidate '
+                                                            'runner checking public batch_norm forward values and '
+                                                            'autograd gradients; promotion requires execution on a '
+                                                            'ROCm/HIP PyTorch build.',
+                                                  'runner': 'rocm_miopen_batch_norm'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112415,6 +113620,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_convolution.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen convolution helper has a source-derived candidate '
+                                                            'runner mirroring the cuDNN convolution value/out-identity '
+                                                            'contract; promotion requires execution on a ROCm/HIP '
+                                                            'PyTorch build.',
+                                                  'runner': 'rocm_miopen_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112507,6 +113724,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_convolution_transpose.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen convolution helper has a source-derived candidate '
+                                                            'runner mirroring the cuDNN convolution value/out-identity '
+                                                            'contract; promotion requires execution on a ROCm/HIP '
+                                                            'PyTorch build.',
+                                                  'runner': 'rocm_miopen_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112587,6 +113816,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_ctc_loss.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-ctc-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_ctc_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen CTC helper has a source-derived candidate runner '
+                                                            'checking predicate return type, public CTC loss values, '
+                                                            'and workspace shape; promotion requires execution on a '
+                                                            'ROCm/HIP PyTorch build.',
+                                                  'runner': 'rocm_miopen_ctc'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112677,6 +113918,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_depthwise_convolution.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen convolution helper has a source-derived candidate '
+                                                            'runner mirroring the cuDNN convolution value/out-identity '
+                                                            'contract; promotion requires execution on a ROCm/HIP '
+                                                            'PyTorch build.',
+                                                  'runner': 'rocm_miopen_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -112817,6 +114070,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_rnn.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-rnn-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_rnn_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen RNN helper has a source-derived candidate runner '
+                                                            'checking one-layer LSTM forward values, gradients, '
+                                                            'reserve tensors, and out identity; promotion requires '
+                                                            'execution on a ROCm/HIP PyTorch build.',
+                                                  'runner': 'rocm_miopen_rnn'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113012,6 +114277,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::miopen_rnn_backward.out',
+                                       'oracle': {'backend_gate': 'rocm',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-rnn-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'rocm_miopen_rnn_backend_pack',
+                                                  'promotion_backend': 'rocm',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MIOpen RNN helper has a source-derived candidate runner '
+                                                            'checking one-layer LSTM forward values, gradients, '
+                                                            'reserve tensors, and out identity; promotion requires '
+                                                            'execution on a ROCm/HIP PyTorch build.',
+                                                  'runner': 'rocm_miopen_rnn'},
                                        'overload': 'out',
                                        'returns': [],
                                        'schema': 'aten::miopen_rnn_backward.out(Tensor input, Tensor[] weight, int '
@@ -113108,6 +114385,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_adaptive_avg_pool2d.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113117,7 +114405,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'output_size, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113150,6 +114438,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_adaptive_avg_pool2d_backward.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113159,7 +114458,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor self, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113222,6 +114521,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_convolution.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN convolution/reorder helper has a source-derived '
+                                                            'candidate runner that checks direct convolution values '
+                                                            'against public dense conv references.',
+                                                  'runner': 'mkldnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113232,7 +114542,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'groups, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113271,6 +114581,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_linear.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_linear_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense linear/autograd references.',
+                                                  'runner': 'mkldnn_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113280,7 +114601,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'bias=None, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113337,6 +114658,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_linear_backward.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_linear_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense linear/autograd references.',
+                                                  'runner': 'mkldnn_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113355,7 +114687,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'out1, Tensor(c!) out2) -> (Tensor(a!), Tensor(b!), Tensor(c!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113394,6 +114726,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_linear_backward_input.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_linear_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense linear/autograd references.',
+                                                  'runner': 'mkldnn_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113403,7 +114746,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'grad_output, Tensor weight, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113454,6 +114797,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_linear_backward_weights.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-linear-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_linear_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN linear helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense linear/autograd references.',
+                                                  'runner': 'mkldnn_linear'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113468,7 +114822,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(b!) out1) -> (Tensor(a!), Tensor(b!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113525,6 +114879,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_max_pool2d.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113535,7 +114900,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'ceil_mode=False, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113604,6 +114969,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_max_pool2d_backward.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113672,6 +115048,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_max_pool3d.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113682,7 +115069,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'ceil_mode=False, *, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -113751,6 +115138,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_max_pool3d_backward.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-pooling-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_pooling_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MKLDNN pooling helper has a source-derived candidate '
+                                                            'runner that compares forward and backward values to '
+                                                            'public dense pooling/autograd references.',
+                                                  'runner': 'mkldnn_pooling'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113819,6 +115217,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_reorder_conv2d_weight.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MKLDNN convolution/reorder helper has a source-derived '
+                                                            'candidate runner that checks direct convolution values '
+                                                            'against public dense conv references.',
+                                                  'runner': 'mkldnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -113887,6 +115296,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_reorder_conv3d_weight.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-convolution-backend-pack',
+                                                  'contract_status': 'candidate',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_convolution_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MKLDNN convolution/reorder helper has a source-derived '
+                                                            'candidate runner that checks direct convolution values '
+                                                            'against public dense conv references.',
+                                                  'runner': 'mkldnn_convolution'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -114033,6 +115453,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_rnn_layer.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-rnn-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_rnn_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN RNN helper has a source-derived candidate runner '
+                                                            'that compares one-layer LSTM forward and backward values '
+                                                            'to public torch.nn.LSTM references.',
+                                                  'runner': 'mkldnn_rnn'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -114058,7 +115489,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(d!) out3) -> (Tensor(a!), Tensor(b!), Tensor(c!), Tensor(d!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -114253,6 +115684,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mkldnn_rnn_layer_backward.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-rnn-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_rnn_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN RNN helper has a source-derived candidate runner '
+                                                            'that compares one-layer LSTM forward and backward values '
+                                                            'to public torch.nn.LSTM references.',
+                                                  'runner': 'mkldnn_rnn'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -114294,7 +115736,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(f!), Tensor(g!))',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -114322,7 +115764,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'tensor': True,
                                                  'type': 'Tensor'}],
                                        'base_name': 'mm',
-                                       'coverage_kind': 'property',
+                                       'coverage_kind': 'backend_pack',
                                        'exclusion': {'category': 'cpu_reference_invalid',
                                                      'reason': 'The dtype_out mm dispatcher overload is not '
                                                                'implemented for the CPU reference backend in this '
@@ -114333,6 +115775,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mm.dtype_out',
+                                       'oracle': {'backend_gate': 'cuda',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cuda-dtype-out-matmul-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
+                                                  'promotion_backend': 'cuda',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'reason': 'CUDA dtype-out matmul overload is validated by a runner '
+                                                            'that checks out identity, output dtype, and dense fp32 '
+                                                            'matmul/addmm formulas.',
+                                                  'runner': 'cuda_dtype_out_matmul'},
                                        'overload': 'dtype_out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -114342,7 +115795,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  '*, Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_property',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -114499,6 +115952,19 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::mps_convolution_backward.out',
+                                       'oracle': {'backend_gate': 'mps',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#mps-convolution-backend-pack',
+                                                  'contract_status': 'blocked',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mps_convolution_backward_out_blocked_schema',
+                                                  'promotion_backend': 'mps',
+                                                  'promotion_evidence': '',
+                                                  'reason': 'MPS convolution backward out overload has a CPU-reference '
+                                                            "contract, but PyTorch's direct Python binding expects an "
+                                                            'undefined third out tensor for the bias-gradient slot and '
+                                                            'rejects ordinary tensors, so TorchCTS does not have a '
+                                                            'safe direct invocation path.',
+                                                  'runner': 'backend_property'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -131248,6 +132714,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                        'max_semantic_level': 3,
                                        'min_semantic_level': 3,
                                        'name': 'aten::to_mkldnn.out',
+                                       'oracle': {'backend_gate': 'cpu_build',
+                                                  'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                  'contract_status': 'accepted',
+                                                  'coverage_kind': 'backend_pack',
+                                                  'oracle_id': 'mkldnn_shape_backend_pack',
+                                                  'promotion_backend': 'cpu_build',
+                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                            'candidate runner that validates dense logical values, '
+                                                            'MKLDNN layout, and out identity where PyTorch exposes a '
+                                                            'usable direct path.',
+                                                  'runner': 'mkldnn_shape'},
                                        'overload': 'out',
                                        'returns': [{'alias': {'is_write': True},
                                                     'name': '',
@@ -131257,7 +132735,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                  'Tensor(a!) out) -> Tensor(a!)',
                                        'semantic_level': 3,
                                        'semantic_levels': [3],
-                                       'status': 'pending_backend_pack',
+                                       'status': 'covered_backend_pack',
                                        'surface_kind': 'out_variant',
                                        'variant_kind': 'out'},
                                       {'args': [{'alias': None,
@@ -134200,6 +135678,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                'max_semantic_level': 3,
                                'min_semantic_level': 3,
                                'name': 'aten::_cudnn_init_dropout_state',
+                               'oracle': {'backend_gate': 'cuda',
+                                          'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-dropout-state-backend-pack',
+                                          'contract_status': 'accepted',
+                                          'coverage_kind': 'backend_pack',
+                                          'oracle_id': 'cuda_cudnn_dropout_state_backend_pack',
+                                          'promotion_backend': 'cuda',
+                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                          'reason': 'cuDNN dropout-state internals are validated by direct CUDA '
+                                                    'dispatcher calls for state allocation device, dtype, non-empty '
+                                                    'state, and out identity.',
+                                          'runner': 'cuda_cudnn_dropout_state'},
                                'overload': '',
                                'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                'schema': 'aten::_cudnn_init_dropout_state(float dropout, bool train, int dropout_seed, '
@@ -134207,7 +135696,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'pin_memory=False) -> Tensor',
                                'semantic_level': 3,
                                'semantic_levels': [3],
-                               'status': 'pending_backend_pack',
+                               'status': 'covered_backend_pack',
                                'surface_kind': 'rng',
                                'variant_kind': 'factory'},
                               {'args': [{'alias': None,
@@ -134245,7 +135734,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'coverage_kind': 'backend_pack',
                                           'oracle_id': 'fused_dropout_backend_pack',
                                           'promotion_backend': 'cuda',
-                                          'promotion_evidence': 'scratch/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
                                           'reason': 'CUDA fused-dropout internals are validated with direct dispatcher '
                                                     'calls for mask/output contracts, out identity, and '
                                                     'memory-efficient mask-fill identity/determinism.',
@@ -135017,6 +136506,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'max_semantic_level': 3,
                                          'min_semantic_level': 3,
                                          'name': 'aten::_cudnn_rnn_flatten_weight',
+                                         'oracle': {'backend_gate': 'cuda',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack',
+                                                    'contract_status': 'accepted',
+                                                    'coverage_kind': 'backend_pack',
+                                                    'oracle_id': 'cuda_cudnn_rnn_backend_pack',
+                                                    'promotion_backend': 'cuda',
+                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                    'reason': 'cuDNN RNN internals are validated by direct CUDA '
+                                                              'dispatcher calls against public nn.LSTM '
+                                                              'forward/backward references and out identity.',
+                                                    'runner': 'cuda_cudnn_rnn'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::_cudnn_rnn_flatten_weight(Tensor[] weight_arr, int '
@@ -135025,7 +136525,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                    'bidirectional) -> Tensor',
                                          'semantic_level': 3,
                                          'semantic_levels': [3],
-                                         'status': 'pending_backend_pack',
+                                         'status': 'covered_backend_pack',
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'functional'},
                                         {'args': [{'alias': None,
@@ -135053,12 +136553,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'max_semantic_level': 3,
                                          'min_semantic_level': 3,
                                          'name': 'aten::_mkldnn_reshape',
+                                         'oracle': {'backend_gate': 'cpu_build',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                    'contract_status': 'accepted',
+                                                    'coverage_kind': 'backend_pack',
+                                                    'oracle_id': 'mkldnn_shape_backend_pack',
+                                                    'promotion_backend': 'cpu_build',
+                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                    'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                              'candidate runner that validates dense logical values, '
+                                                              'MKLDNN layout, and out identity where PyTorch exposes a '
+                                                              'usable direct path.',
+                                                    'runner': 'mkldnn_shape'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::_mkldnn_reshape(Tensor self, int[] shape) -> Tensor',
                                          'semantic_level': 3,
                                          'semantic_levels': [3],
-                                         'status': 'pending_backend_pack',
+                                         'status': 'covered_backend_pack',
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'functional'},
                                         {'args': [{'alias': None,
@@ -135092,12 +136604,24 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'max_semantic_level': 3,
                                          'min_semantic_level': 3,
                                          'name': 'aten::_mkldnn_transpose',
+                                         'oracle': {'backend_gate': 'cpu_build',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#cpu-build-mkldnn-shape-and-conversion-backend-pack',
+                                                    'contract_status': 'accepted',
+                                                    'coverage_kind': 'backend_pack',
+                                                    'oracle_id': 'mkldnn_shape_backend_pack',
+                                                    'promotion_backend': 'cpu_build',
+                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                    'reason': 'MKLDNN shape/conversion helper has a source-derived '
+                                                              'candidate runner that validates dense logical values, '
+                                                              'MKLDNN layout, and out identity where PyTorch exposes a '
+                                                              'usable direct path.',
+                                                    'runner': 'mkldnn_shape'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::_mkldnn_transpose(Tensor self, int dim0, int dim1) -> Tensor',
                                          'semantic_level': 3,
                                          'semantic_levels': [3],
-                                         'status': 'pending_backend_pack',
+                                         'status': 'covered_backend_pack',
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'functional'},
                                         {'args': [{'alias': None,
@@ -135301,17 +136825,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'name': 'aten::_philox_key_split',
                                          'oracle': {'backend_gate': 'mps',
                                                     'contract_ref': 'docs/coverage/contract-evidence.md#mps-philox-rng-backend-pack',
-                                                    'contract_status': 'blocked',
+                                                    'contract_status': 'candidate',
                                                     'coverage_kind': 'backend_pack',
-                                                    'oracle_id': 'philox_mps_rng',
+                                                    'oracle_id': 'mps_philox_rng_backend_pack',
                                                     'promotion_backend': 'mps',
                                                     'promotion_evidence': '',
-                                                    'reason': 'Philox helpers are MPS/Meta-only in this PyTorch build, '
-                                                              'but local MPS 2.12.1 probing reports runtime '
-                                                              'unsupported CPU fallback for direct dispatcher calls; '
-                                                              'promotion needs runtime support plus a source-derived '
-                                                              'RNG contract.',
-                                                    'runner': 'backend_property'},
+                                                    'reason': 'MPS Philox RNG helper has a source/schema-derived '
+                                                              'candidate runner checking key determinism, output '
+                                                              'identity, finite normal values, and uniform range '
+                                                              'bounds; current PyTorch MPS runtime reports the direct '
+                                                              'path is not currently supported.',
+                                                    'runner': 'mps_philox'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::_philox_key_split(Tensor key, int num_splits) -> Tensor',
@@ -136043,6 +137567,17 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'max_semantic_level': 3,
                                          'min_semantic_level': 3,
                                          'name': 'aten::cudnn_convolution_transpose',
+                                         'oracle': {'backend_gate': 'cuda',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack',
+                                                    'contract_status': 'accepted',
+                                                    'coverage_kind': 'backend_pack',
+                                                    'oracle_id': 'cuda_cudnn_convolution_backend_pack',
+                                                    'promotion_backend': 'cuda',
+                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                    'reason': 'cuDNN convolution internals are validated by direct '
+                                                              'CUDA dispatcher calls against public convolution '
+                                                              'formulas, including out identity.',
+                                                    'runner': 'cuda_cudnn_convolution'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::cudnn_convolution_transpose(Tensor self, Tensor weight, '
@@ -136051,7 +137586,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                    'deterministic, bool allow_tf32) -> Tensor',
                                          'semantic_level': 3,
                                          'semantic_levels': [3],
-                                         'status': 'pending_backend_pack',
+                                         'status': 'covered_backend_pack',
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'functional'},
                                         {'args': [{'alias': {'is_write': False},
@@ -137223,6 +138758,18 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'max_semantic_level': 3,
                                          'min_semantic_level': 3,
                                          'name': 'aten::miopen_convolution_transpose',
+                                         'oracle': {'backend_gate': 'rocm',
+                                                    'contract_ref': 'docs/coverage/contract-evidence.md#rocm-miopen-convolution-backend-pack',
+                                                    'contract_status': 'candidate',
+                                                    'coverage_kind': 'backend_pack',
+                                                    'oracle_id': 'rocm_miopen_convolution_backend_pack',
+                                                    'promotion_backend': 'rocm',
+                                                    'promotion_evidence': '',
+                                                    'reason': 'MIOpen convolution helper has a source-derived '
+                                                              'candidate runner mirroring the cuDNN convolution '
+                                                              'value/out-identity contract; promotion requires '
+                                                              'execution on a ROCm/HIP PyTorch build.',
+                                                    'runner': 'rocm_miopen_convolution'},
                                          'overload': '',
                                          'returns': [{'alias': None, 'name': '', 'tensor': True, 'type': 'Tensor'}],
                                          'schema': 'aten::miopen_convolution_transpose(Tensor self, Tensor weight, '
@@ -140786,7 +142333,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'view'}]},
  'metadata': {'case_count': 2183,
-              'generated_at': '2026-07-01T20:52:26.583538Z',
+              'generated_at': '2026-07-02T21:57:49.065425Z',
               'pytorch_version': '2.12.1',
               'semantic_level_counts': {'1': 422, '2': 952, '3': 1051, '4': 384, '5': 380, '6': 19, '7': 6},
               'semantic_level_descriptions': {'1': 'Core primitive behavior that every backend should run '

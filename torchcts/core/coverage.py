@@ -3663,19 +3663,30 @@ def _backend_pack_feasibility_bucket(entry: dict) -> str | None:
         or "out of memory" in reason
         or "runtime unsupported" in reason
         or "not currently supported" in reason
+        or "supported only on" in reason
+        or "architecture mismatch" in reason
+        or "segfault" in reason
+        or "internal assert" in reason
+        or "should be overridden in python" in reason
+        or "requires a real xla runtime" in reason
     ):
         return "blocked_runtime"
     if not oracle:
         return "blocked_contract"
+    if backend_gate in {"rocm", "xla"}:
+        return "blocked_hardware"
     if oracle.get("runner") == "backend_property":
         contract_status = oracle.get("contract_status")
-        if contract_status in {"accepted", "candidate"} and backend_gate in {"rocm", "xla"}:
-            return "blocked_hardware"
+        if contract_status == "blocked" and (
+            "direct invocation" in reason
+            or "direct binding" in reason
+            or "binding" in reason
+            or "schema" in reason
+        ):
+            return "blocked_schema"
         return "blocked_contract"
     if oracle.get("contract_status") in {"accepted", "candidate"}:
         return "candidate_only"
-    if backend_gate in {"rocm", "xla"}:
-        return "blocked_hardware"
     return "blocked_contract"
 
 
