@@ -86,3 +86,17 @@ def test_package_verifier_rejects_standalone_site_installer_artifacts(tmp_path):
     errors = verifier.verify_archive(_write_sdist(tmp_path / "bad.tar.gz", members))
 
     assert any("forbidden standalone site installer artifact" in error for error in errors)
+
+
+def test_package_verifier_rejects_backend_pack_evidence(tmp_path):
+    verifier = _load_verifier()
+    members = (
+        "torchcts/op_dtype_contracts.json",
+        "torchcts/op_metadata.json",
+        "torchcts/site_scripts/install_plan.py",
+        "data/backend-pack-evidence/torchcts-evidence-example.tar.gz",
+    )
+
+    errors = verifier.verify_archive(_write_sdist(tmp_path / "bad.tar.gz", members))
+
+    assert any("forbidden evidence artifact" in error for error in errors)
