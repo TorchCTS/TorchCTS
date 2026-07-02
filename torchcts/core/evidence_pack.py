@@ -25,7 +25,7 @@ import torch
 
 from torchcts import __version__ as torchcts_version
 from torchcts.core import coverage
-from torchcts.core.oracles import OracleSpec, all_oracle_specs, run_oracle_for_surface
+from torchcts.core.oracles import OracleSpec, OracleUnavailable, all_oracle_specs, run_oracle_for_surface
 
 
 def _utc_stamp() -> str:
@@ -332,7 +332,18 @@ def _oracle_result(
             "skipped": True,
             "reason": f"backend gate {spec.backend_gate!r} does not run on device {torch.device(device).type!r}",
         }
-    return _safe_call(run_oracle_for_surface, surface, device)
+    try:
+        value = run_oracle_for_surface(surface, device)
+    except OracleUnavailable as exc:
+        return {"ok": None, "skipped": True, "reason": str(exc)}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_type": exc.__class__.__name__,
+            "error_message": str(exc),
+            "traceback": traceback.format_exc(),
+        }
+    return {"ok": True, "value": _json_safe(value)}
 
 
 def _backend_pack_evidence(
