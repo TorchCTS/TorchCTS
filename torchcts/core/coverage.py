@@ -4375,7 +4375,7 @@ def _validate_audit_consistency(audit: dict) -> list[str]:
 
 
 def run_check_command(strict_unknowns: bool = False) -> int:
-    audit = _build_and_write_default_audit()
+    audit = build_audit()
     errors = list(audit.get("errors", []))
     errors.extend(_validate_audit_consistency(audit))
     if strict_unknowns and audit["metadata"]["unknown_count"]:
