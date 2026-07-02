@@ -37,6 +37,12 @@ def repo_relative(path: str | None) -> str | None:
         return str(path).replace("\\", "/")
 
 
+def artifact_name(path: str | None) -> str | None:
+    if not path:
+        return None
+    return Path(path).name
+
+
 def load_artifact(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("artifact_kind") != "torch_dispatcher_inventory":
@@ -290,7 +296,7 @@ def reduce_artifacts(
             "min_validated_version": versions[0] if versions else None,
             "max_validated_version": versions[-1] if versions else None,
             "dependency_upper_bound": next_patch_upper_bound(versions[-1]) if versions else None,
-            "artifact_paths": [repo_relative(artifact.get("_path")) for artifact in artifacts],
+            "artifact_names": [artifact_name(artifact.get("_path")) for artifact in artifacts],
             "op_count": len(ops),
             "collected_op_count": len(op_names),
             "legacy_static_op_count": legacy_only_count,

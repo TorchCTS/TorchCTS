@@ -31,6 +31,11 @@ EVIDENCE_ONLY_KEYS = {
     "replace_contract",
     "source_probe_mismatches",
 }
+LOCAL_EVIDENCE_PATH_REPLACEMENTS = (
+    (str(REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix"), "<matrix-workdir>"),
+    (str(REPO_ROOT / "scratch"), "<torchcts-workdir>"),
+    ("scratch/pytorch-2.7-compat/matrix", "<matrix-workdir>"),
+)
 
 
 def parse_version_parts(version: str) -> tuple[int, int, int]:
@@ -61,6 +66,28 @@ def repo_relative(path: str | None) -> str | None:
         return str(Path(path).resolve().relative_to(REPO_ROOT)).replace("\\", "/")
     except Exception:
         return str(path).replace("\\", "/")
+
+
+def artifact_name(path: str | None) -> str | None:
+    if not path:
+        return None
+    return Path(path).name
+
+
+def sanitize_tracked_evidence(value: Any) -> Any:
+    if isinstance(value, str):
+        sanitized = value
+        for original, replacement in LOCAL_EVIDENCE_PATH_REPLACEMENTS:
+            sanitized = sanitized.replace(original, replacement)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_tracked_evidence(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): sanitize_tracked_evidence(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def next_patch_upper_bound(version: str) -> str:
@@ -249,7 +276,7 @@ def build_expanded_evidence(
             "max_validated_version": all_versions[-1] if all_versions else None,
             "dependency_upper_bound": next_patch_upper_bound(all_versions[-1]) if all_versions else None,
             "preserved_versions": preserved_versions,
-            "artifact_paths": [repo_relative(artifact.get("_path")) for artifact in artifacts],
+            "artifact_names": [artifact_name(artifact.get("_path")) for artifact in artifacts],
             "contract_count": len(contracts),
             "version_entry_semantics": "replace_contract",
             "contract_counts": _contract_counter(contracts),
@@ -401,32 +428,32 @@ def write_evidence_jsonl(path: Path, expanded: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         json.dumps(
-            {
+            sanitize_tracked_evidence({
                 "record_kind": "metadata",
                 "version": 2,
                 "format": "expanded_evidence_jsonl",
                 "metadata": expanded.get("metadata") or {},
-            },
+            }),
             sort_keys=True,
             separators=(",", ":"),
         )
     ]
     for op_name, versions in sorted((expanded.get("contracts") or {}).items()):
         lines.append(json.dumps(
-            {
+            sanitize_tracked_evidence({
                 "record_kind": "op_contract_evidence",
                 "op": op_name,
                 "versions": versions,
-            },
+            }),
             sort_keys=True,
             separators=(",", ":"),
         ))
     for warning in expanded.get("warnings") or []:
         lines.append(json.dumps(
-            {
+            sanitize_tracked_evidence({
                 "record_kind": "warning",
                 "warning": warning,
-            },
+            }),
             sort_keys=True,
             separators=(",", ":"),
         ))
