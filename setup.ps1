@@ -22,9 +22,16 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File setup.ps1
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 -Yes
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 -DryRun
 #
 # Creates a local .venv and installs TorchCTS in editable mode
 # for development and contribution.
+
+param(
+    [switch]$Yes,
+    [switch]$DryRun
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -36,6 +43,8 @@ $TorchMinVersion = "2.7.0"
 $TorchMaxExclusiveVersion = "2.12.2"
 $TorchMaxValidatedVersion = "2.12.1"
 $TorchSpec = "torch>=$TorchMinVersion,<$TorchMaxExclusiveVersion"
+$AutoYes = $Yes -or $env:TORCHCTS_YES -eq "1"
+$DryRunMode = $DryRun -or $env:TORCHCTS_DRY_RUN -eq "1"
 
 function Read-InstallPlan {
     param([string[]]$Lines)
@@ -53,10 +62,121 @@ function Read-InstallPlan {
     return $plan
 }
 
+function Get-TorchBuildLabel {
+    param([string]$Variant)
+    switch ($Variant) {
+        "cpu" { "CPU build"; break }
+        "cuda" { "NVIDIA CUDA build"; break }
+        "rocm" { "AMD ROCm build"; break }
+        "xpu" { "Intel XPU build"; break }
+        "mps" { "Apple Metal/MPS build"; break }
+        default { "${Variant} build" }
+    }
+}
+
+function Get-TorchSourceLabel {
+    param([string]$TorchIndexUrl)
+    if ($TorchIndexUrl) {
+        return $TorchIndexUrl
+    }
+    return "PyPI default index"
+}
+
+function Get-TorchActionLabel {
+    param(
+        [string]$TorchStatus,
+        [string]$TorchVersion,
+        [bool]$VenvCreated
+    )
+    if ($DryRunMode) {
+        switch ($TorchStatus) {
+            "valid" { return "Would keep installed PyTorch ${TorchVersion}" }
+            "missing" {
+                if (Test-Path $VenvDir) {
+                    return "Would install validated PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion}, then install TorchCTS"
+                }
+                return "Would create the venv, install validated PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion}, then install TorchCTS"
+            }
+            "too_old" { return "Would ask before replacing PyTorch ${TorchVersion}" }
+            "too_new" { return "Would ask before replacing PyTorch ${TorchVersion}" }
+            "broken" { return "Would stop because installed PyTorch cannot be imported" }
+            default { return "Would install validated PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion}, then install TorchCTS" }
+        }
+    }
+    switch ($TorchStatus) {
+        "valid" { return "Keep installed PyTorch ${TorchVersion}" }
+        "missing" { return "Install validated PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion}" }
+        "too_old" {
+            if ($VenvCreated) {
+                return "Stop because the new venv has unexpected PyTorch ${TorchVersion}"
+            }
+            return "Ask before replacing PyTorch ${TorchVersion}"
+        }
+        "too_new" {
+            if ($VenvCreated) {
+                return "Stop because the new venv has unexpected PyTorch ${TorchVersion}"
+            }
+            return "Ask before replacing PyTorch ${TorchVersion}"
+        }
+        "broken" { return "Stop because installed PyTorch cannot be imported" }
+        default { return "Install validated PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion}" }
+    }
+}
+
+function Write-InstallPlanSummary {
+    Write-Host ""
+    Write-Host "Install plan" -ForegroundColor White
+    Write-Host "  Package:    TorchCTS editable checkout"
+    if ($DryRunMode) {
+        Write-Host "  Mode:       Dry run (no files will be changed)"
+    } else {
+        Write-Host "  Mode:       Install"
+    }
+    Write-Host "  Location:   $(Get-Location)\${VenvDir}"
+    Write-Host "  Python:     ${pyVersion} (${Python})"
+    Write-Host "  PyTorch:    $(Get-TorchBuildLabel -Variant $GpuType)"
+    Write-Host "  Validated:  ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec})"
+    Write-Host "  Torch src:  $(Get-TorchSourceLabel -TorchIndexUrl $TorchIndexUrl)"
+    Write-Host "  Device:     ${DeviceHint}"
+    Write-Host "  Detection:  ${TorchReason}"
+    Write-Host "  Action:     $(Get-TorchActionLabel -TorchStatus $TorchStatus -TorchVersion $TorchVersion -VenvCreated $VenvCreated)"
+    Write-Host ""
+}
+
+function Confirm-WrongTorchInstall {
+    param(
+        [string]$TorchDetail,
+        [string]$TorchVersion,
+        [string]$ValidatedRange,
+        [string]$TorchSpec
+    )
+
+    Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
+    Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${ValidatedRange} (${TorchSpec})." -ForegroundColor Yellow
+    if ($AutoYes) {
+        Write-Host "[..] Auto-approved PyTorch replacement via -Yes/TORCHCTS_YES=1." -ForegroundColor Cyan
+        return
+    }
+    if ($env:TORCHCTS_NON_INTERACTIVE -eq "1" -or -not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+        throw "PyTorch version is not in the validated range. Run setup interactively to approve installing a validated PyTorch build, or install ${TorchSpec} manually first."
+    }
+    $answer = Read-Host "Install validated PyTorch and continue? [y/N]"
+    if ($answer -notmatch '^(?i:y|yes)$') {
+        throw "Aborted before changing PyTorch."
+    }
+}
+
 # ── Locate Python ───────────────────────────────────────────────────────────
 
 $Python = $null
-foreach ($candidate in @("python", "python3", "py")) {
+$ExistingVenvPython = Join-Path $VenvDir "Scripts\python.exe"
+$PythonCandidates = @()
+if (Test-Path $ExistingVenvPython) {
+    $PythonCandidates += $ExistingVenvPython
+}
+$PythonCandidates += @("python", "python3", "py")
+
+foreach ($candidate in $PythonCandidates) {
     try {
         $null = & $candidate --version 2>&1
         $Python = $candidate
@@ -110,6 +230,8 @@ if (-not (Test-Path $PlanFile)) {
 $VenvCreated = $false
 if (Test-Path $VenvDir) {
     Write-Host "[..] Existing ${VenvDir} found - reusing it." -ForegroundColor Cyan
+} elseif ($DryRunMode) {
+    Write-Host "[..] No existing ${VenvDir} found - dry run will not create it." -ForegroundColor Cyan
 } else {
     Write-Host "[..] Creating virtual environment in ${VenvDir}..." -ForegroundColor Cyan
     & $Python @PythonArgs -m venv $VenvDir
@@ -141,8 +263,8 @@ if (-not $GpuType -or -not $DeviceHint) {
     throw "Install planner did not return a usable PyTorch plan."
 }
 
-Write-Host "[OK] PyTorch selection: ${GpuType} (${GpuConfidence})" -ForegroundColor Green
-Write-Host "[..] $TorchReason" -ForegroundColor Cyan
+Write-Host "[OK] PyTorch build: $(Get-TorchBuildLabel -Variant $GpuType)" -ForegroundColor Green
+Write-Host "[..] Detection: $TorchReason" -ForegroundColor Cyan
 if ($TorchWarning) {
     Write-Host "[..] $TorchWarning" -ForegroundColor Yellow
 }
@@ -152,8 +274,19 @@ if ($TorchWarning) {
 $Pip = Join-Path $VenvDir "Scripts\pip.exe"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 
-Write-Host "[..] Upgrading pip, setuptools, wheel..." -ForegroundColor Cyan
-& $Pip install --upgrade pip setuptools wheel --quiet
+if ($DryRunMode -and -not (Test-Path $VenvDir)) {
+    $TorchStatus = "missing"
+    $TorchVersion = ""
+    $TorchDetail = "No existing TorchCTS virtual environment was found."
+    Write-InstallPlanSummary
+    Write-Host "[..] Dry run complete. No files were changed." -ForegroundColor Cyan
+    return
+}
+
+if (-not $DryRunMode) {
+    Write-Host "[..] Upgrading pip, setuptools, wheel..." -ForegroundColor Cyan
+    & $Pip install --upgrade pip setuptools wheel --quiet
+}
 
 Write-Host "[..] Checking PyTorch install..." -ForegroundColor Cyan
 $torchStatusOutput = & $VenvPython $PlanFile --torch-status --format key-value
@@ -164,28 +297,43 @@ $torchStatusPlan = Read-InstallPlan -Lines $torchStatusOutput
 $TorchStatus = $torchStatusPlan["status"]
 $TorchVersion = $torchStatusPlan["version"]
 $TorchDetail = $torchStatusPlan["detail"]
-$UpgradeTorch = $env:TORCHCTS_UPGRADE_TORCH -eq "1"
+
+Write-InstallPlanSummary
+
+if ($DryRunMode) {
+    switch ($TorchStatus) {
+        "valid" { Write-Host "[OK] Existing PyTorch ${TorchVersion} is in the validated range." -ForegroundColor Green }
+        "missing" { Write-Host "[..] PyTorch is not installed in the existing venv." -ForegroundColor Yellow }
+        "too_old" { Write-Host "[..] $TorchDetail" -ForegroundColor Yellow }
+        "too_new" { Write-Host "[..] $TorchDetail" -ForegroundColor Yellow }
+        "broken" { Write-Host "[..] $TorchDetail" -ForegroundColor Yellow }
+        default { Write-Host "[..] PyTorch status is unknown." -ForegroundColor Yellow }
+    }
+    Write-Host "[..] Dry run complete. No files were changed." -ForegroundColor Cyan
+    return
+}
 
 $TorchInstallAttempted = $false
-if ($TorchStatus -eq "valid" -and -not $UpgradeTorch) {
+if ($TorchStatus -eq "valid") {
     Write-Host "[OK] Keeping existing PyTorch ${TorchVersion}." -ForegroundColor Green
-} elseif (($TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") -and -not $UpgradeTorch -and $VenvCreated) {
+} elseif (($TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") -and $VenvCreated) {
     throw "$TorchDetail Installer-created venv contains PyTorch ${TorchVersion}, but TorchCTS requires ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Refusing to continue."
-} elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch -and -not $VenvCreated) {
-    Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
-    Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
-} elseif ($TorchStatus -eq "too_new" -and -not $UpgradeTorch -and -not $VenvCreated) {
-    Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
-    Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
-} elseif ($TorchStatus -eq "broken" -and -not $UpgradeTorch) {
-    throw "$TorchDetail Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
+} elseif ($TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") {
+    Confirm-WrongTorchInstall -TorchDetail $TorchDetail -TorchVersion $TorchVersion -ValidatedRange "${TorchMinVersion}-${TorchMaxValidatedVersion}" -TorchSpec $TorchSpec
+    Write-Host "[..] Installing validated PyTorch (${GpuType})..." -ForegroundColor Cyan
+    $TorchInstallAttempted = $true
+    $torchInstallArgs = @("install", "--upgrade", $TorchSpec)
+    if ($TorchIndexUrl) {
+        $torchInstallArgs += @("--index-url", $TorchIndexUrl)
+    }
+    $torchInstallArgs += "--quiet"
+    & $Pip @torchInstallArgs
+} elseif ($TorchStatus -eq "broken") {
+    throw "$TorchDetail Fix the PyTorch install manually before running setup again."
 } else {
     Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
     $TorchInstallAttempted = $true
     $torchInstallArgs = @("install")
-    if ($UpgradeTorch -or $TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") {
-        $torchInstallArgs += "--upgrade"
-    }
     $torchInstallArgs += $TorchSpec
     if ($TorchIndexUrl) {
         $torchInstallArgs += @("--index-url", $TorchIndexUrl)
@@ -221,6 +369,9 @@ if ($LASTEXITCODE -ne 0) {
 $installedVersion = & $VenvPython -c "import torchcts; print(torchcts.__version__)" 2>&1
 if ($LASTEXITCODE -ne 0) { $installedVersion = "unknown" }
 
+$torchVersion = & $VenvPython -c "import torch; print(torch.__version__)" 2>&1
+if ($LASTEXITCODE -ne 0) { $torchVersion = "unknown" }
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 
 Write-Host ""
@@ -228,7 +379,7 @@ Write-Host "TorchCTS development environment ready." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Version:    ${installedVersion}"
 Write-Host "  Python:     ${pyVersion}"
-Write-Host "  PyTorch:    ${GpuType}"
+Write-Host "  PyTorch:    ${torchVersion} ($(Get-TorchBuildLabel -Variant $GpuType))"
 Write-Host "  Venv:       $(Get-Location)\${VenvDir}"
 Write-Host ""
 Write-Host "  Activate:   .\.venv\Scripts\Activate.ps1"

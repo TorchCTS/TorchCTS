@@ -23,6 +23,8 @@
 #
 # Usage:
 #   ./setup.sh
+#   ./setup.sh --yes
+#   ./setup.sh --dry-run
 #
 # Creates a local .venv and installs TorchCTS in editable mode
 # for development and contribution.
@@ -37,6 +39,8 @@ TORCH_MIN_VERSION="2.7.0"
 TORCH_MAX_EXCLUSIVE_VERSION="2.12.2"
 TORCH_MAX_VALIDATED_VERSION="2.12.1"
 TORCH_SPEC="torch>=${TORCH_MIN_VERSION},<${TORCH_MAX_EXCLUSIVE_VERSION}"
+AUTO_YES="${TORCHCTS_YES:-0}"
+DRY_RUN="${TORCHCTS_DRY_RUN:-0}"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -52,10 +56,128 @@ ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn()  { printf "${YELLOW}⚠${NC} %s\n" "$*"; }
 err()   { printf "${RED}✗${NC} %s\n" "$*" >&2; }
 
+can_prompt() {
+    [ "${TORCHCTS_NON_INTERACTIVE:-}" != "1" ] || return 1
+    [ -r /dev/tty ] || return 1
+    [ -w /dev/tty ] || return 1
+    ( : < /dev/tty ) 2>/dev/null
+}
+
+torch_build_label() {
+    case "$1" in
+        cpu) echo "CPU build" ;;
+        cuda) echo "NVIDIA CUDA build" ;;
+        rocm) echo "AMD ROCm build" ;;
+        xpu) echo "Intel XPU build" ;;
+        mps) echo "Apple Metal/MPS build" ;;
+        *) echo "$1 build" ;;
+    esac
+}
+
+torch_source_label() {
+    if [ -n "$TORCH_INDEX_URL" ]; then
+        echo "$TORCH_INDEX_URL"
+    else
+        echo "PyPI default index"
+    fi
+}
+
+torch_action_label() {
+    if [ "$DRY_RUN" = "1" ]; then
+        case "$TORCH_STATUS" in
+            valid) echo "Would keep installed PyTorch ${TORCH_VERSION:-unknown}" ;;
+            missing)
+                if [ -d "$VENV_DIR" ]; then
+                    echo "Would install validated PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION}, then install TorchCTS"
+                else
+                    echo "Would create the venv, install validated PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION}, then install TorchCTS"
+                fi
+                ;;
+            too_old|too_new) echo "Would ask before replacing PyTorch ${TORCH_VERSION:-unknown}" ;;
+            broken) echo "Would stop because installed PyTorch cannot be imported" ;;
+            *) echo "Would install validated PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION}, then install TorchCTS" ;;
+        esac
+        return
+    fi
+    case "$TORCH_STATUS" in
+        valid) echo "Keep installed PyTorch ${TORCH_VERSION:-unknown}" ;;
+        missing) echo "Install validated PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION}" ;;
+        too_old|too_new)
+            if [ "$VENV_CREATED" = "1" ]; then
+                echo "Stop because the new venv has unexpected PyTorch ${TORCH_VERSION:-unknown}"
+            else
+                echo "Ask before replacing PyTorch ${TORCH_VERSION:-unknown}"
+            fi
+            ;;
+        broken) echo "Stop because installed PyTorch cannot be imported" ;;
+        *) echo "Install validated PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION}" ;;
+    esac
+}
+
+print_install_plan() {
+    echo ""
+    printf "${BOLD}Install plan${NC}\n"
+    echo "  Package:    TorchCTS editable checkout"
+    if [ "$DRY_RUN" = "1" ]; then
+        echo "  Mode:       Dry run (no files will be changed)"
+    else
+        echo "  Mode:       Install"
+    fi
+    echo "  Location:   $(pwd)/${VENV_DIR}"
+    echo "  Python:     ${PYTHON_VERSION} ($(command -v "$PYTHON"))"
+    echo "  PyTorch:    $(torch_build_label "$TORCH_VARIANT")"
+    echo "  Validated:  ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC})"
+    echo "  Torch src:  $(torch_source_label)"
+    echo "  Device:     ${TORCH_DEVICE_HINT}"
+    echo "  Detection:  ${TORCH_REASON}"
+    echo "  Action:     $(torch_action_label)"
+    echo ""
+}
+
+confirm_wrong_torch_install() {
+    warn "$TORCH_DETAIL"
+    echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC})."
+    if [ "$AUTO_YES" = "1" ]; then
+        info "Auto-approved PyTorch replacement via --yes/TORCHCTS_YES=1."
+        return
+    fi
+    if ! can_prompt; then
+        err "PyTorch version is not in the validated range."
+        echo "  Run setup interactively to approve installing a validated PyTorch build, or install ${TORCH_SPEC} manually first."
+        exit 1
+    fi
+    printf "  Install validated PyTorch and continue? [y/N] " > /dev/tty
+    read -r answer < /dev/tty || answer=""
+    case "$answer" in
+        y|Y|yes|YES|Yes) ;;
+        *)
+            err "Aborted before changing PyTorch."
+            exit 1
+            ;;
+    esac
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --yes) AUTO_YES=1 ;;
+        --dry-run) DRY_RUN=1 ;;
+        --help|-h)
+            echo "Usage: setup.sh [--yes] [--dry-run]"
+            exit 0
+            ;;
+        *)
+            err "Unknown option: $1"
+            echo "Usage: setup.sh [--yes] [--dry-run]"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 # ── Locate Python ───────────────────────────────────────────────────────────
 
 PYTHON=""
-for candidate in python3 python; do
+for candidate in "${VENV_DIR}/bin/python" python3 python; do
     if command -v "$candidate" &>/dev/null; then
         PYTHON="$candidate"
         break
@@ -118,6 +240,8 @@ fi
 VENV_CREATED=0
 if [ -d "$VENV_DIR" ]; then
     info "Existing ${VENV_DIR} found - reusing it."
+elif [ "$DRY_RUN" = "1" ]; then
+    info "No existing ${VENV_DIR} found - dry run will not create it."
 else
     info "Creating virtual environment in ${VENV_DIR}..."
     "$PYTHON" -m venv "$VENV_DIR"
@@ -131,7 +255,7 @@ PLAN_OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/torchcts_setup_plan.XXXXXX")
 trap 'rm -f "$PLAN_OUTPUT_FILE"' EXIT INT TERM
 
 info "Selecting PyTorch build..."
-if [ "${TORCHCTS_NON_INTERACTIVE:-}" != "1" ] && [ -r /dev/tty ]; then
+if can_prompt; then
     "$PYTHON" "$PLAN_FILE" --format key-value --prompt < /dev/tty > "$PLAN_OUTPUT_FILE"
 else
     "$PYTHON" "$PLAN_FILE" --format key-value > "$PLAN_OUTPUT_FILE"
@@ -160,8 +284,8 @@ if [ -z "$TORCH_VARIANT" ] || [ -z "$TORCH_DEVICE_HINT" ]; then
     exit 1
 fi
 
-ok "PyTorch selection: ${TORCH_VARIANT} (${TORCH_CONFIDENCE})"
-info "$TORCH_REASON"
+ok "PyTorch build: $(torch_build_label "$TORCH_VARIANT")"
+info "Detection: $TORCH_REASON"
 if [ -n "$TORCH_WARNING" ]; then
     warn "$TORCH_WARNING"
 fi
@@ -171,8 +295,19 @@ fi
 PIP="${VENV_DIR}/bin/pip"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 
-info "Upgrading pip and wheel..."
-"$PIP" install --upgrade pip setuptools wheel --quiet
+if [ "$DRY_RUN" = "1" ] && [ ! -d "$VENV_DIR" ]; then
+    TORCH_STATUS="missing"
+    TORCH_VERSION=""
+    TORCH_DETAIL="No existing TorchCTS virtual environment was found."
+    print_install_plan
+    info "Dry run complete. No files were changed."
+    exit 0
+fi
+
+if [ "$DRY_RUN" != "1" ]; then
+    info "Upgrading pip and wheel..."
+    "$PIP" install --upgrade pip setuptools wheel --quiet
+fi
 
 info "Checking PyTorch install..."
 TORCH_STATUS_OUTPUT=$("$VENV_PYTHON" "$PLAN_FILE" --torch-status --format key-value)
@@ -189,39 +324,46 @@ done <<EOF
 $TORCH_STATUS_OUTPUT
 EOF
 
-TORCH_UPGRADE_REQUESTED="${TORCHCTS_UPGRADE_TORCH:-0}"
+print_install_plan
+
+if [ "$DRY_RUN" = "1" ]; then
+    case "$TORCH_STATUS" in
+        valid) ok "Existing PyTorch ${TORCH_VERSION} is in the validated range." ;;
+        missing) warn "PyTorch is not installed in the existing venv." ;;
+        too_old|too_new|broken) warn "$TORCH_DETAIL" ;;
+        *) warn "PyTorch status is unknown." ;;
+    esac
+    info "Dry run complete. No files were changed."
+    exit 0
+fi
+
 TORCH_INSTALL_ATTEMPTED=0
-if [ "$TORCH_STATUS" = "valid" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+if [ "$TORCH_STATUS" = "valid" ]; then
     ok "Keeping existing PyTorch ${TORCH_VERSION}."
-elif { [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; } && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" = "1" ]; then
+elif { [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; } && [ "$VENV_CREATED" = "1" ]; then
     err "$TORCH_DETAIL"
     echo "  Installer-created venv contains PyTorch ${TORCH_VERSION:-unknown}, but TorchCTS requires ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Refusing to continue."
     exit 1
-elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" != "1" ]; then
-    warn "$TORCH_DETAIL"
-    echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
-elif [ "$TORCH_STATUS" = "too_new" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" != "1" ]; then
-    warn "$TORCH_DETAIL"
-    echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
-elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+elif [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; then
+    confirm_wrong_torch_install
+    info "Installing validated PyTorch (${TORCH_VARIANT})..."
+    TORCH_INSTALL_ATTEMPTED=1
+    if [ -n "$TORCH_INDEX_URL" ]; then
+        "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
+    else
+        "$PIP" install --upgrade "$TORCH_SPEC" --quiet
+    fi
+elif [ "$TORCH_STATUS" = "broken" ]; then
     err "$TORCH_DETAIL"
-    echo "  Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
+    echo "  Fix the PyTorch install manually before running setup again."
     exit 1
 else
     info "Installing PyTorch (${TORCH_VARIANT})..."
     TORCH_INSTALL_ATTEMPTED=1
-    if [ "$TORCH_UPGRADE_REQUESTED" = "1" ] || [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; then
-        if [ -n "$TORCH_INDEX_URL" ]; then
-            "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
-        else
-            "$PIP" install --upgrade "$TORCH_SPEC" --quiet
-        fi
+    if [ -n "$TORCH_INDEX_URL" ]; then
+        "$PIP" install "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
     else
-        if [ -n "$TORCH_INDEX_URL" ]; then
-            "$PIP" install "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
-        else
-            "$PIP" install "$TORCH_SPEC" --quiet
-        fi
+        "$PIP" install "$TORCH_SPEC" --quiet
     fi
 fi
 
@@ -254,6 +396,7 @@ info "Verifying PyTorch install..."
 "$VENV_PYTHON" "$PLAN_FILE" --verify "$TORCH_VARIANT"
 
 INSTALLED_VERSION=$("${VENV_PYTHON}" -c "import torchcts; print(torchcts.__version__)" 2>/dev/null || echo "unknown")
+TORCH_VERSION=$("${VENV_PYTHON}" -c "import torch; print(torch.__version__)" 2>/dev/null || echo "unknown")
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 
@@ -262,7 +405,7 @@ printf "${BOLD}${GREEN}TorchCTS development environment ready.${NC}\n"
 echo ""
 echo "  Version:    ${INSTALLED_VERSION}"
 echo "  Python:     ${PYTHON_VERSION}"
-echo "  PyTorch:    ${TORCH_VARIANT}"
+echo "  PyTorch:    ${TORCH_VERSION} ($(torch_build_label "$TORCH_VARIANT"))"
 echo "  Venv:       $(pwd)/${VENV_DIR}"
 echo ""
 echo "  Activate:   source ${VENV_DIR}/bin/activate"
