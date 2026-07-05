@@ -211,6 +211,34 @@
       }
     },
     {
+      "id": "mps-path-shape-sdpa-bool-causal-pytorch-2-12",
+      "backend": "mps",
+      "match": "coverage_id",
+      "nodeid": "torchcts/workloads/test_workload_path_shapes.py::test_workload_path_shape_case[attention_sdpa_sdpa_sq8_sk8_d32_bool_causal_f32_standard]",
+      "dispatcher": "aten::scaled_dot_product_attention",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGABRT",
+      "repro": {
+        "script": "python -m torchcts path-shapes run --device mps --level 8 --subprocess-per-shape -q --tb=short",
+        "case": "path_shape_attention_sdpa_bool_causal_sigabrt_2026_07_05"
+      },
+      "reason": "Real MPS standard and heavy path-shape sweeps on 2026-07-05 showed bool-mask causal scaled_dot_product_attention workload cases abort child subprocesses with SIGABRT before a child result record is written. Non-bool and non-causal SDPA path-shape rows in the same sweeps did not hit this crash pattern, so keep the rule constrained to the bool+causal path-shape workload coverage IDs.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-10-31",
+      "constraints": {
+        "suite": ["workloads"],
+        "coverage_kind": ["path_shape"],
+        "semantic_level": [7, 8],
+        "dtype": ["torch.float32"],
+        "coverage_id_glob": ["attention_sdpa_sdpa_sq*_sk*_d*_bool_causal_f32_*"],
+        "nodeid_glob": ["torchcts/workloads/test_workload_path_shapes.py::test_workload_path_shape_case[attention_sdpa_sdpa_*_bool_causal_f32_*"]
+      }
+    },
+    {
       "id": "mps-generated-autograd-backward-teardown-pytorch-2-12",
       "backend": "mps",
       "match": "coverage_id",

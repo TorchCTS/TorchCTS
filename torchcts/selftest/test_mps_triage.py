@@ -97,6 +97,16 @@ def _generated_item(nodeid, entry, *, fspath="torchcts/generated/test_out_varian
     )
 
 
+def _path_shape_item(nodeid, path_shape_case):
+    return SimpleNamespace(
+        nodeid=nodeid,
+        fspath=nodeid.split("::", 1)[0],
+        name=nodeid.rsplit("::", 1)[-1],
+        callspec=SimpleNamespace(params={"path_shape_case": path_shape_case}),
+        iter_markers=lambda name=None: iter(()),
+    )
+
+
 def _reflection_pad3d_out_entry():
     return {
         "name": "aten::reflection_pad3d.out",
@@ -1066,6 +1076,45 @@ def test_packaged_known_segfaults_cover_generated_autograd_backward_family():
     assert match["constraints"]["surface_kind"] == ["autograd_backward"]
 
 
+def test_packaged_known_segfaults_cover_path_shape_sdpa_bool_causal_nodes():
+    entries = known_segfaults.load_known_segfaults(Path.cwd())
+    active = known_segfaults.active_known_segfaults(
+        entries,
+        backend="mps",
+        torch_version="2.12.1",
+        hardware_key="Apple_M3_Max_128gb",
+    )
+    case_id = "attention_sdpa_sdpa_sq8_sk8_d32_bool_causal_f32_standard"
+    nodeid = f"torchcts/workloads/test_workload_path_shapes.py::test_workload_path_shape_case[{case_id}]"
+    item = _path_shape_item(
+        nodeid,
+        {
+            "case_id": case_id,
+            "family": "attention",
+            "resource_tier": "standard",
+            "model_role": "attention_kernel_selection",
+            "branch_intent": ["sdpa", "sq_8", "sk_8", "head_dim_32", "mask_bool", "causal"],
+            "dtype": "torch.float32",
+            "covers": ["aten::scaled_dot_product_attention"],
+        },
+    )
+
+    match = known_segfaults.match_known_segfault(
+        item,
+        active,
+        metadata={
+            **harness._extract_result_metadata(item),
+            "semantic_level": 7,
+        },
+    )
+
+    assert match is not None
+    assert match["id"] == "mps-path-shape-sdpa-bool-causal-pytorch-2-12"
+    assert match["matched_by"] == "coverage_id"
+    assert match["expected_signal"] == "SIGABRT"
+    assert match["constraints"]["coverage_kind"] == ["path_shape"]
+
+
 def test_known_segfault_schema_accepts_dispatcher_and_coverage_id_entries():
     payload = {
         "version": 1,
@@ -1579,6 +1628,14 @@ def test_harness_child_command_disables_adaptive_isolation(monkeypatch, tmp_path
         "--level-exact": None,
         "--level-range": None,
         "--dtype": [],
+        "--path-shape-family": ["matmul"],
+        "--path-shape-category": [],
+        "--path-shape-case": [],
+        "--path-shape-runner": [],
+        "--path-shape-resource-tier": ["heavy"],
+        "--path-shape-cost-class": ["large"],
+        "--path-shape-model-role": [],
+        "--path-shape-dtype-group": ["float"],
         "--memory-mode": "balanced",
         "--max-device-memory": None,
         "--max-tensor-size": None,
@@ -1591,6 +1648,10 @@ def test_harness_child_command_disables_adaptive_isolation(monkeypatch, tmp_path
 
     assert cmd[cmd.index("--adaptive-isolation") + 1] == "off"
     assert cmd[cmd.index("--known-segfault-policy") + 1] == "off"
+    assert cmd[cmd.index("--path-shape-family") + 1] == "matmul"
+    assert cmd[cmd.index("--path-shape-resource-tier") + 1] == "heavy"
+    assert cmd[cmd.index("--path-shape-cost-class") + 1] == "large"
+    assert cmd[cmd.index("--path-shape-dtype-group") + 1] == "float"
 
 
 def test_harness_finalizes_adaptive_candidates_for_collected_items(monkeypatch, tmp_path, capsys):
