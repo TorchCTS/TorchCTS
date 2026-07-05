@@ -107,11 +107,13 @@ if (-not (Test-Path $PlanFile)) {
 
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
+$VenvCreated = $false
 if (Test-Path $VenvDir) {
     Write-Host "[..] Existing ${VenvDir} found - reusing it." -ForegroundColor Cyan
 } else {
     Write-Host "[..] Creating virtual environment in ${VenvDir}..." -ForegroundColor Cyan
     & $Python @PythonArgs -m venv $VenvDir
+    $VenvCreated = $true
     Write-Host "[OK] Virtual environment created." -ForegroundColor Green
 }
 
@@ -164,20 +166,24 @@ $TorchVersion = $torchStatusPlan["version"]
 $TorchDetail = $torchStatusPlan["detail"]
 $UpgradeTorch = $env:TORCHCTS_UPGRADE_TORCH -eq "1"
 
+$TorchInstallAttempted = $false
 if ($TorchStatus -eq "valid" -and -not $UpgradeTorch) {
     Write-Host "[OK] Keeping existing PyTorch ${TorchVersion}." -ForegroundColor Green
-} elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch) {
+} elseif (($TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") -and -not $UpgradeTorch -and $VenvCreated) {
+    throw "$TorchDetail Installer-created venv contains PyTorch ${TorchVersion}, but TorchCTS requires ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Refusing to continue."
+} elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch -and -not $VenvCreated) {
     Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
     Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
-} elseif ($TorchStatus -eq "too_new" -and -not $UpgradeTorch) {
+} elseif ($TorchStatus -eq "too_new" -and -not $UpgradeTorch -and -not $VenvCreated) {
     Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
     Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
 } elseif ($TorchStatus -eq "broken" -and -not $UpgradeTorch) {
     throw "$TorchDetail Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
 } else {
     Write-Host "[..] Installing PyTorch (${GpuType})..." -ForegroundColor Cyan
+    $TorchInstallAttempted = $true
     $torchInstallArgs = @("install")
-    if ($UpgradeTorch) {
+    if ($UpgradeTorch -or $TorchStatus -eq "too_old" -or $TorchStatus -eq "too_new") {
         $torchInstallArgs += "--upgrade"
     }
     $torchInstallArgs += $TorchSpec
@@ -186,6 +192,21 @@ if ($TorchStatus -eq "valid" -and -not $UpgradeTorch) {
     }
     $torchInstallArgs += "--quiet"
     & $Pip @torchInstallArgs
+}
+
+if ($TorchInstallAttempted) {
+    Write-Host "[..] Checking installed PyTorch version..." -ForegroundColor Cyan
+    $torchStatusOutput = & $VenvPython $PlanFile --torch-status --format key-value
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyTorch status check failed."
+    }
+    $torchStatusPlan = Read-InstallPlan -Lines $torchStatusOutput
+    $TorchStatus = $torchStatusPlan["status"]
+    $TorchVersion = $torchStatusPlan["version"]
+    $TorchDetail = $torchStatusPlan["detail"]
+    if ($TorchStatus -ne "valid") {
+        throw "$TorchDetail Installer-managed PyTorch install produced ${TorchVersion}; expected ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec})."
+    }
 }
 
 Write-Host "[..] Installing TorchCTS in editable mode..." -ForegroundColor Cyan

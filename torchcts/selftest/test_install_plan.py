@@ -19,12 +19,15 @@
 # SOFTWARE.
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from torchcts.site_scripts import install_plan
 
 pytestmark = pytest.mark.covers_category("selftest")
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def make_context(
     *,
@@ -149,6 +152,33 @@ def test_torch_dependency_floor_is_27():
     assert not install_plan.torch_version_satisfies("2.12.2")
     assert not install_plan.torch_version_satisfies("2.13.0")
     assert not install_plan.torch_version_satisfies("2.6.9")
+
+
+def test_install_scripts_do_not_tolerate_wrong_torch_in_created_venv():
+    shell_paths = [
+        REPO_ROOT / "site_scripts" / "install.sh",
+        REPO_ROOT / "setup.sh",
+    ]
+    powershell_paths = [
+        REPO_ROOT / "site_scripts" / "install.ps1",
+        REPO_ROOT / "setup.ps1",
+    ]
+
+    for path in shell_paths:
+        text = path.read_text()
+        assert "VENV_CREATED=1" in text
+        assert "TORCH_INSTALL_ATTEMPTED=1" in text
+        assert "Installer-created venv contains PyTorch" in text
+        assert "Refusing to continue" in text
+        assert "Installer-managed PyTorch install produced" in text
+
+    for path in powershell_paths:
+        text = path.read_text()
+        assert "$VenvCreated = $true" in text
+        assert "$TorchInstallAttempted = $true" in text
+        assert "Installer-created venv contains PyTorch" in text
+        assert "Refusing to continue" in text
+        assert "Installer-managed PyTorch install produced" in text
 
 
 @pytest.mark.parametrize(

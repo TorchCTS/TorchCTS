@@ -167,12 +167,14 @@ fi
 
 # ── Create or reuse venv ────────────────────────────────────────────────────
 
+VENV_CREATED=0
 if [ -d "$VENV_DIR" ]; then
     info "Existing installation found - upgrading."
 else
     info "Creating virtual environment in ${VENV_DIR}..."
     mkdir -p "$INSTALL_DIR"
     "$PYTHON" -m venv "$VENV_DIR"
+    VENV_CREATED=1
     ok "Virtual environment created."
 fi
 
@@ -246,12 +248,17 @@ $TORCH_STATUS_OUTPUT
 EOF
 
 TORCH_UPGRADE_REQUESTED="${TORCHCTS_UPGRADE_TORCH:-0}"
+TORCH_INSTALL_ATTEMPTED=0
 if [ "$TORCH_STATUS" = "valid" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     ok "Keeping existing PyTorch ${TORCH_VERSION}."
-elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+elif { [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; } && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" = "1" ]; then
+    err "$TORCH_DETAIL"
+    echo "  Installer-created venv contains PyTorch ${TORCH_VERSION:-unknown}, but TorchCTS requires ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Refusing to continue."
+    exit 1
+elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" != "1" ]; then
     warn "$TORCH_DETAIL"
     echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
-elif [ "$TORCH_STATUS" = "too_new" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+elif [ "$TORCH_STATUS" = "too_new" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ] && [ "$VENV_CREATED" != "1" ]; then
     warn "$TORCH_DETAIL"
     echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
 elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
@@ -260,7 +267,8 @@ elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; th
     exit 1
 else
     info "Installing PyTorch (${TORCH_VARIANT})..."
-    if [ "$TORCH_UPGRADE_REQUESTED" = "1" ]; then
+    TORCH_INSTALL_ATTEMPTED=1
+    if [ "$TORCH_UPGRADE_REQUESTED" = "1" ] || [ "$TORCH_STATUS" = "too_old" ] || [ "$TORCH_STATUS" = "too_new" ]; then
         if [ -n "$TORCH_INDEX_URL" ]; then
             "$PIP" install --upgrade "$TORCH_SPEC" --index-url "$TORCH_INDEX_URL" --quiet
         else
@@ -272,6 +280,28 @@ else
         else
             "$PIP" install "$TORCH_SPEC" --quiet
         fi
+    fi
+fi
+
+if [ "$TORCH_INSTALL_ATTEMPTED" = "1" ]; then
+    info "Checking installed PyTorch version..."
+    TORCH_STATUS_OUTPUT=$("$VENV_PYTHON" "$PLAN_FILE" --torch-status --format key-value)
+    TORCH_STATUS=""
+    TORCH_VERSION=""
+    TORCH_DETAIL=""
+    while IFS='=' read -r key value; do
+        case "$key" in
+            status) TORCH_STATUS=$value ;;
+            version) TORCH_VERSION=$value ;;
+            detail) TORCH_DETAIL=$value ;;
+        esac
+    done <<EOF
+$TORCH_STATUS_OUTPUT
+EOF
+    if [ "$TORCH_STATUS" != "valid" ]; then
+        err "$TORCH_DETAIL"
+        echo "  Installer-managed PyTorch install produced ${TORCH_VERSION:-unknown}; expected ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC})."
+        exit 1
     fi
 fi
 
