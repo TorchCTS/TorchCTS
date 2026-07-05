@@ -39,7 +39,9 @@ $VenvDir = Join-Path $InstallDir "venv"
 $MinMajor = 3
 $MinMinor = 10
 $TorchMinVersion = "2.7.0"
-$TorchSpec = "torch>=$TorchMinVersion"
+$TorchMaxExclusiveVersion = "2.12.2"
+$TorchMaxValidatedVersion = "2.12.1"
+$TorchSpec = "torch>=$TorchMinVersion,<$TorchMaxExclusiveVersion"
 
 function Read-InstallPlan {
     param([string[]]$Lines)
@@ -208,7 +210,11 @@ try {
     if ($TorchStatus -eq "valid" -and -not $UpgradeTorch) {
         Write-Host "[OK] Keeping existing PyTorch ${TorchVersion}." -ForegroundColor Green
     } elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch) {
-        throw "$TorchDetail Install a PyTorch ${TorchMinVersion}+ build manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup upgrade it."
+        Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
+        Write-Host "     Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
+    } elseif ($TorchStatus -eq "too_new" -and -not $UpgradeTorch) {
+        Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
+        Write-Host "     Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
     } elseif ($TorchStatus -eq "broken" -and -not $UpgradeTorch) {
         throw "$TorchDetail Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
     } else {

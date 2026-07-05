@@ -139,11 +139,35 @@ def test_no_gpu_signal_selects_cpu_without_warning():
 
 def test_torch_dependency_floor_is_27():
     assert install_plan.TORCH_MIN_VERSION == "2.7.0"
-    assert install_plan.TORCH_SPEC == "torch>=2.7.0"
+    assert install_plan.TORCH_MAX_EXCLUSIVE_VERSION == "2.12.2"
+    assert install_plan.TORCH_MAX_VALIDATED_VERSION == "2.12.1"
+    assert install_plan.TORCH_SPEC == "torch>=2.7.0,<2.12.2"
+    assert install_plan.TORCH_VALIDATED_RANGE == "2.7.0-2.12.1"
     assert install_plan.torch_version_satisfies("2.7.0")
     assert install_plan.torch_version_satisfies("2.7.1+cpu")
     assert install_plan.torch_version_satisfies("2.12.1")
+    assert not install_plan.torch_version_satisfies("2.12.2")
+    assert not install_plan.torch_version_satisfies("2.13.0")
     assert not install_plan.torch_version_satisfies("2.6.9")
+
+
+@pytest.mark.parametrize(
+    ("version", "expected_status"),
+    [
+        ("2.7.0", "valid"),
+        ("2.6.9", "too_old"),
+        ("2.12.2", "too_new"),
+        ("not-a-version", "broken"),
+    ],
+)
+def test_torch_status_detail_names_validated_range_and_bound(monkeypatch, version, expected_status):
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(__version__=version))
+
+    status = install_plan.inspect_torch_install()
+
+    assert status.status == expected_status
+    assert "2.7.0-2.12.1" in status.detail
+    assert "torch>=2.7.0,<2.12.2" in status.detail
 
 
 def test_valid_torch_install_is_kept_without_upgrade():
@@ -168,13 +192,25 @@ def test_missing_torch_install_is_installed():
     assert install_plan.torch_install_action(status, upgrade_requested=False) == "install"
 
 
-def test_old_or_broken_torch_install_fails_without_upgrade():
+def test_old_or_new_torch_install_warns_without_upgrade():
     too_old = install_plan.TorchInstallStatus(
         "too_old",
         "2.6.0",
         install_plan.TORCH_MIN_VERSION,
         "too old",
     )
+    too_new = install_plan.TorchInstallStatus(
+        "too_new",
+        "2.12.2",
+        install_plan.TORCH_MIN_VERSION,
+        "too new",
+    )
+
+    assert install_plan.torch_install_action(too_old, upgrade_requested=False) == "keep"
+    assert install_plan.torch_install_action(too_new, upgrade_requested=False) == "keep"
+
+
+def test_broken_torch_install_fails_without_upgrade():
     broken = install_plan.TorchInstallStatus(
         "broken",
         "",
@@ -182,7 +218,6 @@ def test_old_or_broken_torch_install_fails_without_upgrade():
         "broken",
     )
 
-    assert install_plan.torch_install_action(too_old, upgrade_requested=False) == "fail"
     assert install_plan.torch_install_action(broken, upgrade_requested=False) == "fail"
 
 

@@ -34,7 +34,9 @@ VENV_DIR="$INSTALL_DIR/venv"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
 TORCH_MIN_VERSION="2.7.0"
-TORCH_SPEC="torch>=${TORCH_MIN_VERSION}"
+TORCH_MAX_EXCLUSIVE_VERSION="2.12.2"
+TORCH_MAX_VALIDATED_VERSION="2.12.1"
+TORCH_SPEC="torch>=${TORCH_MIN_VERSION},<${TORCH_MAX_EXCLUSIVE_VERSION}"
 
 # ── Colors (only if stdout is a terminal) ────────────────────────────────────
 
@@ -247,9 +249,11 @@ TORCH_UPGRADE_REQUESTED="${TORCHCTS_UPGRADE_TORCH:-0}"
 if [ "$TORCH_STATUS" = "valid" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     ok "Keeping existing PyTorch ${TORCH_VERSION}."
 elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
-    err "$TORCH_DETAIL"
-    echo "  Install a PyTorch ${TORCH_MIN_VERSION}+ build manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup upgrade it."
-    exit 1
+    warn "$TORCH_DETAIL"
+    echo "  Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
+elif [ "$TORCH_STATUS" = "too_new" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
+    warn "$TORCH_DETAIL"
+    echo "  Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
 elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     err "$TORCH_DETAIL"
     echo "  Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."

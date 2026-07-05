@@ -40,7 +40,10 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 
 TORCH_MIN_VERSION = "2.7.0"
-TORCH_SPEC = f"torch>={TORCH_MIN_VERSION}"
+TORCH_MAX_EXCLUSIVE_VERSION = "2.12.2"
+TORCH_MAX_VALIDATED_VERSION = "2.12.1"
+TORCH_SPEC = f"torch>={TORCH_MIN_VERSION},<{TORCH_MAX_EXCLUSIVE_VERSION}"
+TORCH_VALIDATED_RANGE = f"{TORCH_MIN_VERSION}-{TORCH_MAX_VALIDATED_VERSION}"
 INDEX_URLS = {
     "cpu": "https://download.pytorch.org/whl/cpu",
     "cuda": "https://download.pytorch.org/whl/cu128",
@@ -158,15 +161,31 @@ def _parse_version_tuple(value: str | None) -> tuple[int, int, int] | None:
     return tuple(int(part) for part in match.groups())
 
 
-def torch_version_satisfies(version: str | None, minimum: str = TORCH_MIN_VERSION) -> bool:
+def torch_version_satisfies(
+    version: str | None,
+    minimum: str = TORCH_MIN_VERSION,
+    maximum_exclusive: str = TORCH_MAX_EXCLUSIVE_VERSION,
+) -> bool:
     parsed_version = _parse_version_tuple(version)
     parsed_minimum = _parse_version_tuple(minimum)
-    if parsed_version is None or parsed_minimum is None:
+    parsed_maximum = _parse_version_tuple(maximum_exclusive)
+    if parsed_version is None or parsed_minimum is None or parsed_maximum is None:
         return False
-    return parsed_version >= parsed_minimum
+    return parsed_minimum <= parsed_version < parsed_maximum
 
 
-def inspect_torch_install(minimum: str = TORCH_MIN_VERSION) -> TorchInstallStatus:
+def torch_requirement_detail(
+    minimum: str = TORCH_MIN_VERSION,
+    maximum_exclusive: str = TORCH_MAX_EXCLUSIVE_VERSION,
+    maximum_validated: str = TORCH_MAX_VALIDATED_VERSION,
+) -> str:
+    return f"{minimum}-{maximum_validated} (torch>={minimum},<{maximum_exclusive})"
+
+
+def inspect_torch_install(
+    minimum: str = TORCH_MIN_VERSION,
+    maximum_exclusive: str = TORCH_MAX_EXCLUSIVE_VERSION,
+) -> TorchInstallStatus:
     try:
         import torch  # type: ignore[import-not-found]
     except ModuleNotFoundError as exc:
@@ -177,9 +196,37 @@ def inspect_torch_install(minimum: str = TORCH_MIN_VERSION) -> TorchInstallStatu
         return TorchInstallStatus("broken", "", minimum, f"PyTorch import failed: {exc}")
 
     version = str(getattr(torch, "__version__", "unknown"))
-    if torch_version_satisfies(version, minimum):
-        return TorchInstallStatus("valid", version, minimum, f"PyTorch {version} satisfies torch>={minimum}")
-    return TorchInstallStatus("too_old", version, minimum, f"PyTorch {version} is older than torch>={minimum}")
+    parsed_version = _parse_version_tuple(version)
+    parsed_minimum = _parse_version_tuple(minimum)
+    parsed_maximum = _parse_version_tuple(maximum_exclusive)
+    requirement = torch_requirement_detail(minimum, maximum_exclusive)
+    if torch_version_satisfies(version, minimum, maximum_exclusive):
+        return TorchInstallStatus(
+            "valid",
+            version,
+            minimum,
+            f"PyTorch {version} satisfies validated TorchCTS range {requirement}",
+        )
+    if parsed_version is not None and parsed_maximum is not None and parsed_version >= parsed_maximum:
+        return TorchInstallStatus(
+            "too_new",
+            version,
+            minimum,
+            f"PyTorch {version} is newer than validated TorchCTS range {requirement}",
+        )
+    if parsed_version is None or parsed_minimum is None:
+        return TorchInstallStatus(
+            "broken",
+            version,
+            minimum,
+            f"PyTorch version {version} could not be parsed against validated TorchCTS range {requirement}",
+        )
+    return TorchInstallStatus(
+        "too_old",
+        version,
+        minimum,
+        f"PyTorch {version} is older than validated TorchCTS range {requirement}",
+    )
 
 
 def torch_install_action(status: TorchInstallStatus, *, upgrade_requested: bool = False) -> str:
@@ -188,6 +235,8 @@ def torch_install_action(status: TorchInstallStatus, *, upgrade_requested: bool 
     if status.status == "missing":
         return "install"
     if status.status == "valid":
+        return "keep"
+    if status.status in {"too_old", "too_new"}:
         return "keep"
     return "fail"
 
