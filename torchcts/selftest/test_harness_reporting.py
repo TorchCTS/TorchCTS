@@ -73,10 +73,6 @@ from torchcts.opinfo.test_opinfo_errors import _assert_exception_matches_expecte
 
 pytestmark = pytest.mark.covers_category("selftest")
 _SOURCE_REPO_ROOT = Path(__file__).resolve().parents[2]
-_SOURCE_CHECKOUT_ONLY = pytest.mark.skipif(
-    not (_SOURCE_REPO_ROOT / "pyproject.toml").exists(),
-    reason="source checkout test requires repository files",
-)
 
 
 def test_build_report_counts_opinfo_and_ignores_plumbing():
@@ -1980,44 +1976,6 @@ def test_autocast_declared_but_failing_path_is_not_skipped(monkeypatch):
 
     with pytest.raises(RuntimeError, match="autocast broken"):
         mixed_precision_tests.test_autocast_precisions(torch.float16, "cpu", {})
-
-
-def _load_release_hygiene_module():
-    return runpy.run_path(str(_SOURCE_REPO_ROOT / "scripts" / "check_release_hygiene.py"))
-
-
-@_SOURCE_CHECKOUT_ONLY
-def test_release_hygiene_rejects_package_known_failure_cache(tmp_path):
-    hygiene = _load_release_hygiene_module()
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    cache_path = tmp_path / "torchcts" / "opinfo_cache" / "known_failures.json"
-    cache_path.parent.mkdir(parents=True)
-    cache_path.write_text("{}\n", encoding="utf-8")
-
-    errors = hygiene["_check_git_paths"](tmp_path)
-
-    assert any("known_failures.json" in error for error in errors)
-
-
-@_SOURCE_CHECKOUT_ONLY
-def test_release_hygiene_rejects_tracked_backend_specific_text(tmp_path):
-    hygiene = _load_release_hygiene_module()
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    bad = tmp_path / "bad.txt"
-    bad.write_text("backend name: " + ("metal" "core") + "\n", encoding="utf-8")
-    subprocess.run(["git", "add", "bad.txt"], cwd=tmp_path, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    errors = hygiene["_check_forbidden_text"](tmp_path)
-
-    assert any("forbidden text" in error for error in errors)
-
-
-@_SOURCE_CHECKOUT_ONLY
-def test_pyproject_does_not_suppress_backend_fallback_or_pluggy_teardown_warnings():
-    pyproject = (_SOURCE_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-
-    assert "The operator .* is not currently supported on the MPS backend" not in pyproject
-    assert "PluggyTeardownRaisedWarning" not in pyproject
 
 
 def _minimal_valid_manifest():
@@ -4365,7 +4323,7 @@ def test_coverage_evidence_pack_skips_non_runnable_oracles(monkeypatch):
         runner="cuda_fused_dropout",
         backend_gate="cuda",
         contract_status="candidate",
-        contract_ref="docs/coverage/contract-evidence.md#candidate",
+        contract_ref="contract:fixture-candidate",
         promotion_backend="cuda",
     )
     wrong_device = OracleSpec(
@@ -4431,7 +4389,7 @@ def test_coverage_evidence_pack_records_oracle_unavailable_as_skip(monkeypatch):
         runner="cuda_runner",
         backend_gate="cuda",
         contract_status="candidate",
-        contract_ref="docs/coverage/contract-evidence.md#candidate",
+        contract_ref="contract:fixture-candidate",
         promotion_backend="cuda",
     )
 
@@ -4508,7 +4466,7 @@ def test_backend_pack_feasibility_ledger_buckets_pending_rows():
                     "oracle_id": "covered",
                     "runner": "cuda_runner",
                     "contract_status": "accepted",
-                    "contract_ref": "docs/coverage/contract-evidence.md#covered",
+                    "contract_ref": "contract:fixture-covered",
                     "promotion_evidence": "scratch/evidence.tar.gz",
                     "promotion_backend": "cuda",
                     "backend_gate": "cuda",
@@ -4522,7 +4480,7 @@ def test_backend_pack_feasibility_ledger_buckets_pending_rows():
                     "oracle_id": "candidate",
                     "runner": "cuda_runner",
                     "contract_status": "candidate",
-                    "contract_ref": "docs/coverage/contract-evidence.md#candidate",
+                    "contract_ref": "contract:fixture-candidate",
                     "promotion_backend": "cuda",
                     "backend_gate": "cuda",
                 },

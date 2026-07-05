@@ -37,11 +37,6 @@ from torchcts.generated import coverage_helpers
 
 
 pytestmark = pytest.mark.covers_category("selftest")
-_SOURCE_REPO_ROOT = Path(__file__).resolve().parents[2]
-_SOURCE_CHECKOUT_ONLY = pytest.mark.skipif(
-    not (_SOURCE_REPO_ROOT / "pyproject.toml").exists(),
-    reason="source checkout test requires repository files",
-)
 
 
 def _adaptive_result_payload(results, *, device="mps", hardware="hw", version="2.12.1", completed=False):
@@ -1704,7 +1699,6 @@ def test_harness_finalizes_adaptive_candidates_for_collected_items(monkeypatch, 
     assert artifact["rejected"][0]["reason"] == "not_collected_in_current_run"
 
 
-@_SOURCE_CHECKOUT_ONLY
 def test_adaptive_isolation_synthetic_replay_runs_candidate_in_subprocess(tmp_path):
     results_dir = tmp_path / "results"
     results_dir.mkdir()
