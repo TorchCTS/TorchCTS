@@ -5,32 +5,32 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-07-01T15:17:16.159917Z |
-| TorchCTS version | 0.3.4 |
-| Installed TorchCTS metadata version | 0.3.4 |
-| pyproject.toml version | 0.3.4 |
+| Generated at | 2026-07-05T06:55:06.554204Z |
+| TorchCTS version | 0.3.5 |
+| Installed TorchCTS metadata version | 0.3.5 |
+| pyproject.toml version | 0.3.5 |
 | TorchCTS versions agree | True |
 | TorchCTS import path | /Users/kris/localprojects/torchcts/torchcts/__init__.py |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-07-01T15:14:59.393495Z |
+| Coverage audit timestamp | 2026-07-05T06:52:59.685332Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 18906 |
-| Pytest executable nodes | 18822 |
+| Pytest nodes collected | 19788 |
+| Pytest executable nodes | 19704 |
 | Pytest skip-marked nodes | 84 |
 | Structured deselected nodes | 0 |
 | ATen overloads inventoried | 3225 |
 | Backend-relevant overloads | 3214 |
-| Covered backend-relevant overloads | 2966 |
-| Dispatcher coverage | 92.3% |
+| Covered backend-relevant overloads | 3062 |
+| Dispatcher coverage | 95.3% |
 | Unknown tensor-touching surfaces | 0 |
-| Pending surfaces | 192 |
+| Pending surfaces | 96 |
 | Excluded surfaces | 56 |
 | Runtime-unavailable overloads | 0 |
 | Generated coverage surfaces | 1910 |
@@ -45,13 +45,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 814 | 814 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 1 | 846 | 846 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
 | 2 | 13773 | 13759 | 14 | 0 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
 | 3 | 1084 | 1081 | 3 | 0 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
 | 4 | 2405 | 2380 | 25 | 0 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
-| 5 | 478 | 478 | 0 | 0 | 380 | 347 | Advanced numeric, layout, storage, sparse, nested, and stride-sensitive behavior. |
+| 5 | 1248 | 1248 | 0 | 0 | 380 | 347 | Advanced numeric, layout, storage, sparse, nested, and stride-sensitive behavior. |
 | 6 | 199 | 181 | 18 | 0 | 19 | 19 | Specialized backend integration such as compiler, device API, allocator, quantization-adjacent, and low-level implementation surfaces. |
-| 7 | 123 | 99 | 24 | 0 | 6 | 0 | Heavy integration and workload coverage that validates realistic model or multi-device behavior. |
+| 7 | 203 | 179 | 24 | 0 | 6 | 0 | Heavy integration and workload coverage that validates realistic model or multi-device behavior. |
 | 8 | 30 | 30 | 0 | 0 | 0 | 0 | Release-depth stress and adversarial coverage intended for exhaustive validation passes. |
 
 ## Pytest Collection Summary
@@ -60,17 +60,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 18906 |
-| Node IDs parsed from stdout | 18906 |
-| Pytest summary count | 18906 |
-| Parameterized node IDs | 18433 |
-| Unparameterized node IDs | 473 |
+| Structured records parsed | 19788 |
+| Node IDs parsed from stdout | 19788 |
+| Pytest summary count | 19788 |
+| Parameterized node IDs | 19283 |
+| Unparameterized node IDs | 505 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 18822 |
+| executable | 19704 |
 | pytest_skip_marked | 84 |
 
 ## Pytest Collection Skip Reasons
@@ -87,11 +87,11 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
-| operators | 434 |
-| selftest | 392 |
+| operators | 1149 |
+| selftest | 424 |
+| workloads | 255 |
 | compiler | 144 |
 | dtypes | 135 |
-| workloads | 120 |
 | strides | 87 |
 | autograd | 77 |
 | training | 56 |
@@ -109,8 +109,8 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
-| handwritten | 1158 |
-| selftest | 392 |
+| handwritten | 2008 |
+| selftest | 424 |
 
 ## Pytest Nodes By File
 
@@ -120,12 +120,14 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/opinfo/test_opinfo_backward.py | 2319 |
 | torchcts/generated/test_foreach_fused.py | 1969 |
 | torchcts/generated/test_out_variants.py | 898 |
+| torchcts/operators/test_operator_path_shapes.py | 715 |
 | torchcts/generated/test_functional_variants.py | 578 |
 | torchcts/generated/test_inplace_variants.py | 346 |
 | torchcts/generated/test_oracle_surfaces.py | 273 |
-| torchcts/selftest/test_harness_reporting.py | 218 |
+| torchcts/selftest/test_harness_reporting.py | 237 |
 | torchcts/opinfo/test_opinfo_errors.py | 202 |
-| torchcts/selftest/test_mps_triage.py | 109 |
+| torchcts/workloads/test_workload_path_shapes.py | 135 |
+| torchcts/selftest/test_mps_triage.py | 110 |
 | torchcts/generated/test_view_aliases.py | 100 |
 | torchcts/strides/test_noncontiguous.py | 73 |
 | torchcts/workloads/test_sdpa.py | 73 |
@@ -165,6 +167,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/autograd/test_double_backward.py | 12 |
 | torchcts/generated/test_rng_variants.py | 12 |
 | torchcts/memory/test_allocator.py | 12 |
+| torchcts/selftest/test_path_shapes.py | 11 |
 | torchcts/dtypes/test_complex.py | 9 |
 | torchcts/selftest/test_diagnose.py | 9 |
 | torchcts/stress/test_large_tensors.py | 9 |
@@ -198,11 +201,11 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/multi_device/test_multi_device.py | 3 |
 | torchcts/operators/test_foreach.py | 3 |
 | torchcts/rng/test_dropout_rrelu_variants.py | 3 |
+| torchcts/selftest/test_package_artifacts.py | 3 |
 | torchcts/serialization/test_save_load.py | 3 |
 | torchcts/workloads/test_attention_dispatcher.py | 3 |
 | torchcts/autograd/test_tensor_metadata_mutation.py | 2 |
 | torchcts/operators/test_fractional_pooling_backward.py | 2 |
-| torchcts/selftest/test_package_artifacts.py | 2 |
 | torchcts/stress/test_rapid_alloc.py | 2 |
 | torchcts/dtypes/test_metadata_ops.py | 1 |
 | torchcts/strides/test_channels_last.py | 1 |
@@ -218,10 +221,12 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | test_op_backward | 2319 |
 | test_generated_foreach_or_fused | 1969 |
 | test_generated_out_variant | 898 |
+| test_operator_path_shape_case | 715 |
 | test_generated_functional_variant | 578 |
 | test_generated_inplace_variant | 346 |
 | test_oracle_surface | 273 |
 | test_op_errors | 202 |
+| test_workload_path_shape_case | 135 |
 | test_generated_view_alias | 100 |
 | test_unary_float_op | 54 |
 | test_copy_cast_grid | 49 |
@@ -287,8 +292,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | test_compare_tensors_sparse_layouts_pass | 5 |
 | test_compare_tensors_sparse_structure_mismatch_records_failure | 5 |
 | test_sdpa_non_power_of_2 | 5 |
-| test_shipped_manifest_templates_list_every_known_capability | 5 |
-| test_shipped_manifest_templates_validate | 5 |
 
 ## Top Suite And Function Pairs
 
@@ -298,10 +301,12 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo::test_op_backward | 2319 |
 | generated::test_generated_foreach_or_fused | 1969 |
 | generated::test_generated_out_variant | 898 |
+| operators::test_operator_path_shape_case | 715 |
 | generated::test_generated_functional_variant | 578 |
 | generated::test_generated_inplace_variant | 346 |
 | generated::test_oracle_surface | 273 |
 | opinfo::test_op_errors | 202 |
+| workloads::test_workload_path_shape_case | 135 |
 | generated::test_generated_view_alias | 100 |
 | operators::test_unary_float_op | 54 |
 | dtypes::test_copy_cast_grid | 49 |
@@ -367,8 +372,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | selftest::test_compare_tensors_sparse_layouts_pass | 5 |
 | selftest::test_compare_tensors_sparse_structure_mismatch_records_failure | 5 |
 | selftest::test_shipped_manifest_templates_list_every_known_capability | 5 |
-| selftest::test_shipped_manifest_templates_validate | 5 |
-| workloads::test_sdpa_non_power_of_2 | 5 |
 
 ## Visible Dtype Tokens In Node IDs
 
@@ -403,7 +406,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16102 |
+| none | 16984 |
 | training | 2400 |
 | compile | 120 |
 | sparse | 36 |
@@ -444,7 +447,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| torch.float32 | 5304 |
+| torch.float32 | 6154 |
 | torch.float64 | 4750 |
 | torch.bfloat16 | 4400 |
 | torch.float16 | 4389 |
@@ -507,14 +510,15 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
-| category | 814 |
+| path_shape | 850 |
+| category | 846 |
 | handwritten | 736 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 14628 |
+| none | 15510 |
 | out_variant | 1637 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -528,7 +532,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 14648 |
+| none | 15530 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1257,27 +1261,106 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| present | 17882 |
-| missing | 1024 |
+| present | 18690 |
+| missing | 1098 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13912 |
-| present | 4994 |
+| missing | 13944 |
+| present | 5844 |
+
+## Collection Nodes By Coverage Category
+
+| Name | Count |
+| --- | --- |
+| opinfo_forward | 10577 |
+| opinfo_backward | 2319 |
+| generated_foreach_fused | 1969 |
+| handwritten_operator_suite | 1045 |
+| generated_out_variants | 898 |
+| algorithmic_shape | 850 |
+| path_shape | 850 |
+| generated_functional_variants | 578 |
+| selftest | 424 |
+| generated_inplace_variants | 346 |
+| layout_path_shape | 323 |
+| oracle_surfaces | 273 |
+| workload | 255 |
+| opinfo_error_behavior | 202 |
+| compile_behavior | 144 |
+| matmul_path_shape | 140 |
+| layout_storage | 136 |
+| generated_view_aliases | 100 |
+| convolution_path_shape | 90 |
+| stride_behavior | 87 |
+| reduction_path_shape | 85 |
+| attention_path_shape | 80 |
+| indexing_path_shape | 80 |
+| autograd_behavior | 77 |
+| sdpa | 76 |
+| normalization_path_shape | 65 |
+| spatial_path_shape | 65 |
+| training_workflow | 56 |
+| broadcasting_path_shape | 55 |
+| model_pattern_path_shape | 55 |
+| sorting_path_shape | 55 |
+| quantized_container | 50 |
+| dtype_copy_cast | 49 |
+| fft_path_shape | 45 |
+| generated_autograd_backward_variants | 38 |
+| linear_algebra_path_shape | 35 |
+| sparse | 34 |
+| view_or_alias | 33 |
+| stress | 30 |
+| rng | 28 |
+| custom_quantized_decode | 25 |
+| quantized_container_plumbing | 25 |
+| generated_layout_storage_variants | 24 |
+| workload_shape | 21 |
+| generated_factories | 20 |
+| factory | 19 |
+| quantized_native | 19 |
+| autograd_inplace_safety | 18 |
+| metadata_device | 15 |
+| nested | 15 |
+| allocator | 12 |
+| device_api_behavior | 12 |
+| double_backward | 12 |
+| generated_rng_variants | 12 |
+| dtype_complex | 9 |
+| autocast | 8 |
+| dtype_fp8 | 7 |
+| dataloader | 6 |
+| deterministic_memory | 6 |
+| device_api | 6 |
+| device_stream_event_api | 6 |
+| guard_alloc | 6 |
+| module_hooks | 6 |
+| error_behavior | 5 |
+| gradcheck | 4 |
+| named_tensor | 4 |
+| foreach | 3 |
+| multi_device_behavior | 3 |
+| serialization | 3 |
+| pooling | 2 |
+| channels_last | 1 |
+| gradient_checkpointing | 1 |
+| layout_copy_detection | 1 |
+| memory_format | 1 |
 
 ## Pytest Nodes By Semantic Level
 
 | Level | Count |
 | --- | --- |
-| 1 | 814 |
+| 1 | 846 |
 | 2 | 13773 |
 | 3 | 1084 |
 | 4 | 2405 |
-| 5 | 478 |
+| 5 | 1248 |
 | 6 | 199 |
-| 7 | 123 |
+| 7 | 203 |
 | 8 | 30 |
 
 ## Pytest Collection Decisions By Semantic Level
@@ -1286,7 +1369,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 814 |
+| executable | 846 |
 
 ### Level 2
 
@@ -1313,7 +1396,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 478 |
+| executable | 1248 |
 
 ### Level 6
 
@@ -1326,7 +1409,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 99 |
+| executable | 179 |
 | pytest_skip_marked | 24 |
 
 ### Level 8
@@ -1335,15 +1418,225 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | executable | 30 |
 
+## Targeted Path-Shape Coverage
+
+Path-shape rows are a curated semantic-level corpus for source-informed algorithm, tiling, tail, batching, layout, and boundary-shape coverage. They are not generated from cartesian axes.
+
+| Metric | Value |
+| --- | --- |
+| Tracked corpus rows | 1320 |
+| Default-selected corpus rows | 850 |
+| Default resource tiers | smoke, standard |
+| Budget target gaps | 0 |
+| Corpus waivers | 0 |
+| Default target | 850 |
+| Default hard max | 950 |
+| All-tier hard max | 1800 |
+| Collection baseline | 18953 (2026-07-03) |
+| Collected path-shape case IDs | 850 |
+| Collected path-shape node records | 850 |
+
+## Path-Shape Corpus Rows By Family
+
+| Name | Count |
+| --- | --- |
+| attention | 150 |
+| broadcasting | 75 |
+| convolution | 140 |
+| fft | 85 |
+| indexing | 110 |
+| linear_algebra | 65 |
+| matmul | 210 |
+| model_patterns | 95 |
+| normalization | 90 |
+| reduction | 120 |
+| sorting | 80 |
+| spatial | 100 |
+
+## Path-Shape Corpus Rows By Resource Tier
+
+| Name | Count |
+| --- | --- |
+| heavy | 470 |
+| standard | 850 |
+
+## Path-Shape Corpus Rows By Semantic Level
+
+| Name | Count |
+| --- | --- |
+| 5 | 890 |
+| 7 | 80 |
+| 8 | 350 |
+
+## Path-Shape Corpus Rows By Cost Class
+
+| Name | Count |
+| --- | --- |
+| medium | 166 |
+| small | 369 |
+| tiny | 785 |
+
+## Path-Shape Corpus Rows By Runner
+
+| Name | Count |
+| --- | --- |
+| attention.sdpa | 150 |
+| broadcasting.add | 26 |
+| broadcasting.masked_fill | 12 |
+| broadcasting.mul | 25 |
+| broadcasting.where | 12 |
+| convolution.conv1d | 8 |
+| convolution.conv2d | 126 |
+| convolution.conv3d | 3 |
+| convolution.conv_transpose2d | 3 |
+| fft.fft | 27 |
+| fft.fft2 | 4 |
+| fft.irfft | 27 |
+| fft.rfft | 27 |
+| indexing.gather | 22 |
+| indexing.index_select | 22 |
+| indexing.masked_select | 11 |
+| indexing.scatter_add | 22 |
+| indexing.scatter_reduce | 22 |
+| indexing.take | 11 |
+| linear_algebra.cholesky | 17 |
+| linear_algebra.eigh | 17 |
+| linear_algebra.qr | 5 |
+| linear_algebra.solve | 21 |
+| linear_algebra.svdvals | 5 |
+| matmul.addmm | 10 |
+| matmul.bmm | 20 |
+| matmul.linear | 10 |
+| matmul.matmul | 8 |
+| matmul.mm | 162 |
+| model_patterns.depthwise_separable | 16 |
+| model_patterns.patch_embedding | 8 |
+| model_patterns.residual_norm | 10 |
+| model_patterns.transformer_block_fragment | 45 |
+| model_patterns.vision_block | 16 |
+| normalization.batch_norm | 28 |
+| normalization.group_norm | 34 |
+| normalization.layer_norm | 28 |
+| reduction.amax | 28 |
+| reduction.argmax | 28 |
+| reduction.mean | 28 |
+| reduction.prod | 8 |
+| reduction.sum | 28 |
+| sorting.kthvalue | 16 |
+| sorting.sort | 32 |
+| sorting.topk | 32 |
+| spatial.adaptive_avg_pool2d | 20 |
+| spatial.avg_pool2d | 20 |
+| spatial.interpolate | 40 |
+| spatial.max_pool2d | 20 |
+
+## Default Path-Shape Rows By Family
+
+| Name | Count |
+| --- | --- |
+| attention | 80 |
+| broadcasting | 55 |
+| convolution | 90 |
+| fft | 45 |
+| indexing | 80 |
+| linear_algebra | 35 |
+| matmul | 140 |
+| model_patterns | 55 |
+| normalization | 65 |
+| reduction | 85 |
+| sorting | 55 |
+| spatial | 65 |
+
+## Collected Path-Shape Nodes By Family
+
+| Name | Count |
+| --- | --- |
+| matmul | 140 |
+| convolution | 90 |
+| reduction | 85 |
+| attention | 80 |
+| indexing | 80 |
+| normalization | 65 |
+| spatial | 65 |
+| broadcasting | 55 |
+| model_patterns | 55 |
+| sorting | 55 |
+| fft | 45 |
+| linear_algebra | 35 |
+
+## Collected Path-Shape Nodes By Resource Tier
+
+| Name | Count |
+| --- | --- |
+| standard | 850 |
+
+## Collected Path-Shape Nodes By Semantic Level
+
+| Name | Count |
+| --- | --- |
+| 5 | 770 |
+| 7 | 80 |
+
+## Collected Path-Shape Decisions
+
+| Name | Count |
+| --- | --- |
+| executable | 850 |
+
+## Collected Path-Shape Model Roles
+
+| Name | Count |
+| --- | --- |
+| decode_or_tile_boundary | 116 |
+| reduction_boundary | 85 |
+| attention_kernel_selection | 80 |
+| vision_convolution | 76 |
+| elementwise_broadcast | 37 |
+| fft_plan_boundary | 30 |
+| resize_path | 26 |
+| vision_pooling | 26 |
+| vision_norm | 25 |
+| ordering_with_ties | 22 |
+| partial_ordering | 22 |
+| batch_norm | 20 |
+| transformer_norm | 20 |
+| duplicate_index_accumulation | 16 |
+| duplicate_index_reduction | 16 |
+| embedding_like_lookup | 16 |
+| gather_duplicate_index | 16 |
+| mobile_vision_block | 16 |
+| vision_conv_relu_block | 16 |
+| complex_fft_plan | 15 |
+| transformer_attention_fragment | 15 |
+| adaptive_pooling | 13 |
+| rank_selection | 11 |
+| batched_projection | 10 |
+| batched_solve | 9 |
+| masked_blend_broadcast | 9 |
+| masked_update | 9 |
+| boolean_masking | 8 |
+| flattened_indexing | 8 |
+| spd_factorization | 8 |
+| symmetric_eigendecomposition | 8 |
+| temporal_convolution | 8 |
+| vision_transformer_patch_embedding | 8 |
+| linear_layer | 5 |
+| linear_projection_with_bias | 5 |
+| qr_factorization | 5 |
+| singular_value_path | 5 |
+| broadcastable_matmul | 4 |
+| decoder_upsample | 3 |
+| volumetric_convolution | 3 |
+
 ## Dispatcher Coverage Summary
 
 | Metric | Value |
 | --- | --- |
 | ATen overloads | 3225 |
 | Backend-relevant overloads | 3214 |
-| Covered backend-relevant overloads | 2966 |
-| Coverage percent | 92.3% |
-| Pending surfaces | 192 |
+| Covered backend-relevant overloads | 3062 |
+| Coverage percent | 95.3% |
+| Pending surfaces | 96 |
 | Excluded surfaces | 56 |
 | Runtime-unavailable overloads | 0 |
 | Unknown surfaces | 0 |
@@ -1355,11 +1648,11 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | covered_generated | 1910 |
 | covered_handwritten | 710 |
 | covered_opinfo | 265 |
-| pending_backend_pack | 143 |
-| pending_property | 49 |
+| covered_backend_pack | 116 |
+| pending_backend_pack | 61 |
 | covered_property | 48 |
+| pending_property | 35 |
 | excluded_framework_plumbing | 32 |
-| covered_backend_pack | 20 |
 | excluded_unsupported_public_api | 16 |
 | covered_oracle | 13 |
 | not_backend_relevant | 11 |
@@ -1371,8 +1664,8 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| covered | 2966 |
-| pending | 192 |
+| covered | 3062 |
+| pending | 96 |
 | excluded | 56 |
 | not_backend_relevant | 11 |
 | runtime_unavailable | 0 |
@@ -1385,8 +1678,8 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | generated | 1910 |
 | handwritten | 710 |
 | opinfo | 265 |
-| backend_pack | 163 |
-| property | 97 |
+| backend_pack | 177 |
+| property | 83 |
 | excluded | 56 |
 | oracle | 13 |
 
@@ -1443,12 +1736,12 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | handwritten | 555 |
 | opinfo+generated | 302 |
 | opinfo | 265 |
-| exclusion+pending_review | 219 |
-| oracle+exclusion | 80 |
+| oracle+exclusion | 176 |
+| exclusion+pending_review | 86 |
 | opinfo+handwritten+generated | 66 |
+| oracle+exclusion+pending_review | 66 |
 | handwritten+generated | 46 |
 | opinfo+handwritten | 43 |
-| oracle+exclusion+pending_review | 29 |
 | none | 9 |
 | exclusion | 2 |
 | generated+oracle+exclusion | 1 |
@@ -1491,7 +1784,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| covered_backend_pack | 6 |
+| covered_backend_pack | 34 |
 | covered_generated | 145 |
 | covered_handwritten | 419 |
 | covered_opinfo | 265 |
@@ -1502,14 +1795,14 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | excluded_framework_plumbing | 20 |
 | excluded_host_storage | 1 |
 | excluded_unsupported_public_api | 1 |
-| pending_backend_pack | 55 |
-| pending_property | 7 |
+| pending_backend_pack | 32 |
+| pending_property | 2 |
 
 ### Level 3
 
 | Name | Count |
 | --- | --- |
-| covered_backend_pack | 9 |
+| covered_backend_pack | 54 |
 | covered_generated | 713 |
 | covered_handwritten | 184 |
 | covered_oracle | 3 |
@@ -1517,30 +1810,31 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | excluded_framework_plumbing | 11 |
 | excluded_host_storage | 1 |
 | excluded_unsupported_public_api | 13 |
-| pending_backend_pack | 65 |
-| pending_property | 29 |
+| pending_backend_pack | 24 |
+| pending_property | 25 |
 
 ### Level 4
 
 | Name | Count |
 | --- | --- |
-| covered_backend_pack | 5 |
+| covered_backend_pack | 20 |
 | covered_generated | 264 |
 | covered_handwritten | 92 |
 | covered_property | 2 |
 | excluded_framework_plumbing | 1 |
-| pending_backend_pack | 14 |
-| pending_property | 6 |
+| pending_backend_pack | 4 |
+| pending_property | 1 |
 
 ### Level 5
 
 | Name | Count |
 | --- | --- |
+| covered_backend_pack | 8 |
 | covered_generated | 347 |
 | covered_handwritten | 9 |
 | covered_property | 6 |
 | excluded_unsupported_public_api | 2 |
-| pending_backend_pack | 9 |
+| pending_backend_pack | 1 |
 | pending_property | 7 |
 
 ### Level 6
@@ -2521,8 +2815,8 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 671 |
-| Category markers discovered | 806 |
+| Coverage markers discovered | 705 |
+| Category markers discovered | 840 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2543,9 +2837,9 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| selftest | 326 |
-| operators | 187 |
-| workloads | 57 |
+| selftest | 358 |
+| operators | 188 |
+| workloads | 58 |
 | strides | 40 |
 | device_api | 33 |
 | training | 31 |
@@ -2565,9 +2859,9 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| needs_backend_pack | 143 |
+| needs_backend_pack | 61 |
 | out_of_backend_conformance_scope | 56 |
-| kernel_unavailable_in_host_build | 47 |
+| kernel_unavailable_in_host_build | 33 |
 | needs_public_proxy_proof | 1 |
 | needs_valid_internal_inputs | 1 |
 
@@ -2575,11 +2869,11 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| any | 97 |
-| cuda | 55 |
-| cpu_build | 40 |
+| any | 82 |
 | rocm | 21 |
-| fbgemm | 16 |
+| cpu_build | 10 |
+| cuda | 10 |
+| fbgemm | 10 |
 | cpu | 9 |
 | mps | 9 |
 | xla | 1 |
@@ -2588,8 +2882,8 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| implement_backend_gated_runner | 143 |
-| validate_on_backend_build_or_keep_pending | 47 |
+| implement_backend_gated_runner | 61 |
+| validate_on_backend_build_or_keep_pending | 33 |
 | none_dispatcher_plumbing | 32 |
 | none_unsupported_public_api | 16 |
 | none_deprecated_or_removed | 4 |
@@ -2602,29 +2896,42 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| backend_specific_internal | 119 |
-| cpu_reference_invalid | 48 |
+| cpu_reference_invalid | 34 |
 | dispatcher_plumbing | 32 |
 | manual_future_scope | 12 |
-| philox_mps_rng | 8 |
-| semi_structured_sparse_backend_pack | 7 |
+| mps_philox_rng_backend_pack | 8 |
+| rocm_miopen_convolution_backend_pack | 8 |
+| rocm_miopen_ctc_backend_pack | 5 |
 | unsafe_direct_invocation | 5 |
+| cuda_triton_attention_backend_pack | 4 |
+| fbgemm_linear_backend_pack | 4 |
+| mkldnn_convolution_backend_pack | 4 |
+| mkldnn_pooling_backend_pack | 4 |
 | quantized_legacy_rnn_removed | 4 |
 | quantized_static_rnn_cell | 4 |
-| fused_dropout_backend_pack | 3 |
+| rocm_miopen_batch_norm_backend_pack | 4 |
+| rocm_miopen_rnn_backend_pack | 4 |
+| cuda_cudnn_attention_backend_pack | 2 |
+| cuda_scaled_grouped_mm_backend_pack | 2 |
 | distributed_or_c10d | 2 |
 | wrapped_quantized_linear_backend_pack | 2 |
 | covered_by_public_surface | 1 |
+| cuda_mixed_dtypes_linear_backend_pack | 1 |
 | int4_scales_zeros_meta | 1 |
+| mkldnn_rnn_backend_pack | 1 |
+| mkldnn_shape_backend_pack | 1 |
+| mps_convolution_backward_out_blocked_schema | 1 |
+| semi_structured_sparse_thread_mask_backend_pack | 1 |
+| xla_data_propagation_bridge_blocked | 1 |
 
 ## Pending Source Category Counts
 
 | Name | Count |
 | --- | --- |
-| backend_specific_internal | 119 |
-| cpu_reference_invalid | 57 |
+| cpu_reference_invalid | 46 |
+| backend_specific_internal | 43 |
 | dispatcher_plumbing | 32 |
-| unsafe_direct_invocation | 25 |
+| unsafe_direct_invocation | 16 |
 | manual_future_scope | 12 |
 | distributed_or_c10d | 2 |
 | covered_by_public_surface | 1 |

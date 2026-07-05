@@ -623,6 +623,7 @@ def test_declared_diagnostic_probe_enablement_suppresses_special_modes(monkeypat
     monkeypatch.setattr(harness, "_COLLECT_ONLY", False)
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", False)
+    monkeypatch.delenv("_TORCHCTS_SUBPROCESS", raising=False)
     assert harness._declared_diagnostic_probes_enabled(False)
     assert not harness._declared_diagnostic_probes_enabled(True)
 
@@ -633,6 +634,9 @@ def test_declared_diagnostic_probe_enablement_suppresses_special_modes(monkeypat
     assert not harness._declared_diagnostic_probes_enabled(False)
     monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
     monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", True)
+    assert not harness._declared_diagnostic_probes_enabled(False)
+    monkeypatch.setattr(harness, "_KNOWN_SEGFAULT_AUDIT", False)
+    monkeypatch.setenv("_TORCHCTS_SUBPROCESS", "1")
     assert not harness._declared_diagnostic_probes_enabled(False)
 
 
@@ -4567,6 +4571,64 @@ def test_backend_pack_feasibility_ledger_buckets_pending_rows():
         if record["status"] == "pending_backend_pack"
     }
     assert bucketed_pending_names == pending_names
+
+
+def test_backend_pack_feasibility_preserves_timestamp_for_identical_content(tmp_path):
+    existing = {
+        "metadata": {
+            "version": 1,
+            "pytorch_version": "2.12.1",
+            "generated_at": "2026-07-01T00:00:00Z",
+            "record_count": 0,
+        },
+        "buckets": {},
+        "records": [],
+    }
+    fresh = {
+        "metadata": {
+            "version": 1,
+            "pytorch_version": "2.12.1",
+            "generated_at": "2026-07-05T00:00:00Z",
+            "record_count": 0,
+        },
+        "buckets": {},
+        "records": [],
+    }
+    path = tmp_path / "backend-pack-feasibility.json"
+    path.write_text(json.dumps(existing), encoding="utf-8")
+
+    preserved = coverage_module._preserve_generated_at_when_semantically_unchanged(path, fresh)
+
+    assert preserved["metadata"]["generated_at"] == "2026-07-01T00:00:00Z"
+
+
+def test_backend_pack_feasibility_uses_fresh_timestamp_for_changed_content(tmp_path):
+    existing = {
+        "metadata": {
+            "version": 1,
+            "pytorch_version": "2.12.1",
+            "generated_at": "2026-07-01T00:00:00Z",
+            "record_count": 0,
+        },
+        "buckets": {},
+        "records": [],
+    }
+    fresh = {
+        "metadata": {
+            "version": 1,
+            "pytorch_version": "2.12.1",
+            "generated_at": "2026-07-05T00:00:00Z",
+            "record_count": 1,
+        },
+        "buckets": {},
+        "records": [{"bucket": "promote_now", "name": "aten::example"}],
+    }
+    path = tmp_path / "backend-pack-feasibility.json"
+    path.write_text(json.dumps(existing), encoding="utf-8")
+
+    preserved = coverage_module._preserve_generated_at_when_semantically_unchanged(path, fresh)
+
+    assert preserved["metadata"]["generated_at"] == "2026-07-05T00:00:00Z"
 
 
 def test_coverage_check_rejects_covered_backend_pack_without_contract_metadata():

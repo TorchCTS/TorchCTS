@@ -45,6 +45,7 @@ from torchcts.core.semantic_levels import (
 from torchcts.core.dtype_contracts import mismatch_counts as dtype_contract_mismatch_counts
 from torchcts.core.oracles import oracle_spec_for
 from torchcts.op_metadata import runtime_unavailable_op_entries
+from torchcts.path_shapes import corpus_summary as path_shape_corpus_summary
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -165,6 +166,30 @@ BACKEND_PACK_FEASIBILITY_BUCKETS = (
     "blocked_hardware",
     "blocked_runtime",
 )
+
+
+def _path_shape_corpus_stats() -> dict:
+    try:
+        return path_shape_corpus_summary()
+    except Exception as exc:
+        return {
+            "case_count": 0,
+            "default_selected_case_count": 0,
+            "by_family": {},
+            "by_resource_tier": {},
+            "by_semantic_level": {},
+            "by_cost_class": {},
+            "by_runner": {},
+            "default_selected_by_family": {},
+            "resource_tiers": [],
+            "default_resource_tiers": [],
+            "family_budgets": {},
+            "suite_budget": {},
+            "collection_baseline": {},
+            "budget_warnings": [],
+            "waiver_count": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 SURFACE_KINDS = frozenset({
     "autograd_backward",
@@ -3528,6 +3553,7 @@ def build_audit(root: str | os.PathLike | None = None) -> dict:
                 for level in range(1, 9)
             },
             "generated_case_depth": generated_case_depth,
+            "path_shape_corpus_stats": _path_shape_corpus_stats(),
             "pending_blocker_counts": dict(sorted(pending_blocker_counts.items())),
             "pending_backend_gate_counts": dict(sorted(pending_backend_gate_counts.items())),
             "coverage_kind_counts": dict(sorted(coverage_kind_counts.items())),
@@ -3730,6 +3756,33 @@ def build_backend_pack_feasibility_artifact(audit: dict) -> dict:
         "buckets": buckets,
         "records": sorted(records, key=lambda item: (item["bucket"], item["name"] or "")),
     }
+
+
+def _without_generated_at(payload: dict) -> dict:
+    normalized = json.loads(json.dumps(payload, sort_keys=True))
+    metadata = normalized.get("metadata")
+    if isinstance(metadata, dict):
+        metadata.pop("generated_at", None)
+    return normalized
+
+
+def _preserve_generated_at_when_semantically_unchanged(path: Path, payload: dict) -> dict:
+    if not path.exists():
+        return payload
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return payload
+    existing_generated_at = (existing.get("metadata") or {}).get("generated_at")
+    if not existing_generated_at:
+        return payload
+    if _without_generated_at(existing) != _without_generated_at(payload):
+        return payload
+    updated = dict(payload)
+    metadata = dict(updated.get("metadata") or {})
+    metadata["generated_at"] = existing_generated_at
+    updated["metadata"] = metadata
+    return updated
 
 
 def render_pending_review_markdown(audit: dict) -> str:
@@ -4154,8 +4207,12 @@ def write_audit_artifacts(audit: dict) -> None:
     )
     DEFAULT_PENDING_REVIEW_MD_PATH.write_text(render_pending_review_markdown(audit), encoding="utf-8")
     DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    backend_pack_feasibility = _preserve_generated_at_when_semantically_unchanged(
+        DEFAULT_BACKEND_PACK_FEASIBILITY_PATH,
+        build_backend_pack_feasibility_artifact(audit),
+    )
     DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.write_text(
-        json.dumps(build_backend_pack_feasibility_artifact(audit), indent=2, sort_keys=True) + "\n",
+        json.dumps(backend_pack_feasibility, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

@@ -18,6 +18,11 @@ torchcts coverage check --fail-on-unknown
 torchcts coverage report
 torchcts coverage evidence-pack --device cuda
 torchcts coverage evidence-pack --device cuda --backend-gate cuda+rocm
+torchcts path-shapes validate
+python scripts/generate_path_shape_corpus.py --check --strict-budget --enforce-targets
+torchcts path-shapes list --family matmul
+torchcts path-shapes run --device cuda --family matmul --level 8 -q
+torchcts path-shapes run --device cuda --all-resource-tiers --level 8 -q
 ```
 
 Default artifacts are written under `results/coverage/`:
@@ -49,6 +54,71 @@ collect data that needs maintainer review elsewhere.
   dispatcher surfaces. Proxy coverage requires accepted trace or direct-source
   evidence.
 - `excluded`: a reviewed surface that is not counted as covered.
+
+## Targeted Path-Shape Coverage
+
+TorchCTS uses semantic levels, not a second depth taxonomy, for workload depth.
+Targeted path-shape cases are curated L5-L8 rows that intentionally exercise
+source-informed and backend-failure-informed shapes likely to hit different
+algorithm selection, tiling, tail, batching, layout, and boundary paths.
+
+Path-shape cases are generated from reviewed family specs under
+`torchcts/path_shapes/specs/` and tracked in
+`torchcts/path_shapes/corpus.json`. That corpus stores pre-expanded rows: one
+row means one concrete shape/configuration, one concrete dtype, and one pytest
+case. It must not store broad axes such as `shapes x dtypes x layouts x stride
+modes`.
+
+Runner intent and source-note anchors live in
+`docs/coverage/path-shape-catalog.md`.
+
+The current corpus has 850 default-selected rows and 1,320 total rows including
+the opt-in `heavy` tier. The default tier is capped at 5% over the measured
+baseline test count, and all tiers are capped at 10%. These caps are release
+gates, not loose guidance.
+
+Executable path-shape tests live in existing suites such as `operators` and
+`workloads`. The `torchcts/path_shapes/` package is helper/data code, not a
+separate pytest suite. This keeps path-shape tests on the same pytest,
+semantic-level, result JSON, coverage audit, and site-stats paths as the rest of
+TorchCTS.
+
+Selectors narrow tracked rows only:
+
+```bash
+torchcts path-shapes run --device cuda --family matmul --resource-tier standard --level 7
+torchcts path-shapes run --device cuda --runner attention.sdpa --cost-class small --level 8
+torchcts path-shapes run --device cuda --all-resource-tiers --level 8
+
+python -m pytest torchcts/operators torchcts/workloads \
+  --level 7 \
+  --path-shape-family matmul \
+  --path-shape-resource-tier standard
+```
+
+`torchcts path-shapes run` is only a thin CLI wrapper around those pytest
+selectors. It does not define a separate harness, result schema, or coverage
+claim path.
+
+Supported selectors include:
+
+- `--path-shape-family`
+- `--path-shape-category`
+- `--path-shape-case`
+- `--path-shape-runner`
+- `--path-shape-resource-tier`
+- `--path-shape-cost-class`
+- `--path-shape-model-role`
+- `--path-shape-dtype-group`
+
+Use family selectors for human domains such as `matmul`, `convolution`, or
+`attention`. Use runner selectors for exact execution paths such as `matmul.mm`,
+`attention.sdpa`, or `normalization.layer_norm`. Use cost/resource selectors for
+run-size control. Do not encode execution paths as family names.
+
+Selectors do not create new release coverage claims. Ad hoc shapes are useful
+for investigation, but they count as release coverage only after promotion into
+the tracked corpus.
 
 ## Status Rules
 

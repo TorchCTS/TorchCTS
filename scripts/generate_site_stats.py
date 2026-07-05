@@ -234,6 +234,15 @@ def _fallback_records_from_nodes(nodes: list[str]) -> list[dict]:
             "variant_kind": None,
             "strategy": None,
             "strategy_family": None,
+            "covers": [],
+            "covers_categories": [],
+            "level_reason": None,
+            "level_source": None,
+            "path_shape_case_id": None,
+            "path_shape_family": None,
+            "path_shape_resource_tier": None,
+            "path_shape_model_role": None,
+            "path_shape_intent": [],
             "decision": "executable",
             "skip_reason": None,
             "skip_detail": None,
@@ -283,6 +292,13 @@ def _collection_stats(nodes: list[str], structured_collection: dict | None = Non
     variant_kind_counts = Counter()
     dispatcher_presence_counts = Counter()
     coverage_id_presence_counts = Counter()
+    category_counts = Counter()
+    path_shape_family_counts = Counter()
+    path_shape_resource_tier_counts = Counter()
+    path_shape_semantic_level_counts = Counter()
+    path_shape_decisions = Counter()
+    path_shape_case_ids = set()
+    path_shape_model_roles = Counter()
     parameterized = 0
     visible_dtype_tokens = Counter()
     visible_level_tokens = Counter()
@@ -316,6 +332,17 @@ def _collection_stats(nodes: list[str], structured_collection: dict | None = Non
             generated_strategy_counts[str(record["strategy"])] += 1
         if record.get("strategy_family"):
             generated_family_counts[str(record["strategy_family"])] += 1
+        for category in record.get("covers_categories") or []:
+            category_counts[str(category)] += 1
+        path_shape_case_id = record.get("path_shape_case_id")
+        if path_shape_case_id:
+            path_shape_case_ids.add(str(path_shape_case_id))
+            path_shape_family_counts[str(record.get("path_shape_family") or "unknown")] += 1
+            path_shape_resource_tier_counts[str(record.get("path_shape_resource_tier") or "unknown")] += 1
+            path_shape_semantic_level_counts[level] += 1
+            path_shape_decisions[decision] += 1
+            if record.get("path_shape_model_role"):
+                path_shape_model_roles[str(record["path_shape_model_role"])] += 1
         coverage_kind_counts[record.get("coverage_kind") or "none"] += 1
         surface_kind_counts[record.get("surface_kind") or "none"] += 1
         variant_kind_counts[record.get("variant_kind") or "none"] += 1
@@ -348,6 +375,13 @@ def _collection_stats(nodes: list[str], structured_collection: dict | None = Non
         "semantic_decisions": semantic_decisions,
         "generated_strategy_counts": generated_strategy_counts,
         "generated_family_counts": generated_family_counts,
+        "category_counts": category_counts,
+        "path_shape_case_count": len(path_shape_case_ids),
+        "path_shape_family_counts": path_shape_family_counts,
+        "path_shape_resource_tier_counts": path_shape_resource_tier_counts,
+        "path_shape_semantic_level_counts": path_shape_semantic_level_counts,
+        "path_shape_decisions": path_shape_decisions,
+        "path_shape_model_roles": path_shape_model_roles,
         "coverage_kind_counts": coverage_kind_counts,
         "surface_kind_counts": surface_kind_counts,
         "variant_kind_counts": variant_kind_counts,
@@ -472,6 +506,7 @@ def _coverage_stats(audit: dict) -> dict:
         "semantic_level_surface_counts": metadata.get("semantic_level_surface_counts", {}),
         "semantic_level_descriptions": metadata.get("semantic_level_descriptions", {}),
         "generated_case_depth": metadata.get("generated_case_depth", {}),
+        "path_shape_corpus_stats": metadata.get("path_shape_corpus_stats", {}),
         "pending_blocker_counts": Counter(metadata.get("pending_blocker_counts", {})),
         "pending_backend_gate_counts": Counter(metadata.get("pending_backend_gate_counts", {})),
         "variant_counts": variant_counts,
@@ -813,6 +848,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         _append_counter_section(lines, "Collection Generated Nodes By Strategy Family", collection_stats["generated_family_counts"])
         _append_counter_section(lines, "Collection Dispatcher Name Presence", collection_stats["dispatcher_presence_counts"])
         _append_counter_section(lines, "Collection Coverage ID Presence", collection_stats["coverage_id_presence_counts"])
+        _append_counter_section(lines, "Collection Nodes By Coverage Category", collection_stats["category_counts"])
         _append_semantic_level_count_table(lines, "Pytest Nodes By Semantic Level", collection_stats["semantic_levels"])
         _append_semantic_level_counter_sections(lines, "Pytest Collection Decisions By Semantic Level", collection_stats["semantic_decisions"])
     else:
@@ -820,6 +856,48 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         lines.append("")
         lines.append("Pytest collection was skipped. Re-run without `--no-collect` to include test-node breakdowns.")
         lines.append("")
+
+    path_shape_stats = coverage.get("path_shape_corpus_stats") or {}
+    lines.append("## Targeted Path-Shape Coverage")
+    lines.append("")
+    lines.append("Path-shape rows are a curated semantic-level corpus for source-informed algorithm, tiling, tail, batching, layout, and boundary-shape coverage. They are not generated from cartesian axes.")
+    lines.append("")
+    path_shape_rows = [
+        ["Tracked corpus rows", path_shape_stats.get("case_count", 0)],
+        ["Default-selected corpus rows", path_shape_stats.get("default_selected_case_count", 0)],
+        ["Default resource tiers", ", ".join(path_shape_stats.get("default_resource_tiers") or [])],
+        ["Budget target gaps", len(path_shape_stats.get("budget_warnings") or [])],
+        ["Corpus waivers", path_shape_stats.get("waiver_count", 0)],
+    ]
+    suite_budget = path_shape_stats.get("suite_budget") or {}
+    baseline = path_shape_stats.get("collection_baseline") or {}
+    if suite_budget:
+        path_shape_rows.extend([
+            ["Default target", suite_budget.get("default_target", 0)],
+            ["Default hard max", suite_budget.get("default_hard_max", 0)],
+            ["All-tier hard max", suite_budget.get("all_tiers_hard_max", 0)],
+        ])
+    if baseline:
+        path_shape_rows.append(["Collection baseline", f"{baseline.get('test_count', 0)} ({baseline.get('date_measured', 'unknown')})"])
+    if collection_stats:
+        path_shape_rows.extend([
+            ["Collected path-shape case IDs", collection_stats["path_shape_case_count"]],
+            ["Collected path-shape node records", sum(collection_stats["path_shape_decisions"].values())],
+        ])
+    lines.extend(_table(["Metric", "Value"], path_shape_rows))
+    lines.append("")
+    _append_mapping_section(lines, "Path-Shape Corpus Rows By Family", path_shape_stats.get("by_family", {}))
+    _append_mapping_section(lines, "Path-Shape Corpus Rows By Resource Tier", path_shape_stats.get("by_resource_tier", {}))
+    _append_mapping_section(lines, "Path-Shape Corpus Rows By Semantic Level", path_shape_stats.get("by_semantic_level", {}))
+    _append_mapping_section(lines, "Path-Shape Corpus Rows By Cost Class", path_shape_stats.get("by_cost_class", {}))
+    _append_mapping_section(lines, "Path-Shape Corpus Rows By Runner", path_shape_stats.get("by_runner", {}))
+    _append_mapping_section(lines, "Default Path-Shape Rows By Family", path_shape_stats.get("default_selected_by_family", {}))
+    if collection_stats:
+        _append_counter_section(lines, "Collected Path-Shape Nodes By Family", collection_stats["path_shape_family_counts"])
+        _append_counter_section(lines, "Collected Path-Shape Nodes By Resource Tier", collection_stats["path_shape_resource_tier_counts"])
+        _append_counter_section(lines, "Collected Path-Shape Nodes By Semantic Level", collection_stats["path_shape_semantic_level_counts"])
+        _append_counter_section(lines, "Collected Path-Shape Decisions", collection_stats["path_shape_decisions"])
+        _append_counter_section(lines, "Collected Path-Shape Model Roles", collection_stats["path_shape_model_roles"])
 
     lines.append("## Dispatcher Coverage Summary")
     lines.append("")

@@ -294,6 +294,270 @@ def run_triage_command(args):
     return 0
 
 
+_PATH_SHAPE_TEST_RELATIVE_PATHS = (
+    ("operators", "test_operator_path_shapes.py"),
+    ("workloads", "test_workload_path_shapes.py"),
+)
+
+
+def _add_path_shape_selector_args(command_parser):
+    command_parser.add_argument(
+        "--family",
+        "--path-shape-family",
+        action="append",
+        dest="family",
+        help="Path-shape family selector; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--category",
+        "--path-shape-category",
+        action="append",
+        dest="category",
+        help="Path-shape category selector; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--case",
+        "--path-shape-case",
+        action="append",
+        dest="case_id",
+        help="Exact path-shape case id; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--runner",
+        "--path-shape-runner",
+        action="append",
+        dest="runner",
+        help="Path-shape runner selector; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--resource-tier",
+        "--path-shape-resource-tier",
+        action="append",
+        dest="resource_tier",
+        help="Resource tier selector; default selection is smoke+standard",
+    )
+    command_parser.add_argument(
+        "--cost-class",
+        "--path-shape-cost-class",
+        action="append",
+        dest="cost_class",
+        help="Cost-class selector; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--all-resource-tiers",
+        action="store_true",
+        help="Select every tracked resource tier instead of the default smoke+standard tiers",
+    )
+    command_parser.add_argument(
+        "--model-role",
+        "--path-shape-model-role",
+        action="append",
+        dest="model_role",
+        help="Model-role selector; may be repeated or use comma/plus syntax",
+    )
+    command_parser.add_argument(
+        "--dtype-group",
+        "--path-shape-dtype-group",
+        action="append",
+        dest="dtype_group",
+        help="Dtype-group selector; may be repeated or use comma/plus syntax",
+    )
+
+
+def _path_shape_selector_kwargs(args):
+    resource_tiers = getattr(args, "resource_tier", None)
+    if getattr(args, "all_resource_tiers", False):
+        from torchcts.path_shapes import load_path_shape_corpus
+
+        corpus = load_path_shape_corpus()
+        resource_tiers = sorted(corpus.get("resource_tiers") or [])
+
+    return {
+        "families": getattr(args, "family", None),
+        "categories": getattr(args, "category", None),
+        "case_ids": getattr(args, "case_id", None),
+        "runners": getattr(args, "runner", None),
+        "resource_tiers": resource_tiers,
+        "model_roles": getattr(args, "model_role", None),
+        "dtype_groups": getattr(args, "dtype_group", None),
+        "cost_classes": getattr(args, "cost_class", None),
+    }
+
+
+def _path_shape_pytest_selector_args(args):
+    pytest_args = []
+    selector_map = (
+        ("family", "--path-shape-family"),
+        ("category", "--path-shape-category"),
+        ("case_id", "--path-shape-case"),
+        ("runner", "--path-shape-runner"),
+        ("resource_tier", "--path-shape-resource-tier"),
+        ("cost_class", "--path-shape-cost-class"),
+        ("model_role", "--path-shape-model-role"),
+        ("dtype_group", "--path-shape-dtype-group"),
+    )
+    for attr, pytest_option in selector_map:
+        values = getattr(args, attr, None) or []
+        for value in values:
+            pytest_args.extend([pytest_option, value])
+    if getattr(args, "all_resource_tiers", False):
+        from torchcts.path_shapes import load_path_shape_corpus
+
+        corpus = load_path_shape_corpus()
+        pytest_args.extend(["--path-shape-resource-tier", ",".join(sorted(corpus.get("resource_tiers") or []))])
+    return pytest_args
+
+
+def _path_shape_test_paths():
+    pkg_dir = os.path.dirname(__file__)
+    return [os.path.join(pkg_dir, *parts) for parts in _PATH_SHAPE_TEST_RELATIVE_PATHS]
+
+
+def _print_simple_table(rows, headers):
+    widths = [len(header) for header in headers]
+    for row in rows:
+        for index, cell in enumerate(row):
+            widths[index] = max(widths[index], len(str(cell)))
+    print("  ".join(header.ljust(widths[index]) for index, header in enumerate(headers)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(str(cell).ljust(widths[index]) for index, cell in enumerate(row)))
+
+
+def _format_counter(counter):
+    if not counter:
+        return "none"
+    return ", ".join(f"{key}={value}" for key, value in sorted(counter.items()))
+
+
+def run_path_shapes_command(args, unknown=None):
+    command = getattr(args, "path_shapes_command", None)
+    if command == "validate":
+        return _run_path_shapes_validate(args)
+    if command == "summary":
+        return _run_path_shapes_validate(args)
+    if command == "budget":
+        return _run_path_shapes_budget(args)
+    if command == "list":
+        return _run_path_shapes_list(args)
+    if command == "run":
+        return _run_path_shapes_run(args, unknown or [])
+    print("Error: path-shapes subcommand is required.", file=sys.stderr)
+    return 1
+
+
+def _run_path_shapes_validate(args):
+    from torchcts.path_shapes import PathShapeValidationError, corpus_summary
+
+    try:
+        summary = corpus_summary(
+            strict_budget=getattr(args, "strict_budget", False),
+            enforce_targets=getattr(args, "enforce_targets", False),
+        )
+    except PathShapeValidationError as exc:
+        print(f"Path-shape corpus is invalid:\n{exc}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "json", False):
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+
+    print("Path-shape corpus is valid.")
+    print(f"Cases: {summary['case_count']}")
+    print(f"Default-selected cases: {summary['default_selected_case_count']}")
+    print(f"Families: {_format_counter(summary['by_family'])}")
+    print(f"Resource tiers: {_format_counter(summary['by_resource_tier'])}")
+    print(f"Semantic levels: {_format_counter(summary['by_semantic_level'])}")
+    print(f"Cost classes: {_format_counter(summary.get('by_cost_class', {}))}")
+    print(f"Runners: {_format_counter(summary.get('by_runner', {}))}")
+    print(f"Default resource tiers: {', '.join(summary['default_resource_tiers'])}")
+    suite_budget = summary.get("suite_budget") or {}
+    baseline = summary.get("collection_baseline") or {}
+    if suite_budget:
+        print(
+            "Budget: "
+            f"default target={suite_budget.get('default_target')}, "
+            f"default hard max={suite_budget.get('default_hard_max')}, "
+            f"all-tier hard max={suite_budget.get('all_tiers_hard_max')}"
+        )
+    if baseline:
+        print(f"Collection baseline: {baseline.get('test_count')} ({baseline.get('date_measured')})")
+    warnings = summary.get("budget_warnings") or []
+    if warnings:
+        print("Budget target gaps:")
+        for warning in warnings:
+            print(f"  - {warning}")
+    print(f"Waivers: {summary['waiver_count']}")
+    return 0
+
+
+def _run_path_shapes_budget(args):
+    return _run_path_shapes_validate(args)
+
+
+def _run_path_shapes_list(args):
+    from torchcts.path_shapes import PathShapeValidationError, select_path_shape_cases
+
+    try:
+        cases = select_path_shape_cases(**_path_shape_selector_kwargs(args))
+    except PathShapeValidationError as exc:
+        print(f"Path-shape corpus is invalid:\n{exc}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "json", False):
+        print(json.dumps(cases, indent=2, sort_keys=True))
+    elif cases:
+        rows = [
+            (
+                case["case_id"],
+                case["family"],
+                f"L{case['semantic_level']}",
+                case["resource_tier"],
+                case.get("cost_class", ""),
+                case["runner"],
+                case["suite"],
+            )
+            for case in cases
+        ]
+        _print_simple_table(rows, ("Case", "Family", "Level", "Tier", "Cost", "Runner", "Suite"))
+    else:
+        print("No path-shape cases matched the selectors.")
+
+    print(f"Selected path-shape cases: {len(cases)}")
+    if getattr(args, "require_cases", False) and not cases:
+        return 1
+    return 0
+
+
+def _path_shape_pytest_args(args, unknown=None):
+    pytest_args = []
+    if getattr(args, "device", None):
+        pytest_args.extend(["--device", args.device])
+    if getattr(args, "level_exact", None) is not None:
+        pytest_args.extend(["--level-exact", str(args.level_exact)])
+    elif getattr(args, "level_range", None):
+        pytest_args.extend(["--level-range", args.level_range])
+    elif getattr(args, "level", None) is not None:
+        pytest_args.extend(["--level", str(args.level)])
+    if getattr(args, "validation", False):
+        pytest_args.append("--validation")
+    if getattr(args, "subprocess_per_shape", False):
+        pytest_args.append("--subprocess-per-test")
+    if getattr(args, "output_dir", None):
+        pytest_args.extend(["--results-dir", args.output_dir])
+    pytest_args.extend(_path_shape_pytest_selector_args(args))
+    pytest_args.extend(unknown or [])
+    pytest_args.extend(_path_shape_test_paths())
+    return pytest_args
+
+
+def _run_path_shapes_run(args, unknown):
+    pytest_args = _path_shape_pytest_args(args, unknown)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return subprocess.call([sys.executable, "-m", "pytest", *pytest_args])
+
+
 def _print_banner():
     try:
         from torchcts import __version__
@@ -562,6 +826,71 @@ def main():
         help="Alias for --strict-unknowns; return nonzero if unknown surfaces remain",
     )
 
+    # Path-shape subcommands
+    path_shapes_parser = subparsers.add_parser(
+        "path-shapes",
+        help="Inspect and run the tracked targeted path-shape corpus",
+    )
+    path_shapes_subparsers = path_shapes_parser.add_subparsers(
+        dest="path_shapes_command",
+        help="Path-shape command",
+    )
+    path_shapes_validate = path_shapes_subparsers.add_parser(
+        "validate",
+        help="Validate the tracked path-shape corpus",
+    )
+    path_shapes_validate.add_argument("--json", action="store_true", help="Emit the validation summary as JSON")
+    path_shapes_validate.add_argument("--strict-budget", action="store_true", help="Fail baseline-ratio budget violations")
+    path_shapes_validate.add_argument("--enforce-targets", action="store_true", help="Fail target gaps as release blockers")
+
+    path_shapes_summary = path_shapes_subparsers.add_parser(
+        "summary",
+        help="Print path-shape corpus counts and budget usage",
+    )
+    path_shapes_summary.add_argument("--json", action="store_true", help="Emit the summary as JSON")
+    path_shapes_summary.add_argument("--strict-budget", action="store_true", help="Fail baseline-ratio budget violations")
+    path_shapes_summary.add_argument("--enforce-targets", action="store_true", help="Fail target gaps as release blockers")
+
+    path_shapes_budget = path_shapes_subparsers.add_parser(
+        "budget",
+        help="Check path-shape count budgets and collection baseline metadata",
+    )
+    path_shapes_budget.add_argument("--json", action="store_true", help="Emit the budget summary as JSON")
+    path_shapes_budget.add_argument("--check", action="store_true", help="Check current budget metadata")
+    path_shapes_budget.set_defaults(strict_budget=True)
+    path_shapes_budget.add_argument("--no-strict-budget", action="store_false", dest="strict_budget", help="Skip baseline-ratio budget checks")
+    path_shapes_budget.add_argument("--enforce-targets", action="store_true", help="Fail target gaps as release blockers")
+
+    path_shapes_list = path_shapes_subparsers.add_parser(
+        "list",
+        help="List tracked path-shape cases selected by filters",
+    )
+    _add_path_shape_selector_args(path_shapes_list)
+    path_shapes_list.add_argument("--json", action="store_true", help="Emit selected cases as JSON")
+    path_shapes_list.add_argument("--require-cases", action="store_true", help="Return nonzero if selectors match no cases")
+
+    path_shapes_run = path_shapes_subparsers.add_parser(
+        "run",
+        help="Run tracked path-shape cases through the normal pytest harness",
+    )
+    _add_path_shape_selector_args(path_shapes_run)
+    path_shapes_run.add_argument("--device", help="Target device name, for example cpu, cuda, or mps")
+    path_shapes_run.add_argument(
+        "--level",
+        type=int,
+        default=8,
+        help="Run path-shape cases at or below this semantic level; defaults to 8",
+    )
+    path_shapes_run.add_argument("--level-exact", type=int, help="Run only path-shape cases at this exact semantic level")
+    path_shapes_run.add_argument("--level-range", help="Run only path-shape cases in inclusive MIN:MAX semantic level range")
+    path_shapes_run.add_argument("--validation", action="store_true", help="Run in validation mode")
+    path_shapes_run.add_argument(
+        "--subprocess-per-shape",
+        action="store_true",
+        help="Forward --subprocess-per-test to isolate each materialized shape",
+    )
+    path_shapes_run.add_argument("--output-dir", help="Forwarded pytest results directory")
+
     # Triage subcommands
     triage_parser = subparsers.add_parser("triage", help="Crash-safe backend failure adjudication")
     triage_subparsers = triage_parser.add_subparsers(dest="triage_command", help="Triage command")
@@ -604,6 +933,9 @@ def main():
 
     elif args.command == "coverage":
         sys.exit(run_coverage_command(args, getattr(args, "strict_unknowns", False)))
+
+    elif args.command == "path-shapes":
+        sys.exit(run_path_shapes_command(args, unknown))
 
     elif args.command == "triage":
         sys.exit(run_triage_command(args))

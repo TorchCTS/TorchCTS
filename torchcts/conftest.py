@@ -135,6 +135,19 @@ _SEMANTIC_SELECTION_SKIP_REASONS = frozenset({
     "semantic_level_gt_requested",
     "semantic_level_out_of_range",
 })
+_PATH_SHAPE_SELECTION_SKIP_REASONS = frozenset({
+    "path_shape_no_selected_cases",
+})
+_PATH_SHAPE_SUBPROCESS_SELECTOR_OPTIONS = (
+    ("--path-shape-family", "--path-shape-family"),
+    ("--path-shape-category", "--path-shape-category"),
+    ("--path-shape-case", "--path-shape-case"),
+    ("--path-shape-runner", "--path-shape-runner"),
+    ("--path-shape-resource-tier", "--path-shape-resource-tier"),
+    ("--path-shape-cost-class", "--path-shape-cost-class"),
+    ("--path-shape-model-role", "--path-shape-model-role"),
+    ("--path-shape-dtype-group", "--path-shape-dtype-group"),
+)
 _DTYPE_PARAM_NAMES = ("dtype", "src_dtype", "dst_dtype", "autocast_dtype")
 _HANDWRITTEN_CONTRACT_ALIASES = {
     # Python API names used by handwritten tests whose dtype contract is stored
@@ -1063,7 +1076,7 @@ def _run_declared_diagnostic_probes(supported_dtypes, caps, device_name, *, back
 
 
 def _declared_diagnostic_probes_enabled(is_validation):
-    return not is_validation and not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT)
+    return not is_validation and not (_COLLECT_ONLY or _SHOW_SKIPS or _KNOWN_SEGFAULT_AUDIT or _is_child_process())
 
 
 def _extract_result_metadata(item):
@@ -1086,6 +1099,11 @@ def _extract_result_metadata(item):
         "strategy": None,
         "strategy_family": None,
         "sample_descriptor": None,
+        "path_shape_case_id": None,
+        "path_shape_family": None,
+        "path_shape_resource_tier": None,
+        "path_shape_model_role": None,
+        "path_shape_intent": [],
     }
 
     filepath = str(item.fspath)
@@ -1121,10 +1139,25 @@ def _extract_result_metadata(item):
             metadata["surface_kind"] = coverage_entry.get("surface_kind")
             metadata["variant_kind"] = coverage_entry.get("variant_kind")
 
+        if isinstance(params.get("path_shape_case"), dict):
+            path_shape_case = params["path_shape_case"]
+            metadata["path_shape_case_id"] = path_shape_case.get("case_id")
+            metadata["path_shape_family"] = path_shape_case.get("family")
+            metadata["path_shape_resource_tier"] = path_shape_case.get("resource_tier")
+            metadata["path_shape_model_role"] = path_shape_case.get("model_role")
+            metadata["path_shape_intent"] = list(path_shape_case.get("branch_intent") or path_shape_case.get("intent") or [])
+            metadata["coverage_kind"] = "path_shape"
+            metadata["coverage_id"] = path_shape_case.get("case_id")
+            covers = path_shape_case.get("covers") or []
+            if len(covers) == 1:
+                metadata["dispatcher_name"] = covers[0]
+
         if "dtype" in params:
             metadata["dtype"] = dtype_to_str(params["dtype"])
         elif "dtype_str" in params:
             metadata["dtype"] = params["dtype_str"]
+        elif isinstance(params.get("path_shape_case"), dict):
+            metadata["dtype"] = str(params["path_shape_case"].get("dtype") or "") or None
 
         if "sample_input" in params:
             sample = params["sample_input"]
@@ -1174,7 +1207,9 @@ def _extract_result_metadata(item):
         {"surface": surface, "dtype": dtype_to_str(dtype)}
         for surface, dtype in _fixed_dtype_contract_gates_for_item(item)
     ]
-    if metadata["test_kind"] == "opinfo":
+    if metadata.get("coverage_kind") == "path_shape":
+        pass
+    elif metadata["test_kind"] == "opinfo":
         metadata["coverage_kind"] = "opinfo"
     elif metadata["suite"] == "generated":
         metadata["coverage_kind"] = "generated"
@@ -1272,6 +1307,15 @@ def _site_stats_collection_record(item, decision, *, skip_reason=None, skip_deta
         "variant_kind": metadata["variant_kind"],
         "strategy": metadata["strategy"],
         "strategy_family": metadata["strategy_family"],
+        "covers": metadata["covers"],
+        "covers_categories": metadata["covers_categories"],
+        "level_reason": metadata["level_reason"],
+        "level_source": metadata["level_source"],
+        "path_shape_case_id": metadata["path_shape_case_id"],
+        "path_shape_family": metadata["path_shape_family"],
+        "path_shape_resource_tier": metadata["path_shape_resource_tier"],
+        "path_shape_model_role": metadata["path_shape_model_role"],
+        "path_shape_intent": metadata["path_shape_intent"],
         "decision": decision,
         "skip_reason": skip_reason,
         "skip_detail": skip_detail,
@@ -1342,6 +1386,14 @@ def pytest_addoption(parser):
     group.addoption("--level", type=int, help="Run semantic test cases with semantic_level <= LEVEL (1-8)")
     group.addoption("--level-exact", type=int, help="Run only semantic test cases with semantic_level == LEVEL (1-8)")
     group.addoption("--level-range", help="Run only semantic test cases in inclusive MIN:MAX level range")
+    group.addoption("--path-shape-family", action="append", help="Select tracked path-shape cases by family")
+    group.addoption("--path-shape-category", action="append", help="Select tracked path-shape cases by category")
+    group.addoption("--path-shape-case", action="append", help="Select tracked path-shape cases by case_id")
+    group.addoption("--path-shape-runner", action="append", help="Select tracked path-shape cases by runner")
+    group.addoption("--path-shape-resource-tier", action="append", help="Select tracked path-shape cases by resource tier")
+    group.addoption("--path-shape-cost-class", action="append", help="Select tracked path-shape cases by cost class")
+    group.addoption("--path-shape-model-role", action="append", help="Select tracked path-shape cases by model role")
+    group.addoption("--path-shape-dtype-group", action="append", help="Select tracked path-shape cases by dtype group")
     group.addoption("--show-skips", action="store_true", help="Dry-run: print skips and exit")
     group.addoption("--report-skips", action="store_true", help="Include skip audit in report")
     group.addoption("--results-dir", default="./results", help="Directory to save JSON/Markdown results")
@@ -1726,6 +1778,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "cpu_contract_dtype(dispatcher_name, dtype): hardcoded backend dtype contract gate for handwritten tests")
     config.addinivalue_line("markers", "generated: generated coverage tests")
     config.addinivalue_line("markers", "semantic_level(level, reason=None): semantic priority level from 1 to 8")
+    config.addinivalue_line("markers", "path_shape: curated path-shape coverage case")
 
     # 1. Load manifest
     _MANIFEST = load_manifest()
@@ -2342,7 +2395,13 @@ def pytest_collection_modifyitems(session, config, items):
                 skip_reason = "framework_bug"
                 detail = "index_reduce hangs infinitely on MPS when input/destination contains NaN (CAS loop GPU thread deadlock)"
 
-        # 12. Semantic test level
+        # 12. Empty path-shape module parameter set
+        if not skip_reason and hasattr(item, "callspec") and "path_shape_case" in item.callspec.params:
+            if not isinstance(item.callspec.params.get("path_shape_case"), dict):
+                skip_reason = "path_shape_no_selected_cases"
+                detail = "no tracked path-shape rows matched this module's runner and selectors"
+
+        # 13. Semantic test level
         if not skip_reason:
             try:
                 semantic = _semantic_level_for_item(item)
@@ -2376,7 +2435,7 @@ def pytest_collection_modifyitems(session, config, items):
                         skip_reason=skip_reason,
                         skip_detail=detail,
                     ))
-            elif skip_reason in _SEMANTIC_SELECTION_SKIP_REASONS:
+            elif skip_reason in _SEMANTIC_SELECTION_SKIP_REASONS or skip_reason in _PATH_SHAPE_SELECTION_SKIP_REASONS:
                 selection_deselected_items.append(item)
                 if site_stats_enabled:
                     site_stats_records.append(_site_stats_collection_record(
@@ -2806,6 +2865,10 @@ def _subprocess_child_command(item):
     dtype_filters = item.config.getoption("--dtype") or []
     for dtype_name in dtype_filters:
         cmd.extend(["--dtype", dtype_name])
+    for config_option, pytest_option in _PATH_SHAPE_SUBPROCESS_SELECTOR_OPTIONS:
+        values = item.config.getoption(config_option) or []
+        for value in values:
+            cmd.extend([pytest_option, value])
     memory_mode = item.config.getoption("--memory-mode")
     if memory_mode:
         cmd.extend(["--memory-mode", memory_mode])

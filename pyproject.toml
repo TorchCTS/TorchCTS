@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchcts"
-version = "0.3.4"
+version = "0.3.5"
 description = "A manifest-driven PyTorch backend validation and reporting suite"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,7 +30,7 @@ where = ["."]
 include = ["torchcts*"]
 
 [tool.setuptools.package-data]
-torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json", "op_dtype_contracts.json"]
+torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_exclusions.json", "known_segfaults.json", "op_metadata.json", "op_dtype_contracts.json", "path_shapes/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]
