@@ -211,10 +211,10 @@ try {
         Write-Host "[OK] Keeping existing PyTorch ${TorchVersion}." -ForegroundColor Green
     } elseif ($TorchStatus -eq "too_old" -and -not $UpgradeTorch) {
         Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
-        Write-Host "     Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
+        Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
     } elseif ($TorchStatus -eq "too_new" -and -not $UpgradeTorch) {
         Write-Host "[..] $TorchDetail" -ForegroundColor Yellow
-        Write-Host "     Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
+        Write-Host "     Installed PyTorch: ${TorchVersion}; validated PyTorch: ${TorchMinVersion}-${TorchMaxValidatedVersion} (${TorchSpec}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build." -ForegroundColor Yellow
     } elseif ($TorchStatus -eq "broken" -and -not $UpgradeTorch) {
         throw "$TorchDetail Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."
     } else {

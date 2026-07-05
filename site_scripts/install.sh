@@ -250,10 +250,10 @@ if [ "$TORCH_STATUS" = "valid" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     ok "Keeping existing PyTorch ${TORCH_VERSION}."
 elif [ "$TORCH_STATUS" = "too_old" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     warn "$TORCH_DETAIL"
-    echo "  Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
+    echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
 elif [ "$TORCH_STATUS" = "too_new" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     warn "$TORCH_DETAIL"
-    echo "  Continuing with existing PyTorch. TorchCTS is validated for PyTorch ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}); set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
+    echo "  Installed PyTorch: ${TORCH_VERSION:-unknown}; validated PyTorch: ${TORCH_MIN_VERSION}-${TORCH_MAX_VALIDATED_VERSION} (${TORCH_SPEC}). Continuing anyway; set TORCHCTS_UPGRADE_TORCH=1 to let setup install a validated build."
 elif [ "$TORCH_STATUS" = "broken" ] && [ "$TORCH_UPGRADE_REQUESTED" != "1" ]; then
     err "$TORCH_DETAIL"
     echo "  Fix the PyTorch install manually, or set TORCHCTS_UPGRADE_TORCH=1 to let setup reinstall it."

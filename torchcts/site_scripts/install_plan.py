@@ -205,27 +205,27 @@ def inspect_torch_install(
             "valid",
             version,
             minimum,
-            f"PyTorch {version} satisfies validated TorchCTS range {requirement}",
+            f"Installed PyTorch {version} satisfies validated TorchCTS range {requirement}",
         )
     if parsed_version is not None and parsed_maximum is not None and parsed_version >= parsed_maximum:
         return TorchInstallStatus(
             "too_new",
             version,
             minimum,
-            f"PyTorch {version} is newer than validated TorchCTS range {requirement}",
+            f"Installed PyTorch {version} is newer than validated TorchCTS range {requirement}",
         )
     if parsed_version is None or parsed_minimum is None:
         return TorchInstallStatus(
             "broken",
             version,
             minimum,
-            f"PyTorch version {version} could not be parsed against validated TorchCTS range {requirement}",
+            f"Installed PyTorch {version} could not be parsed against validated TorchCTS range {requirement}",
         )
     return TorchInstallStatus(
         "too_old",
         version,
         minimum,
-        f"PyTorch {version} is older than validated TorchCTS range {requirement}",
+        f"Installed PyTorch {version} is older than validated TorchCTS range {requirement}",
     )
 
 

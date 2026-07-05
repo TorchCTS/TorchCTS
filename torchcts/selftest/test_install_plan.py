@@ -166,6 +166,7 @@ def test_torch_status_detail_names_validated_range_and_bound(monkeypatch, versio
     status = install_plan.inspect_torch_install()
 
     assert status.status == expected_status
+    assert f"Installed PyTorch {version}" in status.detail
     assert "2.7.0-2.12.1" in status.detail
     assert "torch>=2.7.0,<2.12.2" in status.detail
 
