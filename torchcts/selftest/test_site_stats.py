@@ -59,7 +59,51 @@ def test_generate_site_stats_no_collect_writes_markdown(tmp_path):
     assert "pyproject.toml version" in text
     assert "TorchCTS import path" in text
     assert "Unknown tensor-touching surfaces | 0" in text
+    assert "## Known Crash Rule Ledger" in text
+    assert "mps-path-shape-sdpa-bool-causal-pytorch-2-12" in text
     assert "Ops skipped (unsupported)" not in text
+
+
+def test_site_stats_known_crashes_use_validated_loader(monkeypatch):
+    module = _load_site_stats_module()
+    calls = []
+
+    def fake_load_known_segfaults(project_root):
+        calls.append(project_root)
+        return [
+            {
+                "id": "mps-example",
+                "backend": "mps",
+                "match": "coverage_id",
+                "evidence_scope": "constrained_metadata",
+                "classification": "confirmed_backend_crash",
+                "expected_signal": "SIGABRT",
+                "constraints": {"coverage_id_glob": ["example*"]},
+                "review_after": "2026-10-31",
+                "source_path": str(module.REPO_ROOT / "torchcts" / "known_segfaults.json"),
+            }
+        ]
+
+    monkeypatch.setattr(module.known_segfaults_module, "load_known_segfaults", fake_load_known_segfaults)
+
+    stats = module._known_crash_stats()
+
+    assert calls == [module.REPO_ROOT]
+    assert stats["count"] == 1
+    assert stats["backend_counts"]["mps"] == 1
+    assert stats["signal_counts"]["SIGABRT"] == 1
+    assert stats["source_counts"]["torchcts/known_segfaults.json"] == 1
+    assert stats["rule_rows"] == [
+        [
+            "mps-example",
+            "mps",
+            "coverage_id",
+            "constrained_metadata",
+            "SIGABRT",
+            "coverage_id_glob",
+            "2026-10-31",
+        ]
+    ]
 
 
 def test_site_stats_script_imports_checkout_package():

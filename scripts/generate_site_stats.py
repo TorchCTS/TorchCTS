@@ -30,6 +30,7 @@ from torchcts.core.coverage import (
     PENDING_STATUSES,
     build_audit,
 )
+from torchcts.core import known_segfaults as known_segfaults_module
 
 
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "site-stats.md"
@@ -527,16 +528,16 @@ def _coverage_stats(audit: dict) -> dict:
 
 
 def _known_crash_stats() -> dict:
-    path = REPO_ROOT / "torchcts" / "known_segfaults.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    entries = data.get("known_segfaults", [])
+    entries = known_segfaults_module.load_known_segfaults(REPO_ROOT)
     backend_counts = Counter()
     match_counts = Counter()
     scope_counts = Counter()
     classification_counts = Counter()
     signal_counts = Counter()
+    source_counts = Counter()
     constraint_key_counts = Counter()
     constrained_count = 0
+    rule_rows = []
 
     for entry in entries:
         backend_counts[entry.get("backend") or "unknown"] += 1
@@ -544,11 +545,26 @@ def _known_crash_stats() -> dict:
         scope_counts[entry.get("evidence_scope") or "unknown"] += 1
         classification_counts[entry.get("classification") or "unknown"] += 1
         signal_counts[entry.get("expected_signal") or "unknown"] += 1
+        source = entry.get("source_path") or "unknown"
+        try:
+            source = _repo_relative(str(Path(source).resolve().relative_to(REPO_ROOT.resolve())))
+        except (OSError, ValueError):
+            source = _repo_relative(str(source))
+        source_counts[source] += 1
         constraints = entry.get("constraints") or {}
         if constraints:
             constrained_count += 1
             for key in constraints:
                 constraint_key_counts[key] += 1
+        rule_rows.append([
+            entry.get("id") or "unknown",
+            entry.get("backend") or "unknown",
+            entry.get("match") or "unknown",
+            entry.get("evidence_scope") or "unknown",
+            entry.get("expected_signal") or "unknown",
+            ", ".join(sorted(constraints)) if constraints else "",
+            entry.get("review_after") or "unknown",
+        ])
 
     return {
         "count": len(entries),
@@ -557,8 +573,10 @@ def _known_crash_stats() -> dict:
         "scope_counts": scope_counts,
         "classification_counts": classification_counts,
         "signal_counts": signal_counts,
+        "source_counts": source_counts,
         "constrained_count": constrained_count,
         "constraint_key_counts": constraint_key_counts,
+        "rule_rows": sorted(rule_rows, key=lambda row: row[0]),
     }
 
 
@@ -1039,7 +1057,15 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     _append_counter_section(lines, "Known Crash Rules By Evidence Scope", known_crashes["scope_counts"])
     _append_counter_section(lines, "Known Crash Rules By Classification", known_crashes["classification_counts"])
     _append_counter_section(lines, "Known Crash Rules By Expected Signal", known_crashes["signal_counts"])
+    _append_counter_section(lines, "Known Crash Rules By Source Ledger", known_crashes["source_counts"])
     _append_counter_section(lines, "Known Crash Constraint Key Counts", known_crashes["constraint_key_counts"])
+    lines.append("## Known Crash Rule Ledger")
+    lines.append("")
+    lines.extend(_table(
+        ["Rule ID", "Backend", "Match", "Evidence Scope", "Signal", "Constraint Keys", "Review After"],
+        known_crashes["rule_rows"],
+    ))
+    lines.append("")
 
     lines.append("## Website Interpretation Notes")
     lines.append("")

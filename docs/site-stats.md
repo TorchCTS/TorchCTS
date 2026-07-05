@@ -5,7 +5,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-07-05T06:55:06.554204Z |
+| Generated at | 2026-07-05T15:46:53.074880Z |
 | TorchCTS version | 0.3.5 |
 | Installed TorchCTS metadata version | 0.3.5 |
 | pyproject.toml version | 0.3.5 |
@@ -14,15 +14,15 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-07-05T06:52:59.685332Z |
+| Coverage audit timestamp | 2026-07-05T15:44:44.647872Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 19788 |
-| Pytest executable nodes | 19704 |
+| Pytest nodes collected | 19792 |
+| Pytest executable nodes | 19708 |
 | Pytest skip-marked nodes | 84 |
 | Structured deselected nodes | 0 |
 | ATen overloads inventoried | 3225 |
@@ -36,7 +36,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Generated coverage surfaces | 1910 |
 | Generated dispatcher semantic cases | 1921 |
 | Required generated dispatcher semantic cases | 1921 |
-| Known crash isolation rules | 10 |
+| Known crash isolation rules | 11 |
 | CPU dtype contract records | 3046 |
 
 ## Semantic Level Overview
@@ -45,7 +45,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 846 | 846 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 1 | 850 | 850 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
 | 2 | 13773 | 13759 | 14 | 0 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
 | 3 | 1084 | 1081 | 3 | 0 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
 | 4 | 2405 | 2380 | 25 | 0 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
@@ -60,17 +60,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 19788 |
-| Node IDs parsed from stdout | 19788 |
-| Pytest summary count | 19788 |
+| Structured records parsed | 19792 |
+| Node IDs parsed from stdout | 19792 |
+| Pytest summary count | 19792 |
 | Parameterized node IDs | 19283 |
-| Unparameterized node IDs | 505 |
+| Unparameterized node IDs | 509 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 19704 |
+| executable | 19708 |
 | pytest_skip_marked | 84 |
 
 ## Pytest Collection Skip Reasons
@@ -88,7 +88,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | operators | 1149 |
-| selftest | 424 |
+| selftest | 428 |
 | workloads | 255 |
 | compiler | 144 |
 | dtypes | 135 |
@@ -110,7 +110,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | handwritten | 2008 |
-| selftest | 424 |
+| selftest | 428 |
 
 ## Pytest Nodes By File
 
@@ -124,10 +124,10 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/generated/test_functional_variants.py | 578 |
 | torchcts/generated/test_inplace_variants.py | 346 |
 | torchcts/generated/test_oracle_surfaces.py | 273 |
-| torchcts/selftest/test_harness_reporting.py | 237 |
+| torchcts/selftest/test_harness_reporting.py | 239 |
 | torchcts/opinfo/test_opinfo_errors.py | 202 |
 | torchcts/workloads/test_workload_path_shapes.py | 135 |
-| torchcts/selftest/test_mps_triage.py | 110 |
+| torchcts/selftest/test_mps_triage.py | 111 |
 | torchcts/generated/test_view_aliases.py | 100 |
 | torchcts/strides/test_noncontiguous.py | 73 |
 | torchcts/workloads/test_sdpa.py | 73 |
@@ -191,12 +191,12 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/errors/test_error_handling.py | 5 |
 | torchcts/operators/test_fft.py | 5 |
 | torchcts/operators/test_padding.py | 5 |
+| torchcts/selftest/test_site_stats.py | 5 |
 | torchcts/stress/test_edge_numerics.py | 5 |
 | torchcts/workloads/test_transformer.py | 5 |
 | torchcts/autograd/test_gradcheck.py | 4 |
 | torchcts/operators/test_named_tensors.py | 4 |
 | torchcts/operators/test_upsample.py | 4 |
-| torchcts/selftest/test_site_stats.py | 4 |
 | torchcts/training/test_fused_optimizer_raw.py | 4 |
 | torchcts/multi_device/test_multi_device.py | 3 |
 | torchcts/operators/test_foreach.py | 3 |
@@ -406,7 +406,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16984 |
+| none | 16988 |
 | training | 2400 |
 | compile | 120 |
 | sparse | 36 |
@@ -510,15 +510,15 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | opinfo | 13098 |
 | generated | 4258 |
+| category | 850 |
 | path_shape | 850 |
-| category | 846 |
 | handwritten | 736 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 15510 |
+| none | 15514 |
 | out_variant | 1637 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -532,7 +532,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 15530 |
+| none | 15534 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1262,13 +1262,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Name | Count |
 | --- | --- |
 | present | 18690 |
-| missing | 1098 |
+| missing | 1102 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13944 |
+| missing | 13948 |
 | present | 5844 |
 
 ## Collection Nodes By Coverage Category
@@ -1283,7 +1283,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | algorithmic_shape | 850 |
 | path_shape | 850 |
 | generated_functional_variants | 578 |
-| selftest | 424 |
+| selftest | 428 |
 | generated_inplace_variants | 346 |
 | layout_path_shape | 323 |
 | oracle_surfaces | 273 |
@@ -1354,7 +1354,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Count |
 | --- | --- |
-| 1 | 846 |
+| 1 | 850 |
 | 2 | 13773 |
 | 3 | 1084 |
 | 4 | 2405 |
@@ -1369,7 +1369,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 846 |
+| executable | 850 |
 
 ### Level 2
 
@@ -2815,8 +2815,8 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 705 |
-| Category markers discovered | 840 |
+| Coverage markers discovered | 709 |
+| Category markers discovered | 844 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2837,7 +2837,7 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| selftest | 358 |
+| selftest | 362 |
 | operators | 188 |
 | workloads | 58 |
 | strides | 40 |
@@ -2973,28 +2973,28 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Rules | 10 |
-| Rules with constraints | 4 |
+| Rules | 11 |
+| Rules with constraints | 5 |
 
 ## Known Crash Rules By Backend
 
 | Name | Count |
 | --- | --- |
-| mps | 10 |
+| mps | 11 |
 
 ## Known Crash Rules By Match Mode
 
 | Name | Count |
 | --- | --- |
 | dispatcher | 6 |
-| coverage_id | 2 |
+| coverage_id | 3 |
 | nodeid | 2 |
 
 ## Known Crash Rules By Evidence Scope
 
 | Name | Count |
 | --- | --- |
-| constrained_metadata | 4 |
+| constrained_metadata | 5 |
 | dispatcher_surface | 4 |
 | exact_node | 2 |
 
@@ -3002,28 +3002,51 @@ No entries.
 
 | Name | Count |
 | --- | --- |
-| confirmed_backend_crash | 10 |
+| confirmed_backend_crash | 11 |
 
 ## Known Crash Rules By Expected Signal
 
 | Name | Count |
 | --- | --- |
 | SIGSEGV | 10 |
+| SIGABRT | 1 |
+
+## Known Crash Rules By Source Ledger
+
+| Name | Count |
+| --- | --- |
+| torchcts/known_segfaults.json | 11 |
 
 ## Known Crash Constraint Key Counts
 
 | Name | Count |
 | --- | --- |
-| coverage_kind | 4 |
-| nodeid_glob | 4 |
-| suite | 4 |
-| semantic_level | 3 |
+| coverage_kind | 5 |
+| nodeid_glob | 5 |
+| suite | 5 |
+| semantic_level | 4 |
+| coverage_id_glob | 3 |
 | strategy | 3 |
 | surface_kind | 3 |
 | variant_kind | 3 |
-| coverage_id_glob | 2 |
+| dtype | 2 |
 | strategy_family | 2 |
-| dtype | 1 |
+
+## Known Crash Rule Ledger
+
+| Rule ID | Backend | Match | Evidence Scope | Signal | Constraint Keys | Review After |
+| --- | --- | --- | --- | --- | --- | --- |
+| mps-col2im-generated-functional-pytorch-2-12 | mps | dispatcher | constrained_metadata | SIGSEGV | coverage_kind, nodeid_glob, semantic_level, strategy, strategy_family, suite, surface_kind, variant_kind | 2026-09-30 |
+| mps-generated-autograd-backward-teardown-pytorch-2-12 | mps | coverage_id | constrained_metadata | SIGSEGV | coverage_id_glob, coverage_kind, nodeid_glob, suite, surface_kind, variant_kind | 2026-09-30 |
+| mps-generated-manual-foreach-pytorch-2-12 | mps | coverage_id | constrained_metadata | SIGSEGV | coverage_id_glob, coverage_kind, dtype, nodeid_glob, semantic_level, strategy, suite | 2026-09-30 |
+| mps-generated-unfold-view-copy-pytorch-2-12 | mps | dispatcher | dispatcher_surface | SIGSEGV |  | 2026-09-30 |
+| mps-grid-sampler-2d-cpu-fallback-backward-pytorch-2-12 | mps | nodeid | exact_node | SIGSEGV |  | 2026-09-30 |
+| mps-grid-sampler-2d-cpu-fallback-default-pytorch-2-12 | mps | dispatcher | dispatcher_surface | SIGSEGV |  | 2026-09-30 |
+| mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12 | mps | dispatcher | dispatcher_surface | SIGSEGV |  | 2026-09-30 |
+| mps-hamming-window-periodic-generated-factory-pytorch-2-12 | mps | dispatcher | constrained_metadata | SIGSEGV | coverage_kind, nodeid_glob, semantic_level, strategy, strategy_family, suite, surface_kind, variant_kind | 2026-09-30 |
+| mps-path-shape-sdpa-bool-causal-pytorch-2-12 | mps | coverage_id | constrained_metadata | SIGABRT | coverage_id_glob, coverage_kind, dtype, nodeid_glob, semantic_level, suite | 2026-10-31 |
+| mps-range-out-underscore-copy-cleanup-pytorch-2-12 | mps | nodeid | exact_node | SIGSEGV |  | 2026-09-30 |
+| mps-reflection-pad3d-out-pytorch-2-12 | mps | dispatcher | dispatcher_surface | SIGSEGV |  | 2026-09-30 |
 
 ## Website Interpretation Notes
 
