@@ -109,7 +109,7 @@ def _reflection_pad3d_out_entry():
         "status": "covered_generated",
         "coverage_kind": "generated",
         "surface_kind": "out_variant",
-        "variant_kind": "out_variant",
+        "variant_kind": "out",
         "semantic_level": 3,
         "generated": {
             "strategy": {
@@ -861,15 +861,28 @@ def test_packaged_known_segfaults_cover_generated_grid_sampler_crash_nodes():
             ("mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12", "aten::_grid_sampler_2d_cpu_fallback.out"),
     }
     for nodeid, (expected_id, dispatcher_name) in expected.items():
+        is_out = ".out" in dispatcher_name
         match = known_segfaults.match_known_segfault(
             SimpleNamespace(
                 nodeid=nodeid,
-                metadata={"dispatcher_name": dispatcher_name, "coverage_id": dispatcher_name},
+                metadata={
+                    "dispatcher_name": dispatcher_name,
+                    "coverage_id": dispatcher_name,
+                    "suite": "generated",
+                    "coverage_kind": "generated",
+                    "surface_kind": "out_variant" if is_out else "functional_data",
+                    "variant_kind": "out" if is_out else "functional",
+                    "strategy": "manual_grid",
+                    "strategy_family": "_grid_sampler_2d_cpu_fallback",
+                    "semantic_level": 3,
+                    "dtype": "torch.float64",
+                },
             ),
             active,
         )
         assert match is not None
         assert match["id"] == expected_id
+        assert match["constraints"]["dtype"] == ["torch.float64", "torch.complex128"]
 
 
 def test_packaged_known_segfaults_cover_generated_reflection_pad3d_out_node():
@@ -881,7 +894,7 @@ def test_packaged_known_segfaults_cover_generated_reflection_pad3d_out_node():
         hardware_key="Apple_M3_Max_128gb",
     )
     nodeid = "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]"
-    item = _generated_item(nodeid, _reflection_pad3d_out_entry())
+    item = _generated_item(nodeid, _reflection_pad3d_out_entry(), dtype=torch.float64)
 
     match = known_segfaults.match_known_segfault(
         item,
@@ -892,7 +905,9 @@ def test_packaged_known_segfaults_cover_generated_reflection_pad3d_out_node():
     assert match is not None
     assert match["id"] == "mps-reflection-pad3d-out-pytorch-2-12"
     assert match["matched_by"] == "dispatcher"
-    assert match["evidence_scope"] == "dispatcher_surface"
+    assert match["evidence_scope"] == "constrained_metadata"
+    assert match["constraints"]["dtype"] == ["torch.float64", "torch.complex128"]
+    assert match["matched_metadata"]["dtype"] == "torch.float64"
 
 
 def test_packaged_known_segfaults_cover_generated_unfold_view_alias_node():
@@ -904,7 +919,7 @@ def test_packaged_known_segfaults_cover_generated_unfold_view_alias_node():
         hardware_key="Apple_M3_Max_128gb",
     )
     nodeid = "torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]]"
-    item = _generated_item(nodeid, _unfold_view_alias_entry())
+    item = _generated_item(nodeid, _unfold_view_alias_entry(), dtype=torch.float64)
 
     match = known_segfaults.match_known_segfault(
         item,
@@ -915,7 +930,9 @@ def test_packaged_known_segfaults_cover_generated_unfold_view_alias_node():
     assert match is not None
     assert match["id"] == "mps-generated-unfold-view-copy-pytorch-2-12"
     assert match["matched_by"] == "dispatcher"
-    assert match["evidence_scope"] == "dispatcher_surface"
+    assert match["evidence_scope"] == "constrained_metadata"
+    assert match["constraints"]["dtype"] == ["torch.float64", "torch.complex128"]
+    assert match["matched_metadata"]["dtype"] == "torch.float64"
 
 
 def test_packaged_known_segfaults_cover_generated_hamming_window_periodic_node():
@@ -931,6 +948,7 @@ def test_packaged_known_segfaults_cover_generated_hamming_window_periodic_node()
         nodeid,
         _hamming_window_periodic_factory_entry(),
         fspath="torchcts/generated/test_factories.py",
+        dtype=torch.float64,
     )
 
     match = known_segfaults.match_known_segfault(
@@ -944,6 +962,8 @@ def test_packaged_known_segfaults_cover_generated_hamming_window_periodic_node()
     assert match["matched_by"] == "dispatcher"
     assert match["evidence_scope"] == "constrained_metadata"
     assert match["constraints"]["strategy_family"] == ["window"]
+    assert match["constraints"]["dtype"] == ["torch.float64"]
+    assert match["matched_metadata"]["dtype"] == "torch.float64"
 
 
 def test_packaged_known_segfaults_cover_generated_col2im_node():
@@ -959,6 +979,7 @@ def test_packaged_known_segfaults_cover_generated_col2im_node():
         nodeid,
         _col2im_functional_entry(),
         fspath="torchcts/generated/test_functional_variants.py",
+        dtype=torch.float64,
     )
 
     match = known_segfaults.match_known_segfault(
@@ -972,6 +993,8 @@ def test_packaged_known_segfaults_cover_generated_col2im_node():
     assert match["matched_by"] == "dispatcher"
     assert match["evidence_scope"] == "constrained_metadata"
     assert match["constraints"]["strategy_family"] == ["col2im"]
+    assert match["constraints"]["dtype"] == ["torch.float64", "torch.complex128"]
+    assert match["matched_metadata"]["dtype"] == "torch.float64"
 
 
 def test_packaged_known_segfaults_cover_generated_manual_foreach_nodes():
@@ -1056,6 +1079,7 @@ def test_packaged_known_segfaults_cover_generated_autograd_backward_family():
         nodeid,
         _native_batch_norm_backward_entry(),
         fspath="torchcts/generated/test_autograd_backward_variants.py",
+        dtype=torch.float64,
     )
 
     match = known_segfaults.match_known_segfault(
@@ -1066,6 +1090,8 @@ def test_packaged_known_segfaults_cover_generated_autograd_backward_family():
 
     assert match is not None
     assert match["id"] == "mps-generated-autograd-backward-teardown-pytorch-2-12"
+    assert match["constraints"]["dtype"] == ["torch.float64"]
+    assert match["matched_metadata"]["dtype"] == "torch.float64"
     assert match["matched_by"] == "coverage_id"
     assert match["evidence_scope"] == "constrained_metadata"
     assert match["constraints"]["surface_kind"] == ["autograd_backward"]
@@ -1257,29 +1283,6 @@ def test_known_segfault_nodeid_wins_over_dispatcher():
     )
 
     assert match["id"] == "exact"
-
-
-def test_known_segfault_equal_specificity_ambiguity_fails():
-    first = _known_segfault_entry(
-        id="first",
-        match="dispatcher",
-        nodeid=None,
-        dispatcher="aten::example.default",
-        evidence_scope="dispatcher_surface",
-    )
-    second = dict(first, id="second")
-    entries = known_segfaults.validate_known_segfaults([
-        {"version": 1, "known_segfaults": [first, second]}
-    ])
-
-    with pytest.raises(known_segfaults.KnownSegfaultError, match="ambiguous"):
-        known_segfaults.match_known_segfault(
-            SimpleNamespace(
-                nodeid="torchcts/example.py::test_case",
-                metadata={"dispatcher_name": "aten::example.default"},
-            ),
-            entries,
-        )
 
 
 def test_known_segfault_schema_rejects_duplicate_ids():

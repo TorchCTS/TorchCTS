@@ -27,6 +27,88 @@ import torch
 import psutil
 from torchcts.core.manifest_schema import CAPABILITY_ORDER, KNOWN_CAPABILITIES
 
+_BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
+    "dtype_not_supported",
+    "dtype_regex_filtered",
+    "dtype_not_listed",
+    "capability_not_declared",
+    "op_excluded",
+    "container_format_not_supported",
+    "custom_container_decoder_not_declared",
+    "generated_no_manifest_enabled_dtypes",
+    "resource_limit",
+    "device_count",
+    "no_device_module",
+    "set_device_not_supported",
+    "oom_not_recoverable",
+})
+_BACKEND_MANIFEST_ASSERTION_BAR_WIDTH = 37
+_MIN_FULL_RUN_MANIFEST_TEST_COUNT = 19000
+
+
+def _backend_manifest_assertion_from_data(metadata, results, skips_dict):
+    stored = metadata.get("backend_manifest_assertion")
+    if isinstance(stored, dict) and stored.get("total_runnable_test_count") is not None:
+        try:
+            asserted = int(stored.get("asserted_test_count", 0) or 0)
+            total = int(stored.get("total_runnable_test_count", 0) or 0)
+        except (TypeError, ValueError):
+            asserted = 0
+            total = 0
+        declined = max(total - asserted, 0)
+        fraction = asserted / total if total else 0.0
+        return {
+            "asserted_test_count": asserted,
+            "declined_test_count": declined,
+            "total_runnable_test_count": total,
+            "asserted_fraction": fraction,
+            "asserted_percent": fraction * 100.0,
+            "progress_bar_width": int(stored.get("progress_bar_width") or _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH),
+        }
+
+    declined = sum(
+        1
+        for record in skips_dict.values()
+        if record.get("skip_reason") in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS
+    )
+    asserted = len(results)
+    total = asserted + declined
+    fraction = asserted / total if total else 0.0
+    return {
+        "asserted_test_count": asserted,
+        "declined_test_count": declined,
+        "total_runnable_test_count": total,
+        "asserted_fraction": fraction,
+        "asserted_percent": fraction * 100.0,
+        "progress_bar_width": _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH,
+    }
+
+
+def _backend_manifest_assertion_lines(summary):
+    asserted = int(summary.get("asserted_test_count", 0) or 0)
+    total = int(summary.get("total_runnable_test_count", 0) or 0)
+    if total < _MIN_FULL_RUN_MANIFEST_TEST_COUNT:
+        return [
+            "  Backend manifest support scorecard unavailable for this run.",
+            f"  Scored {asserted} out of {total} selected/declined tests.",
+            f"  A full-run scorecard requires at least {_MIN_FULL_RUN_MANIFEST_TEST_COUNT} runnable tests.",
+            "  This is a partial, interrupted, or failed collection report; no backend support percentage is shown.",
+            "",
+        ]
+    fraction = float(summary.get("asserted_fraction", 0.0) or 0.0)
+    percent = float(summary.get("asserted_percent", fraction * 100.0) or 0.0)
+    width = int(summary.get("progress_bar_width") or _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH)
+    width = max(width, 1)
+    filled = min(width, max(0, int((width * fraction) + 0.5)))
+    bar = "[" + ("█" * filled) + ("░" * (width - filled)) + "]"
+    return [
+        "  Backend asserts via manifest.py that it supports:",
+        f"  {asserted} out of {total} tests / {percent:.2f}%",
+        f"  {bar}",
+        "",
+    ]
+
+
 def get_hardware_key(device_name, manifest=None):
     if device_name == "cuda" and torch.cuda.is_available():
         try:
@@ -94,16 +176,22 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     results = current_data.get("results", {})
     skips_dict = current_data.get("skips", {})
+    backend_manifest_assertion = _backend_manifest_assertion_from_data(metadata, results, skips_dict)
     manifest_skip_reasons = {
         "op_excluded",
         "dtype_not_supported",
         "dtype_regex_filtered",
         "dtype_not_listed",
         "capability_not_declared",
+        "container_format_not_supported",
+        "custom_container_decoder_not_declared",
+        "generated_no_manifest_enabled_dtypes",
+        "resource_limit",
     }
     selection_skip_reasons = {
         "semantic_level_gt_requested",
         "semantic_level_out_of_range",
+        "opinfo_no_selected_cases",
     }
     coverage_skip_reasons = {
         "coverage_unknown",
@@ -248,20 +336,20 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     # ── Capability Results ──
     # We group tests by suite/capabilities.
     capability_counts = {
-        cap: {"pass": 0, "total": 0, "skipped": False}
+        cap: {"pass": 0, "total": 0, "declined": False, "skipped": False}
         for cap in CAPABILITY_ORDER
     }
 
-    # Inspect skips to see if capability skipped
+    # Inspect non-executed records to distinguish manifest declines from runtime skips.
     for nodeid, res in skips_dict.items():
-        # if a capability was not declared, mark it skipped
         reason = res.get("skip_reason")
         cap = capability_for(nodeid, res)
-        if reason == "capability_not_declared":
+        if reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+            if cap in capability_counts:
+                capability_counts[cap]["declined"] = True
+        elif reason not in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
             if cap in capability_counts:
                 capability_counts[cap]["skipped"] = True
-        elif reason == "device_count" and cap == "multi_device":
-            capability_counts["multi_device"]["skipped"] = True
 
     # Count passes and totals from results
     # IEEE 754 compliance tracking (NaN/Inf tiers)
@@ -319,7 +407,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         # clean representation: e.g. torch.float32 or float32
         dt = dt.replace("torch.", "")
         if dt not in dtype_counts:
-            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0}
+            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0, "declined": 0}
         dtype_counts[dt]["total"] += 1
         if res.get("status") == "PASS":
             dtype_counts[dt]["pass"] += 1
@@ -333,8 +421,11 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             continue
         dt = dt.replace("torch.", "")
         if dt not in dtype_counts:
-            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0}
-        dtype_counts[dt]["skip"] += 1
+            dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0, "declined": 0}
+        if res.get("skip_reason") in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+            dtype_counts[dt]["declined"] += 1
+        else:
+            dtype_counts[dt]["skip"] += 1
 
     # ── Semantic Level Coverage ──
     semantic_counts = {}
@@ -348,13 +439,18 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             level = int(level)
             if requested_level is None:
                 requested_level = res.get("requested_level")
-            semantic_counts.setdefault(level, {"pass": 0, "fail": 0, "skip": 0, "total": 0})
+            semantic_counts.setdefault(level, {"pass": 0, "fail": 0, "skip": 0, "deselected": 0, "total": 0})
             semantic_counts[level]["total"] += 1
             status = res.get("status")
             if status == "PASS":
                 semantic_counts[level]["pass"] += 1
             elif status in ("FAIL", "ERROR"):
                 semantic_counts[level]["fail"] += 1
+            elif (
+                res.get("skip_reason") in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS
+                or res.get("skip_reason") in selection_skip_reasons
+            ):
+                semantic_counts[level]["deselected"] += 1
             else:
                 semantic_counts[level]["skip"] += 1
 
@@ -431,6 +527,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     # Construct the summary output
     summary_lines = []
+    summary_lines.extend(_backend_manifest_assertion_lines(backend_manifest_assertion))
     summary_lines.append("=" * 60)
     summary_lines.append(f"  Backend: {device:<10} | Hardware: {hw_key}")
     summary_lines.append(f"  PyTorch: {pytorch_version:<10} | Run: {timestamp}")
@@ -460,13 +557,15 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     summary_lines.append("  CAPABILITY RESULTS")
     summary_lines.append("  " + "─" * 18)
     for cap, stats in capability_counts.items():
-        if stats["skipped"]:
+        if stats["total"] > 0:
+            indicator = "✅" if stats["pass"] == stats["total"] else "❌"
+            summary_lines.append(f"  {indicator}  {cap:<15} {stats['pass']}/{stats['total']} passed")
+        elif stats["declined"]:
+            summary_lines.append(f"  ⬚  {cap:<15} DECLINED")
+        elif stats["skipped"]:
             summary_lines.append(f"  ⬚  {cap:<15} SKIPPED")
         else:
-            indicator = "✅" if stats["pass"] == stats["total"] and stats["total"] > 0 else "❌"
-            if stats["total"] == 0:
-                indicator = "⬚"
-            summary_lines.append(f"  {indicator}  {cap:<15} {stats['pass']}/{stats['total']} passed")
+            summary_lines.append(f"  ⬚  {cap:<15} {stats['pass']}/{stats['total']} passed")
     summary_lines.append("")
 
     summary_lines.append("  DTYPE COVERAGE")
@@ -478,12 +577,13 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         line_parts = []
         for dt in chunk:
             stats = dtype_counts[dt]
-            if stats["total"] == 0 and stats["skip"]:
+            if stats["total"] == 0 and (stats["skip"] or stats["declined"]):
                 ind = "⬚"
             else:
                 ind = "✅" if stats["fail"] == 0 else "❌"
             skip_text = f" skip={stats['skip']}" if stats["skip"] else ""
-            line_parts.append(f"  {dt:<10} {stats['pass']}/{stats['total']} {ind}{skip_text}")
+            declined_text = f" declined={stats['declined']}" if stats["declined"] else ""
+            line_parts.append(f"  {dt:<10} {stats['pass']}/{stats['total']} {ind}{skip_text}{declined_text}")
         summary_lines.append("  ".join(line_parts))
     summary_lines.append("")
 
@@ -496,9 +596,16 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         summary_lines.append(f"  {requested_text}")
         for level in sorted(semantic_counts):
             stats = semantic_counts[level]
-            summary_lines.append(
-                f"  L{level:<2} pass={stats['pass']:<4} fail={stats['fail']:<4} skip={stats['skip']:<4} total={stats['total']}"
-            )
+            parts = [
+                f"pass={stats['pass']:<4}",
+                f"fail={stats['fail']:<4}",
+            ]
+            if stats["skip"] or not stats["deselected"]:
+                parts.append(f"skip={stats['skip']:<4}")
+            if stats["deselected"]:
+                parts.append(f"deselected={stats['deselected']:<4}")
+            parts.append(f"total={stats['total']}")
+            summary_lines.append(f"  L{level:<2} " + " ".join(parts))
         summary_lines.append("")
 
     # IEEE 754 Compliance section (NaN/Inf tiers)
@@ -583,12 +690,19 @@ def build_report(current_data, baseline_data=None, include_skips=False):
                             md_lines.append(f"> Previous maxerr: {base_res.get('maxerr'):.6f}")
                         md_lines.append("")
 
-    # ── Skip Audit Section ──
+    def not_run_record_label(reason):
+        if reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+            return "declines"
+        if reason in selection_skip_reasons:
+            return "deselections"
+        return "skips"
+
+    # ── Not-Run Audit Section ──
     if include_skips and skips_dict:
-        md_lines.append("## Skip Audit")
+        md_lines.append("## Not-Run Audit")
         md_lines.append("")
         
-        # Group skips by reason
+        # Group non-executed records by reason
         reason_groups = {}
         for nodeid, res in skips_dict.items():
             reason = res.get("skip_reason", "unknown")
@@ -596,24 +710,31 @@ def build_report(current_data, baseline_data=None, include_skips=False):
                 reason_groups[reason] = []
             reason_groups[reason].append(res)
             
-        md_lines.append("### Skips By Reason:")
+        md_lines.append("### Not Run By Reason:")
         for reason, items in reason_groups.items():
-            md_lines.append(f"- **{reason}**: {len(items)} skips")
+            md_lines.append(f"- **{reason}**: {len(items)} {not_run_record_label(reason)}")
         md_lines.append("")
 
-        dtype_skip_groups = {}
+        dtype_not_run_groups = {}
         for _nodeid, res in skips_dict.items():
             if res.get("skip_reason") not in dtype_skip_reasons:
                 continue
             dt = (res.get("dtype") or "unknown").replace("torch.", "")
-            dtype_skip_groups[dt] = dtype_skip_groups.get(dt, 0) + 1
-        if dtype_skip_groups:
-            md_lines.append("### Dtype Skips:")
-            for dt, count in sorted(dtype_skip_groups.items()):
-                md_lines.append(f"- **{dt}**: {count} skips")
+            label = not_run_record_label(res.get("skip_reason"))
+            dtype_not_run_groups.setdefault(dt, {"declines": 0, "deselections": 0, "skips": 0})
+            dtype_not_run_groups[dt][label] += 1
+        if dtype_not_run_groups:
+            md_lines.append("### Dtype Not Run:")
+            for dt, counts in sorted(dtype_not_run_groups.items()):
+                parts = [
+                    f"{count} {label}"
+                    for label, count in (("declines", counts["declines"]), ("deselections", counts["deselections"]), ("skips", counts["skips"]))
+                    if count
+                ]
+                md_lines.append(f"- **{dt}**: {', '.join(parts)}")
             md_lines.append("")
 
-        md_lines.append("### Full Skip List:")
+        md_lines.append("### Full Not-Run List:")
         md_lines.append("| Test Name | Reason | Detail |")
         md_lines.append("|---|---|---|")
         for nodeid, res in skips_dict.items():
@@ -624,7 +745,10 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             md_lines.append(f"| `{nodeid.split('/')[-1]}` | `{reason}` | {detail} |")
         md_lines.append("")
 
+    while md_lines and not md_lines[-1]:
+        md_lines.pop()
     markdown_report = "\n".join(md_lines)
+    markdown_report = "\n".join(line.rstrip() for line in markdown_report.splitlines())
     return scorecard_str, markdown_report
 
 def generate_report_cli(from_file=None):

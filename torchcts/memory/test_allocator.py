@@ -32,12 +32,25 @@ pytestmark = pytest.mark.covers_category("allocator")
 
 DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
+
+def _allocator_telemetry_available(device):
+    if device == "cpu":
+        return False
+    if device == "cuda":
+        return hasattr(torch.cuda, "memory_allocated")
+    if device == "mps":
+        return hasattr(torch, "mps") and hasattr(torch.mps, "current_allocated_memory")
+    if device == "xpu" and hasattr(torch, "xpu"):
+        return hasattr(torch.xpu, "memory_allocated")
+    mod = get_device_module(device)
+    return mod is not None and hasattr(mod, "memory_allocated")
+
+
 @pytest.mark.stress
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("size", [1024, 2048])
 def test_allocator_tracking_and_cache(size, dtype, device, manifest):
-    mod = get_device_module(device)
-    if mod is None or not hasattr(mod, "memory_allocated"):
+    if not _allocator_telemetry_available(device):
         pytest.skip(f"torch.{device} does not expose allocator telemetry.")
     
     # Reset allocator state

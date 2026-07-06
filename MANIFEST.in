@@ -1,2 +1,3 @@
 prune data/pytorch-version-matrix
 prune data/backend-pack-evidence
+prune sample-results

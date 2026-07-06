@@ -116,7 +116,7 @@ def _cpu_error_for_error_input(op_fn, err_in):
 @pytest.mark.parametrize("op_name", op_names_with_errors)
 def test_op_errors(op_name, device):
     if op_name == "dummy":
-        pytest.skip("No OpInfo error tests matched the manifest filters.")
+        pytest.fail("Empty OpInfo error selection placeholder was not deselected at collection time.")
 
     op_info = get_live_opinfo(op_name)
     assert op_info is not None, f"Could not load live OpInfo for {op_name}"

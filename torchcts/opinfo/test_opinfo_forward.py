@@ -32,6 +32,7 @@ from torchcts.core.opinfo_adapter import (
 )
 from torchcts.core.comparer import compare_nan_propagation, compare_inf_propagation
 from torchcts.core.device import synchronize
+from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 
 pytestmark = pytest.mark.covers_category("opinfo_forward")
@@ -126,42 +127,6 @@ if not op_tests:
     op_tests = [("dummy", "dummy", "clean")]
 
 
-# ---------------------------------------------------------------------------
-# Op classification sets
-# ---------------------------------------------------------------------------
-
-# Ops whose outputs are inherently nondeterministic — value comparison is invalid
-_NONDETERMINISTIC_OPS = frozenset({
-    # Uninitialized memory
-    "empty", "empty_like", "empty_permuted", "empty_strided",
-    "new_empty", "new_empty_strided",
-    # Random sampling
-    "bernoulli", "geometric", "multinomial",
-    "rand_like", "randint", "randint_like", "randn", "randn_like",
-    "nn.functional.dropout", "nn.functional.dropout2d", "nn.functional.dropout3d",
-    "nn.functional.alpha_dropout", "nn.functional.feature_alpha_dropout",
-    "nn.functional.fractional_max_pool2d", "nn.functional.fractional_max_pool3d",
-    # Decompositions with inherent sign/order ambiguity
-    "svd_lowrank", "pca_lowrank",
-    # Random distributions
-    "normal", "uniform", "log_normal", "cauchy", "exponential",
-})
-
-_UNINITIALIZED_OPS = frozenset({
-    "empty", "empty_like", "empty_permuted", "empty_strided",
-    "new_empty", "new_empty_strided",
-})
-
-# Ops that return (values, indices) where index ordering depends on sort stability
-_SORT_OPS = frozenset({
-    "sort", "argsort", "topk", "kthvalue",
-})
-
-# Ops that return indices where tie-breaking is unspecified
-_ARGMAX_OPS = frozenset({
-    "masked.argmax", "masked.argmin", "argmax", "argmin",
-})
-
 # Ops where we override dropout_p=0 for numerical comparison
 _DROPOUT_OVERRIDE_OPS = frozenset({
     "nn.functional.scaled_dot_product_attention",
@@ -181,128 +146,6 @@ def _move_sample_obj(obj, target_device):
     return obj
 
 
-
-
-# ---------------------------------------------------------------------------
-# Sort output comparison helpers
-# ---------------------------------------------------------------------------
-
-def _compare_sort_output(actual, expected, op_name, sample, category, dtype, compare):
-    """Compare sort/topk outputs handling unstable tie-breaking.
-
-    For stable=False (default):
-      - Values must match within tolerance
-      - Indices are validated by reconstruction: input[indices] == values
-
-    For stable=True:
-      - Both values AND indices must match exactly
-    """
-    __tracebackhide__ = True
-    stable = sample.kwargs.get("stable", False)
-
-    # Extract values and indices from the output
-    if isinstance(actual, (tuple, torch.return_types.sort)):
-        act_values, act_indices = actual[0], actual[1]
-        exp_values, exp_indices = expected[0], expected[1]
-    elif op_name == "argsort":
-        # argsort returns only indices
-        act_indices = actual
-        exp_indices = expected
-        act_values = None
-        exp_values = None
-    else:
-        # Fallback: single tensor output
-        compare(actual, expected, category=category, dtype=dtype)
-        return
-
-    # Values must always match within tolerance
-    if act_values is not None:
-        compare(act_values, exp_values, category=category, dtype=dtype)
-
-    if stable:
-        # Stable sort: indices must match exactly
-        if act_indices is not None and exp_indices is not None:
-            if not torch.equal(act_indices.cpu(), exp_indices.cpu()):
-                raise AssertionError(
-                    f"Stable sort indices mismatch for {op_name}. "
-                    f"Mismatched elements: {(act_indices.cpu() != exp_indices.cpu()).sum().item()}"
-                )
-    else:
-        # Unstable sort: verify indices produce valid sorted values.
-        # For sort-family ops, dim can be in different positional arg slots:
-        #   sort(input, dim=-1, descending=False, stable=False)  -> dim is args[0]
-        #   topk(input, k, dim=-1, largest=True, sorted=True)    -> dim is args[1]
-        #   kthvalue(input, k, dim=-1, keepdim=False)            -> dim is args[1]
-        #   argsort(input, dim=-1, descending=False, stable=False) -> dim is args[0]
-
-        def _get_sort_dim(op_name, sample):
-            if "dim" in sample.kwargs:
-                return sample.kwargs["dim"]
-            if op_name in ("topk", "kthvalue"):
-                # args = (k, [dim, ...])
-                return sample.args[1] if len(sample.args) > 1 else -1
-            else:
-                # sort, argsort: args = ([dim, ...])
-                return sample.args[0] if sample.args else -1
-
-        if op_name in ("topk", "kthvalue"):
-            # topk/kthvalue: output may have different shape from input (reduced dim
-            # for kthvalue, reduced size for topk). Validate by comparing the sorted
-            # values, which are deterministic (no tie-breaking ambiguity in values).
-            # The values comparison already happened above. For indices, we verify
-            # that input[actual_indices] matches actual_values by advanced indexing.
-            if act_values is not None and act_indices is not None:
-                dim = _get_sort_dim(op_name, sample)
-                dev = act_values.device
-                original_input = sample.input
-                if isinstance(original_input, torch.Tensor):
-                    original_input = original_input.to(dev)
-                try:
-                    # Handle keepdim=False: indices may have fewer dims than input.
-                    # Unsqueeze at the sort dim to make gather work, then squeeze back.
-                    indices_for_gather = act_indices
-                    needs_squeeze = act_indices.ndim < original_input.ndim
-                    if needs_squeeze:
-                        indices_for_gather = act_indices.unsqueeze(dim)
-                    reconstructed = torch.gather(original_input, dim, indices_for_gather)
-                    if needs_squeeze:
-                        reconstructed = reconstructed.squeeze(dim)
-                    compare(reconstructed, act_values, category="exact", dtype=dtype)
-                except Exception as e:
-                    raise AssertionError(
-                        f"Unstable {op_name} index validation failed: "
-                        f"input[indices] != values. {e}"
-                    ) from e
-        elif op_name == "argsort":
-            # argsort: compare gathered values from device vs CPU indices
-            dim = _get_sort_dim(op_name, sample)
-            dev = act_indices.device
-            original_input = sample.input.to(dev)
-            try:
-                gathered_act = torch.gather(original_input, dim, act_indices)
-                gathered_exp = torch.gather(sample.input.to(exp_indices.device), dim, exp_indices)
-                compare(gathered_act, gathered_exp, category=category, dtype=dtype)
-            except AssertionError:
-                raise
-            except Exception as e:
-                raise AssertionError(
-                    f"argsort index validation failed: {e}"
-                ) from e
-        elif act_values is not None and act_indices is not None:
-            # sort/msort: standard gather reconstruction
-            dim = _get_sort_dim(op_name, sample)
-            dev = act_values.device
-            original_input = sample.input
-            if isinstance(original_input, torch.Tensor):
-                original_input = original_input.to(dev)
-            try:
-                reconstructed = torch.gather(original_input, dim, act_indices)
-                compare(reconstructed, act_values, category="exact", dtype=dtype)
-            except Exception as e:
-                raise AssertionError(
-                    f"Unstable sort index validation failed for {op_name}: "
-                    f"input[indices] != sorted values. {e}"
-                ) from e
 
 
 def _override_dropout(sample, op_name):
@@ -390,7 +233,7 @@ def _compare_special_tier(actual, expected, condition):
                          ids=[f"{c}-{op}-{dt}" for op, dt, c in op_tests])
 def test_op_forward(op_name, dtype_str, input_condition, device, compare, request):
     if op_name == "dummy":
-        pytest.skip("No OpInfo tests matched the manifest filters.")
+        pytest.fail("Empty OpInfo manifest selection placeholder was not deselected at collection time.")
 
     dtype = str_to_dtype(dtype_str)
 
@@ -521,17 +364,23 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
                 )
 
         # --- Comparison logic ---
-        if op_name in _NONDETERMINISTIC_OPS:
-            _compare_nondeterministic(actual, expected, op_name)
-        elif op_name in _ARGMAX_OPS:
-            # Argmax/argmin return indices. NaN/Inf inputs can change tie
-            # behavior without changing the structural contract.
-            _compare_nondeterministic(actual, expected, op_name)
+        if compare_non_unique_output_if_applicable(
+            op_name,
+            actual,
+            expected,
+            sample=sample,
+            input=dev_input,
+            args=dev_args,
+            kwargs=dev_kwargs,
+            input_condition=input_condition,
+            category=category,
+            dtype=dtype,
+            compare=compare,
+        ):
+            pass
         elif input_condition != InputCondition.CLEAN:
             # Non-clean tiers: structural + NaN/Inf propagation check only
             _compare_special_tier(actual, expected, input_condition)
-        elif op_name in _SORT_OPS:
-            _compare_sort_output(actual, expected, op_name, sample, category, dtype, compare)
         else:
             _compare_recursive(actual, expected, category, dtype, compare)
         tested_any = True
@@ -580,38 +429,6 @@ def _compare_recursive(act, exp, category, dtype, compare):
         for k in act:
             assert k in exp, f"Key {k} not in CPU reference output keys"
             _compare_recursive(act[k], exp[k], category, dtype, compare)
-
-
-def _compare_nondeterministic(act, exp, op_name):
-    """Structural comparison for nondeterministic/random/uninitialized ops."""
-    __tracebackhide__ = True
-    if isinstance(act, torch.Tensor) and isinstance(exp, torch.Tensor):
-        assert act.shape == exp.shape, (
-            f"Shape mismatch: got {act.shape}, expected {exp.shape}"
-        )
-        assert act.dtype == exp.dtype, (
-            f"Dtype mismatch: got {act.dtype}, expected {exp.dtype}"
-        )
-        if op_name not in _UNINITIALIZED_OPS:
-            if act.is_floating_point() or act.is_complex():
-                if torch.isfinite(exp).all():
-                    assert torch.isfinite(act).all(), (
-                        f"Output tensor contains non-finite values (NaN/Inf) "
-                        f"but CPU reference was finite."
-                    )
-    elif isinstance(act, (list, tuple)) and isinstance(exp, (list, tuple)):
-        assert len(act) == len(exp), (
-            f"Output sequence lengths differ: got {len(act)}, expected {len(exp)}"
-        )
-        for a, e in zip(act, exp):
-            _compare_nondeterministic(a, e, op_name)
-    elif isinstance(act, dict) and isinstance(exp, dict):
-        assert len(act) == len(exp), (
-            f"Output dict sizes differ: got {len(act)}, expected {len(exp)}"
-        )
-        for k in act:
-            assert k in exp, f"Key {k} not in CPU reference output keys"
-            _compare_nondeterministic(act[k], exp[k], op_name)
 
 
 def _run_stable_sort_tests(samples, op_fn, device, category, dtype, compare):

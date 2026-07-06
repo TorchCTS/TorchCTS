@@ -4635,6 +4635,8 @@ def multi_output_reduction_arg_value(entry: dict, arg: dict, dtype: torch.dtype,
         return 0
     if name == "quant_max":
         return 255
+    if base_name.startswith("linalg_") or base_name.startswith("_linalg_"):
+        return linalg_arg_value(entry, arg, dtype, device)
     if name == "mode":
         return 0
     if name == "padding_idx":
@@ -4646,8 +4648,6 @@ def multi_output_reduction_arg_value(entry: dict, arg: dict, dtype: torch.dtype,
             return None
         if name == "density":
             return False
-    if base_name.startswith("linalg_") or base_name.startswith("_linalg_"):
-        return linalg_arg_value(entry, arg, dtype, device)
     if name == "momentum":
         return 0.1
     if name == "eps":
@@ -5588,6 +5588,8 @@ def linalg_arg_value(entry: dict, arg: dict, dtype: torch.dtype, device: str = "
         return False
     if name == "compute_mode":
         return 1
+    if name == "mode":
+        return "reduced"
     if name in {"alpha", "beta"}:
         return 1
     if name == "dims_self":

@@ -379,12 +379,8 @@ class E8m0fnuCodec(ContainerCodec):
 @pytest.mark.covers("aten::_to_copy")
 @pytest.mark.covers_category("quantized_container_plumbing")
 @pytest.mark.parametrize("packing", list(_CODEC_REGISTRY.keys()))
-def test_quantized_plumbing(packing, device, manifest):
+def test_quantized_plumbing(packing, device):
     """Verify pack/unpack round-trips and scale tensor device transfers."""
-    supported = manifest.get("supported_container_formats", {})
-    if not supported.get(packing, False):
-        pytest.skip(f"Container format '{packing}' not in supported_container_formats")
-
     codec = _CODEC_REGISTRY[packing]
     n_elements = 128
 
@@ -462,14 +458,9 @@ def _run_custom_decoder_case(packing, decoder, device, compare):
 @pytest.mark.parametrize("packing", list(_CODEC_REGISTRY.keys()))
 def test_custom_quantized_decoder(packing, device, manifest, compare):
     """Verify user-provided semantic decoders against TorchCTS reference codecs."""
-    supported = manifest.get("supported_container_formats", {})
-    if not supported.get(packing, False):
-        pytest.skip(f"Container format '{packing}' not in supported_container_formats")
-
     decoder_specs = manifest.get("custom_container_decoders", {})
     decoder_spec = decoder_specs.get(packing)
-    if not decoder_spec:
-        pytest.skip(f"No custom decoder declared for container format '{packing}'")
+    assert decoder_spec, f"No custom decoder declared for container format '{packing}'"
 
     decoder = load_custom_container_decoder(decoder_spec)
     _run_custom_decoder_case(packing, decoder, device, compare)

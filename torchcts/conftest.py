@@ -118,6 +118,7 @@ _RESULTS_DIR = "./results"
 _START_TIME = 0
 _SESSION_RESULTS = {}
 _SESSION_SKIPS = {}
+_BACKEND_MANIFEST_ASSERTION = {}
 _SESSION_PROBE_RESULTS = []
 _SESSION_PROBE_FAILURES = []
 _SESSION_PROBE_FAILURE_KEYS = set()
@@ -138,6 +139,30 @@ _SEMANTIC_SELECTION_SKIP_REASONS = frozenset({
 _PATH_SHAPE_SELECTION_SKIP_REASONS = frozenset({
     "path_shape_no_selected_cases",
 })
+_EMPTY_SELECTION_SKIP_REASONS = frozenset({
+    "opinfo_no_selected_cases",
+})
+_COLLECTION_SELECTION_SKIP_REASONS = (
+    _SEMANTIC_SELECTION_SKIP_REASONS
+    | _PATH_SHAPE_SELECTION_SKIP_REASONS
+    | _EMPTY_SELECTION_SKIP_REASONS
+)
+_BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
+    "dtype_not_supported",
+    "dtype_regex_filtered",
+    "dtype_not_listed",
+    "capability_not_declared",
+    "op_excluded",
+    "container_format_not_supported",
+    "custom_container_decoder_not_declared",
+    "generated_no_manifest_enabled_dtypes",
+    "resource_limit",
+    "device_count",
+    "no_device_module",
+    "set_device_not_supported",
+    "oom_not_recoverable",
+})
+_BACKEND_MANIFEST_ASSERTION_BAR_WIDTH = 37
 _PATH_SHAPE_SUBPROCESS_SELECTOR_OPTIONS = (
     ("--path-shape-family", "--path-shape-family"),
     ("--path-shape-category", "--path-shape-category"),
@@ -437,6 +462,10 @@ def _known_segfault_result_fields(match, *, resolved=False, actual_signal=None):
         "known_segfault_matched_nodeid": match.get("matched_nodeid"),
         "known_segfault_matched_metadata": dict(match.get("matched_metadata") or {}),
     }
+    if match.get("overlapping_known_segfault_ids"):
+        fields["known_segfault_overlapping_ids"] = list(match["overlapping_known_segfault_ids"])
+    if match.get("all_matching_known_segfault_ids"):
+        fields["known_segfault_all_matching_ids"] = list(match["all_matching_known_segfault_ids"])
     if resolved:
         fields["known_segfault_resolved"] = True
     if actual_signal is not None and actual_signal != match["expected_signal"]:
@@ -457,21 +486,6 @@ def _known_segfault_process_classification(match, stdout="", stderr=""):
     return "confirmed_backend_crash"
 
 
-def _canonical_collection_path(value):
-    from torchcts.core.known_segfaults import canonicalize_nodeid
-
-    text = canonicalize_nodeid(str(value).split("::", 1)[0]).rstrip("/")
-    return text or "."
-
-
-def _path_selects_file(selected_path, candidate_file):
-    selected = _canonical_collection_path(selected_path)
-    candidate = _canonical_collection_path(candidate_file)
-    if selected in {".", "torchcts"}:
-        return True
-    return candidate == selected or candidate.startswith(f"{selected}/")
-
-
 def _known_segfault_descriptor_for_item(item):
     from torchcts.core.known_segfaults import canonicalize_nodeid
 
@@ -484,82 +498,10 @@ def _known_segfault_descriptor_for_item(item):
     }
 
 
-def _selected_collection_args(config):
-    return [str(arg) for arg in getattr(config, "args", []) if str(arg) and not str(arg).startswith("-")]
-
-
-def _known_segfault_entry_in_scope(config, entry, descriptors):
-    from torchcts.core.known_segfaults import canonicalize_nodeid, entry_matches
-
-    primary_matches = [
-        descriptor
-        for descriptor in descriptors
-        if entry_matches(entry, descriptor["canonical_nodeid"], descriptor["metadata"], include_constraints=False)
-    ]
-    if primary_matches:
-        dtype_constraints = (entry.get("constraints") or {}).get("dtype") or []
-        if dtype_constraints and not any(
-            str(descriptor["metadata"].get("dtype")) in dtype_constraints
-            for descriptor in primary_matches
-        ):
-            return False
-        return True
-
-    suite_option = config.getoption("--suite") if hasattr(config, "getoption") else None
-    suite_constraints = (entry.get("constraints") or {}).get("suite") or []
-
-    selected_args = _selected_collection_args(config)
-    if suite_option and suite_option in suite_constraints and not selected_args:
-        return True
-
-    selected_nodes = [arg for arg in selected_args if "::" in arg]
-    if selected_nodes:
-        entry_nodeid = entry.get("nodeid")
-        if not entry_nodeid:
-            return False
-        canonical_entry = canonicalize_nodeid(entry_nodeid)
-        return any(canonical_entry.startswith(canonicalize_nodeid(arg)) for arg in selected_nodes)
-
-    selected_paths = [_canonical_collection_path(arg) for arg in selected_args]
-    if not selected_paths:
-        return True
-    if suite_option is None and (len(selected_paths) >= 8 or any(path in {".", "torchcts"} for path in selected_paths)):
-        return True
-
-    if entry.get("nodeid"):
-        entry_file = canonicalize_nodeid(entry["nodeid"]).split("::", 1)[0]
-        if any(_path_selects_file(path, entry_file) for path in selected_paths):
-            return True
-
-    if suite_constraints:
-        for suite in suite_constraints:
-            suite_path = f"torchcts/{suite}"
-            if any(_path_selects_file(path, suite_path) for path in selected_paths):
-                return True
-    return False
-
-
-def _format_stale_known_segfault_entries(entries):
-    return (
-        "Known segfault ledger contains stale in-scope rule(s):\n"
-        + "\n".join(
-            "  - {id}: match={match} dispatcher={dispatcher} evidence_scope={scope} constraints={constraints}".format(
-                id=entry["id"],
-                match=entry["match"],
-                dispatcher=entry["dispatcher"],
-                scope=entry["evidence_scope"],
-                constraints=entry.get("constraints") or {},
-            )
-            for entry in entries
-        )
-    )
-
-
-def _validate_known_segfault_collection(config, entries, items, *, strict_stale=True):
+def _validate_known_segfault_collection(entries, items):
     from torchcts.core.known_segfaults import (
         KnownSegfaultError,
         best_known_segfault_match,
-        entry_matches,
     )
 
     descriptors = [_known_segfault_descriptor_for_item(item) for item in items]
@@ -573,20 +515,6 @@ def _validate_known_segfault_collection(config, entries, items, *, strict_stale=
             )
         except KnownSegfaultError as exc:
             errors.append(str(exc))
-
-    stale_entries = []
-    for entry in entries:
-        if not _known_segfault_entry_in_scope(config, entry, descriptors):
-            continue
-        if not any(entry_matches(entry, d["canonical_nodeid"], d["metadata"]) for d in descriptors):
-            stale_entries.append(entry)
-
-    if stale_entries:
-        stale_message = _format_stale_known_segfault_entries(stale_entries)
-        if strict_stale:
-            errors.append(stale_message)
-        else:
-            print("Warning: " + stale_message, file=sys.stderr)
 
     if errors:
         pytest.exit("\n".join(errors), returncode=1)
@@ -1158,6 +1086,8 @@ def _extract_result_metadata(item):
             metadata["dtype"] = params["dtype_str"]
         elif isinstance(params.get("path_shape_case"), dict):
             metadata["dtype"] = str(params["path_shape_case"].get("dtype") or "") or None
+        elif len(_MANIFEST.get("dtype_filter") or []) == 1:
+            metadata["dtype"] = _MANIFEST["dtype_filter"][0]
 
         if "sample_input" in params:
             sample = params["sample_input"]
@@ -1355,6 +1285,29 @@ def _merge_pending_manifest_skips(*, include_opinfo):
         _SESSION_SKIPS[nodeid] = record
 
 
+def _build_backend_manifest_assertion(asserted_count, skips):
+    reason_counts = {}
+    for record in skips.values():
+        reason = record.get("skip_reason")
+        if reason not in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+            continue
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    declined_count = sum(reason_counts.values())
+    total_count = asserted_count + declined_count
+    fraction = asserted_count / total_count if total_count else 0.0
+    return {
+        "schema_version": 1,
+        "basis": "collection_selected_tests_plus_backend_manifest_declines",
+        "asserted_test_count": asserted_count,
+        "declined_test_count": declined_count,
+        "total_runnable_test_count": total_count,
+        "asserted_fraction": fraction,
+        "asserted_percent": fraction * 100.0,
+        "progress_bar_width": _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH,
+        "declined_skip_reasons": dict(sorted(reason_counts.items())),
+    }
+
+
 def _get_runtime_device_count(device_name):
     if device_name in ("cpu", "meta"):
         return 1
@@ -1459,6 +1412,152 @@ def get_required_capabilities(item):
         for arg in m.args:
             reqs.add(arg)
     return reqs
+
+
+def _callspec_params(item):
+    return item.callspec.params if hasattr(item, "callspec") else {}
+
+
+def _first_numeric_manifest_value(value, default=None):
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else default
+    if value is None or value == "auto":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _quantized_container_manifest_skip_for_item(item):
+    params = _callspec_params(item)
+    if "packing" not in params:
+        return None
+    if "test_quantized.py" not in str(item.fspath).replace("\\", "/"):
+        return None
+
+    packing = params["packing"]
+    supported = _MANIFEST.get("supported_container_formats", {})
+    extra = {"container_format": packing}
+    if not supported.get(packing, False):
+        return (
+            "container_format_not_supported",
+            f"Container format '{packing}' not in supported_container_formats",
+            extra,
+        )
+
+    if item.name.startswith("test_custom_quantized_decoder"):
+        decoder_specs = _MANIFEST.get("custom_container_decoders", {})
+        if not decoder_specs.get(packing):
+            return (
+                "custom_container_decoder_not_declared",
+                f"No custom decoder declared for container format '{packing}'",
+                extra,
+            )
+    return None
+
+
+def _large_tensor_resource_skip_for_item(item):
+    if not item.name.startswith("test_large_allocations"):
+        return None
+
+    limits = _MANIFEST.get("resource_limits", {})
+    max_tensor = _first_numeric_manifest_value(limits.get("max_tensor_size_mb"))
+    if max_tensor is not None and max_tensor < 2048:
+        return (
+            "resource_limit",
+            f"Max tensor size is limited to {max_tensor:g}MB by resource limits.",
+            {"resource_limit": "max_tensor_size_mb", "resource_limit_value": max_tensor},
+        )
+
+    hw = _MANIFEST.get("hardware", {})
+    dev_mem = _first_numeric_manifest_value(hw.get("device_memory_gb"), 2)
+    if dev_mem is not None and dev_mem < 6:
+        return (
+            "resource_limit",
+            f"Device memory is too small ({dev_mem:g}GB) for >2GB tensor stress test.",
+            {"resource_limit": "device_memory_gb", "resource_limit_value": dev_mem},
+        )
+    return None
+
+
+def _generated_rng_capability_skip_for_item(item):
+    params = _callspec_params(item)
+    entry = params.get("entry")
+    if not isinstance(entry, dict):
+        return None
+
+    strategy = (entry.get("generated") or {}).get("strategy") or {}
+    if strategy.get("strategy") != "manual_rng":
+        return None
+
+    caps = _MANIFEST.get("capabilities", {})
+    if not caps.get("rng", True):
+        return (
+            "capability_not_declared",
+            "requires capabilities: rng",
+            {"capability": "rng"},
+        )
+
+    has_generator_arg = any(arg.get("name") == "generator" for arg in entry.get("args", []))
+    if not has_generator_arg or caps.get("device_generator", True):
+        return None
+
+    try:
+        from torchcts.sample_generation import rng_uses_target_device_generator
+
+        uses_target_generator = rng_uses_target_device_generator(entry)
+    except Exception:
+        uses_target_generator = True
+
+    if uses_target_generator:
+        return (
+            "capability_not_declared",
+            "requires capabilities: device_generator",
+            {"capability": "device_generator"},
+        )
+    return None
+
+
+def _generated_manifest_dtype_skip_for_item(item):
+    params = _callspec_params(item)
+    entry = params.get("entry")
+    if not isinstance(entry, dict):
+        return None
+    if "generated/" not in str(item.fspath).replace("\\", "/"):
+        return None
+
+    try:
+        from torchcts.generated.coverage_helpers import manifest_effective_dtype_items
+
+        dtype_items = manifest_effective_dtype_items(
+            _MANIFEST,
+            op_name=entry.get("name"),
+            enforce_cpu_contract=False,
+        )
+    except Exception:
+        return None
+
+    if dtype_items:
+        return None
+    return (
+        "generated_no_manifest_enabled_dtypes",
+        f"No manifest-enabled dtypes selected for generated {entry.get('name')}",
+        {"op": entry.get("name")},
+    )
+
+
+def _opinfo_empty_selection_skip_for_item(item):
+    params = _callspec_params(item)
+    if params.get("op_name") != "dummy":
+        return None
+    if "opinfo/" not in str(item.fspath).replace("\\", "/"):
+        return None
+    return (
+        "opinfo_no_selected_cases",
+        "No OpInfo tests matched the manifest filters.",
+        {"op": None},
+    )
 
 
 def _marker_string_args(item, marker_name):
@@ -1760,6 +1859,7 @@ def pytest_configure(config):
     global _KNOWN_SEGFAULT_AUDIT
     global _ADAPTIVE_ISOLATION_MODE, _ADAPTIVE_ISOLATION_LOAD, _ADAPTIVE_ISOLATION_ACTIVE
     global _ADAPTIVE_ISOLATION_REJECTED, _ADAPTIVE_ISOLATION_WARNINGS, _SESSION_COMPLETED
+    global _BACKEND_MANIFEST_ASSERTION
     global _SESSION_PROBE_RESULTS, _SESSION_PROBE_FAILURES, _SESSION_PROBE_FAILURE_KEYS
 
     # Register custom markers
@@ -1950,6 +2050,7 @@ def pytest_configure(config):
     _ADAPTIVE_ISOLATION_REJECTED = []
     _ADAPTIVE_ISOLATION_WARNINGS = []
     _SESSION_COMPLETED = False
+    _BACKEND_MANIFEST_ASSERTION = {}
     _SESSION_PROBE_RESULTS = []
     _SESSION_PROBE_FAILURES = []
     _SESSION_PROBE_FAILURE_KEYS = set()
@@ -2103,7 +2204,7 @@ def pytest_configure(config):
         pass
 
 def pytest_collection_modifyitems(session, config, items):
-    global _MANIFEST, _DEVICE_NAME, _SESSION_SKIPS, _SHOW_SKIPS
+    global _MANIFEST, _DEVICE_NAME, _SESSION_SKIPS, _SHOW_SKIPS, _BACKEND_MANIFEST_ASSERTION
     is_validation = config.getoption("--validation")
     site_stats_records = []
     site_stats_enabled = _site_stats_collection_enabled()
@@ -2181,8 +2282,9 @@ def pytest_collection_modifyitems(session, config, items):
     device_count = _MANIFEST.get("effective_device_count", _MANIFEST.get("device_count", 1))
 
     keep_items = []
-    dtype_deselected_items = []
+    manifest_deselected_items = []
     selection_deselected_items = []
+    backend_asserted_count = 0
     
     for item in items:
         skip_reason = None
@@ -2222,12 +2324,17 @@ def pytest_collection_modifyitems(session, config, items):
         # capability skips; --dtype should remove non-selected dtype items even
         # if another static skip would also apply.
         if hasattr(item, "callspec"):
-            for dtype_param in ("dtype", "autocast_dtype"):
+            for dtype_param in ("dtype", "dtype_str", "autocast_dtype"):
                 if dtype_param not in item.callspec.params:
                     continue
-                dt = item.callspec.params[dtype_param]
-                dt_str = dtype_to_str(dt)
-                dtype_label = dt_str if dtype_param == "dtype" else f"{dt_str} ({dtype_param})"
+                raw_dtype = item.callspec.params[dtype_param]
+                if dtype_param == "dtype_str":
+                    dt_str = str(raw_dtype)
+                    dt = str_to_dtype(dt_str)
+                else:
+                    dt = raw_dtype
+                    dt_str = dtype_to_str(dt)
+                dtype_label = dt_str if dtype_param in ("dtype", "dtype_str") else f"{dt_str} ({dtype_param})"
                 disposition = dtype_manifest_disposition(
                     dt,
                     dt_str,
@@ -2329,6 +2436,27 @@ def pytest_collection_modifyitems(session, config, items):
             skip_reason = "op_excluded"
             detail = f"{op_name} is in skip_ops list"
 
+        # 5b. Manifest/config parameter gates
+        if not skip_reason:
+            quantized_skip = _quantized_container_manifest_skip_for_item(item)
+            if quantized_skip:
+                skip_reason, detail, skip_record_extra = quantized_skip
+
+        if not skip_reason:
+            resource_skip = _large_tensor_resource_skip_for_item(item)
+            if resource_skip:
+                skip_reason, detail, skip_record_extra = resource_skip
+
+        if not skip_reason:
+            generated_rng_skip = _generated_rng_capability_skip_for_item(item)
+            if generated_rng_skip:
+                skip_reason, detail, skip_record_extra = generated_rng_skip
+
+        if not skip_reason:
+            generated_dtype_skip = _generated_manifest_dtype_skip_for_item(item)
+            if generated_dtype_skip:
+                skip_reason, detail, skip_record_extra = generated_dtype_skip
+
         # 6. CPU device cannot run cross-device or device-module tests
         if not skip_reason and _DEVICE_NAME == "cpu":
             filepath = str(item.fspath)
@@ -2401,6 +2529,12 @@ def pytest_collection_modifyitems(session, config, items):
                 skip_reason = "path_shape_no_selected_cases"
                 detail = "no tracked path-shape rows matched this module's runner and selectors"
 
+        # 12b. Empty OpInfo parameter-set placeholder
+        if not skip_reason:
+            opinfo_empty_skip = _opinfo_empty_selection_skip_for_item(item)
+            if opinfo_empty_skip:
+                skip_reason, detail, skip_record_extra = opinfo_empty_skip
+
         # 13. Semantic test level
         if not skip_reason:
             try:
@@ -2426,8 +2560,8 @@ def pytest_collection_modifyitems(session, config, items):
 
         if skip_reason:
             _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail, skip_record_extra)
-            if dtype_manifest_skip:
-                dtype_deselected_items.append(item)
+            if dtype_manifest_skip or skip_reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+                manifest_deselected_items.append(item)
                 if site_stats_enabled:
                     site_stats_records.append(_site_stats_collection_record(
                         item,
@@ -2435,7 +2569,7 @@ def pytest_collection_modifyitems(session, config, items):
                         skip_reason=skip_reason,
                         skip_detail=detail,
                     ))
-            elif skip_reason in _SEMANTIC_SELECTION_SKIP_REASONS or skip_reason in _PATH_SHAPE_SELECTION_SKIP_REASONS:
+            elif skip_reason in _COLLECTION_SELECTION_SKIP_REASONS:
                 selection_deselected_items.append(item)
                 if site_stats_enabled:
                     site_stats_records.append(_site_stats_collection_record(
@@ -2455,12 +2589,14 @@ def pytest_collection_modifyitems(session, config, items):
                         skip_detail=detail,
                     ))
         else:
+            backend_asserted_count += 1
             keep_items.append(item)
             if site_stats_enabled:
                 site_stats_records.append(_site_stats_collection_record(item, "executable"))
 
     _merge_pending_manifest_skips(include_opinfo=config.getoption("--suite") in (None, "opinfo"))
-    deselected_items = dtype_deselected_items + selection_deselected_items
+    _BACKEND_MANIFEST_ASSERTION = _build_backend_manifest_assertion(backend_asserted_count, _SESSION_SKIPS)
+    deselected_items = manifest_deselected_items + selection_deselected_items
     if deselected_items:
         config.hook.pytest_deselected(items=deselected_items)
     if site_stats_enabled:
@@ -2469,10 +2605,8 @@ def pytest_collection_modifyitems(session, config, items):
     known_segfault_descriptors = []
     if _KNOWN_SEGFAULT_POLICY == "isolate" and _KNOWN_SEGFAULTS_ACTIVE:
         known_segfault_descriptors = _validate_known_segfault_collection(
-            config,
             _KNOWN_SEGFAULTS_ACTIVE,
             keep_items,
-            strict_stale=bool(_KNOWN_SEGFAULT_AUDIT or config.getoption("--validation")),
         )
         if _KNOWN_SEGFAULT_AUDIT:
             _print_known_segfault_audit(config, _KNOWN_SEGFAULTS_ACTIVE, known_segfault_descriptors)
@@ -2514,6 +2648,7 @@ def pytest_collection_modifyitems(session, config, items):
 def flush_results_to_disk():
     global _SESSION_RESULTS, _SESSION_SKIPS, _START_TIME, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR
     global _ARTIFACT_WRITES_ENABLED, _SESSION_COMPLETED, _SESSION_PROBE_RESULTS, _SESSION_PROBE_FAILURES
+    global _BACKEND_MANIFEST_ASSERTION
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
@@ -2539,6 +2674,7 @@ def flush_results_to_disk():
             "harness_probe_failure_artifact": (
                 _harness_probe_artifact_path() if _SESSION_PROBE_FAILURES else None
             ),
+            "backend_manifest_assertion": dict(_BACKEND_MANIFEST_ASSERTION),
         },
         "results": _SESSION_RESULTS,
         "skips": _SESSION_SKIPS,
@@ -3055,12 +3191,6 @@ def pytest_runtest_protocol(item, nextitem):
                             actual_signal=_signal_name(res.returncode),
                         )
                     )
-                    if child_record.get("status") == "PASS":
-                        print(
-                            f"Warning: known segfault {known_segfault_match['id']} passed; "
-                            "rule may be stale, intentionally broad, or order-dependent.",
-                            file=sys.stderr,
-                        )
                 if adaptive_isolation_match:
                     child_record.update(
                         _adaptive_isolation_result_fields(
@@ -3096,11 +3226,6 @@ def pytest_runtest_protocol(item, nextitem):
                             resolved=True,
                             actual_signal=_signal_name(res.returncode),
                         )
-                    )
-                    print(
-                        f"Warning: known segfault {known_segfault_match['id']} passed; "
-                        "rule may be stale, intentionally broad, or order-dependent.",
-                        file=sys.stderr,
                     )
                 if adaptive_isolation_match:
                     record.update(

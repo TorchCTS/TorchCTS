@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from torchcts.path_shapes.runners.common import compare_tensor, float_data, run_device_op, torch_dtype
+from torchcts.path_shapes.runners.common import compare_output, compare_tensor, float_data, run_device_op, torch_dtype
 
 
 def _spd(batch_shape, n, dtype):
@@ -40,17 +40,16 @@ def run_qr(case: dict, device: str, compare) -> None:
     a_cpu = float_data((*tuple(s.get("batch_shape", [])), s["m"], s["n"]), dtype, scale=0.01)
     actual_q, actual_r = run_device_op(case, device, lambda: torch.linalg.qr(a_cpu.to(device), mode=s.get("mode", "reduced")))
     expected_q, expected_r = torch.linalg.qr(a_cpu, mode=s.get("mode", "reduced"))
-    compare_tensor(actual_q.abs(), expected_q.abs(), compare, category="linalg", dtype=dtype, device=device)
-    compare_tensor(actual_r.abs(), expected_r.abs(), compare, category="linalg", dtype=dtype, device=device)
+    compare_output("linalg.qr", (actual_q, actual_r), (expected_q, expected_r), compare, category="linalg", dtype=dtype, device=device, input=a_cpu, kwargs={"mode": s.get("mode", "reduced")})
 
 
 def run_eigh(case: dict, device: str, compare) -> None:
     dtype = torch_dtype(case["dtype"])
     s = case["shape"]
     a_cpu = _spd(tuple(s.get("batch_shape", [])), s["n"], dtype)
-    actual_vals, _actual_vecs = run_device_op(case, device, lambda: torch.linalg.eigh(a_cpu.to(device)))
-    expected_vals, _expected_vecs = torch.linalg.eigh(a_cpu)
-    compare_tensor(actual_vals, expected_vals, compare, category="linalg", dtype=dtype, device=device)
+    actual = run_device_op(case, device, lambda: torch.linalg.eigh(a_cpu.to(device)))
+    expected = torch.linalg.eigh(a_cpu)
+    compare_output("linalg.eigh", actual, expected, compare, category="linalg", dtype=dtype, device=device, input=a_cpu, kwargs={"UPLO": "L"})
 
 
 def run_svdvals(case: dict, device: str, compare) -> None:

@@ -52,12 +52,27 @@ def get_metrics():
     return _ACTIVE_TEST_METRICS
 
 
+def snapshot_metrics():
+    return dict(_ACTIVE_TEST_METRICS)
+
+
+def restore_metrics(metrics):
+    global _ACTIVE_TEST_METRICS
+    _ACTIVE_TEST_METRICS = dict(metrics)
+
+
 def _record_quality_warning(message):
     current = _ACTIVE_TEST_METRICS.get("quality_warning")
     if current:
         _ACTIVE_TEST_METRICS["quality_warning"] = f"{current}\n{message}"
     else:
         _ACTIVE_TEST_METRICS["quality_warning"] = message
+
+
+def mark_usable_fallback(message):
+    _ACTIVE_TEST_METRICS["golden_pass"] = False
+    _ACTIVE_TEST_METRICS["usable_pass"] = _ACTIVE_TEST_METRICS["usable_pass"] and True
+    _record_quality_warning(message)
 
 
 def _fail_compare(message):

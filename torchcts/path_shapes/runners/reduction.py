@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from torchcts.path_shapes.runners.common import compare_tensor, float_data, positive_data, run_device_op, torch_dtype
+from torchcts.path_shapes.runners.common import compare_output, compare_tensor, float_data, positive_data, run_device_op, torch_dtype
 
 
 def _input(case: dict, dtype: torch.dtype):
@@ -62,7 +62,7 @@ def run_argmax(case: dict, device: str, compare) -> None:
             x_cpu[:, 5] = 100.0
     actual = run_device_op(case, device, lambda: torch.argmax(x_cpu.to(device), dim=reduce_dim))
     expected = torch.argmax(x_cpu, dim=reduce_dim)
-    compare_tensor(actual, expected, compare, category="exact", dtype=torch.int64, device=device)
+    compare_output("argmax", actual, expected, compare, category="exact", dtype=torch.int64, device=device, input=x_cpu, args=(reduce_dim,), kwargs={"dim": reduce_dim})
 
 
 def run_prod(case: dict, device: str, compare) -> None:

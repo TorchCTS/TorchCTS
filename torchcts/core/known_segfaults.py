@@ -383,15 +383,24 @@ def entry_matches(
     return True
 
 
-def match_specificity(entry: dict) -> tuple[int, int, int, int]:
+def _glob_specificity_score(constraints: dict) -> int:
+    score = 0
+    for key in GLOB_CONSTRAINT_KEYS:
+        for pattern in constraints.get(key, []):
+            text = str(pattern)
+            score += len(text.replace("*", "").replace("?", ""))
+    return score
+
+
+def match_specificity(entry: dict) -> tuple[int, int, int, int, int]:
     constraints = entry.get("constraints") or {}
     base = {"nodeid": 300, "dispatcher": 200, "coverage_id": 100}.get(entry.get("match"), 0)
     exact_count = sum(1 for key in constraints if key not in GLOB_CONSTRAINT_KEYS)
     glob_count = sum(1 for key in constraints if key in GLOB_CONSTRAINT_KEYS)
-    return (base, len(constraints), exact_count, -glob_count)
+    return (base, len(constraints), exact_count, _glob_specificity_score(constraints), -glob_count)
 
 
-def _match_sort_key(entry: dict) -> tuple[int, int, int, int, str]:
+def _match_sort_key(entry: dict) -> tuple[int, int, int, int, int, str]:
     return (*match_specificity(entry), entry.get("id", ""))
 
 
@@ -429,13 +438,14 @@ def best_known_segfault_match(
     if not matches:
         return None
     top = matches[0]
-    top_score = match_specificity(top)
-    tied = [match for match in matches if match_specificity(match) == top_score]
-    if len(tied) > 1:
-        ids = ", ".join(match["id"] for match in tied)
-        raise KnownSegfaultError(
-            f"ambiguous known segfault match for {canonicalize_nodeid(nodeid)}: {ids}"
-        )
+    if len(matches) > 1:
+        top = dict(top)
+        top["overlapping_known_segfault_ids"] = [
+            match["id"]
+            for match in matches
+            if match["id"] != top["id"]
+        ]
+        top["all_matching_known_segfault_ids"] = [match["id"] for match in matches]
     return top
 
 

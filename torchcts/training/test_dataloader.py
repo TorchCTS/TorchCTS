@@ -28,23 +28,17 @@ DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 
 @pytest.mark.medium
 @pytest.mark.requires("dataloader")
+@pytest.mark.requires("pinned_memory")
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("batch_size", [10, 20])
-def test_dataloader_pin_memory(batch_size, dtype, device, manifest):
+def test_dataloader_pin_memory(batch_size, dtype, device):
     # Dataloader with pin_memory=True
     x_cpu = torch.randn(100, 10, dtype=dtype)
     y_cpu = torch.randn(100, 1, dtype=dtype)
     
     dataset = TensorDataset(x_cpu, y_cpu)
     
-    # We use pin_memory only if device supports it (e.g. cuda, mps)
-    # Gated by pinned_memory capability
-    caps = manifest.get("capabilities", {})
-    pin = caps.get("pinned_memory", False)
-    if not pin:
-        pytest.skip("Pinned memory support is not declared for this backend.")
-    
-    loader = DataLoader(dataset, batch_size=batch_size, pin_memory=pin, num_workers=0)
+    loader = DataLoader(dataset, batch_size=batch_size, pin_memory=True, num_workers=0)
     
     # Iterate and copy to device
     for batch_x, batch_y in loader:

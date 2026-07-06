@@ -21,6 +21,7 @@
 import pytest
 import torch
 from torchcts.core.device import synchronize
+from torchcts.core.non_unique_output_compare import compare_non_unique_output
 
 LINALG_DTYPES = [torch.float32]
 
@@ -36,16 +37,20 @@ def _compare_linalg_tuple(actual, expected, compare, dtypes):
         _compare_linalg_tensor(actual_tensor, expected_tensor, compare, dtype=dtype)
 
 
-def _compare_eig_residual(matrix, eigenvalues, eigenvectors, compare):
-    matrix_complex = matrix.to(eigenvectors.dtype)
-    lhs = matrix_complex @ eigenvectors
-    rhs = eigenvectors @ torch.diag(eigenvalues)
-    _compare_linalg_tensor(lhs, rhs.detach().cpu(), compare, dtype=eigenvectors.dtype)
-
-
-def _compare_svd_reconstruction(matrix, u, s, vh, compare):
-    reconstructed = u @ torch.diag(s) @ vh
-    _compare_linalg_tensor(reconstructed, matrix.detach().cpu(), compare)
+def _compare_non_unique_linalg(op_name, actual, expected, matrix, compare, dtype=torch.float32, args=(), kwargs=None):
+    synchronize(matrix.device.type)
+    compare_non_unique_output(
+        op_name,
+        actual,
+        expected,
+        input=matrix,
+        args=args,
+        kwargs=kwargs or {},
+        input_condition="clean",
+        category="linalg",
+        dtype=dtype,
+        compare=compare,
+    )
 
 
 @pytest.mark.smoke
@@ -61,9 +66,7 @@ def test_linalg_decompositions(dtype, op_name, device, compare, input_gen):
         try:
             u_dev, s_dev, vh_dev = torch.linalg.svd(x_dev)
             u_cpu, s_cpu, vh_cpu = torch.linalg.svd(x_dev.cpu())
-            synchronize(device)
-            # singular values (s) must be identical
-            compare(s_dev, s_cpu, category="linalg", dtype=dtype)
+            _compare_non_unique_linalg("linalg.svd", (u_dev, s_dev, vh_dev), (u_cpu, s_cpu, vh_cpu), x_dev, compare, dtype=dtype)
         except NotImplementedError:
             pass
             
@@ -84,10 +87,7 @@ def test_linalg_decompositions(dtype, op_name, device, compare, input_gen):
         try:
             q_dev, r_dev = torch.linalg.qr(x_dev)
             q_cpu, r_cpu = torch.linalg.qr(x_dev.cpu())
-            synchronize(device)
-            reconstructed_dev = torch.mm(q_dev, r_dev)
-            reconstructed_cpu = torch.mm(q_cpu, r_cpu)
-            compare(reconstructed_dev, reconstructed_cpu, category="linalg", dtype=dtype)
+            _compare_non_unique_linalg("linalg.qr", (q_dev, r_dev), (q_cpu, r_cpu), x_dev, compare, dtype=dtype)
         except NotImplementedError:
             pass
 
@@ -135,8 +135,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
     )
     assert actual[0].data_ptr() == eigvals_out.data_ptr()
     assert actual[1].data_ptr() == eigvecs_out.data_ptr()
-    _compare_linalg_tensor(actual[0], expected[0], compare, dtype=torch.complex64)
-    _compare_eig_residual(matrix_dev, actual[0], actual[1], compare)
+    _compare_non_unique_linalg("linalg.eig", actual, expected, matrix_dev, compare, dtype=torch.complex64)
 
     eigvals_out = torch.empty(2, dtype=torch.complex64, device=device)
     expected = torch.ops.aten.linalg_eigvals.default(matrix_cpu)
@@ -158,8 +157,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
     )
     assert actual[0].data_ptr() == eigvals_real.data_ptr()
     assert actual[1].data_ptr() == eigvecs_real.data_ptr()
-    _compare_linalg_tensor(actual[0], expected[0], compare)
-    _compare_linalg_tensor(matrix_dev @ actual[1], (actual[1] @ torch.diag(actual[0])).cpu(), compare)
+    _compare_non_unique_linalg("linalg.eigh", actual, expected, matrix_dev, compare, kwargs={"UPLO": "L"})
 
     expected = torch.ops.aten.linalg_svd.default(matrix_cpu, False)
     actual = torch.ops.aten.linalg_svd.U(
@@ -170,8 +168,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
         S=torch.empty(2, device=device),
         Vh=torch.empty(2, 2, device=device),
     )
-    _compare_linalg_tensor(actual[1], expected[1], compare)
-    _compare_svd_reconstruction(matrix_dev, actual[0], actual[1], actual[2], compare)
+    _compare_non_unique_linalg("linalg.svd", actual, expected, matrix_dev, compare)
 
     expected = torch.ops.aten._linalg_svd.default(matrix_cpu, False, True)
     actual = torch.ops.aten._linalg_svd.U(
@@ -183,8 +180,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
         S=torch.empty(2, device=device),
         Vh=torch.empty(2, 2, device=device),
     )
-    _compare_linalg_tensor(actual[1], expected[1], compare)
-    _compare_svd_reconstruction(matrix_dev, actual[0], actual[1], actual[2], compare)
+    _compare_non_unique_linalg("_linalg_svd", actual, expected, matrix_dev, compare)
 
     expected = torch.ops.aten.svd.default(matrix_cpu, True, True)
     actual = torch.ops.aten.svd.U(
@@ -195,8 +191,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
         S=torch.empty(2, device=device),
         V=torch.empty(2, 2, device=device),
     )
-    _compare_linalg_tensor(actual[1], expected[1], compare)
-    _compare_linalg_tensor(actual[0] @ torch.diag(actual[1]) @ actual[2].T, matrix_cpu, compare)
+    _compare_non_unique_linalg("svd", actual, expected, matrix_dev, compare)
 
     expected = torch.ops.aten.triangular_solve.default(rhs_cpu, matrix_cpu, True, False, False)
     actual = torch.ops.aten.triangular_solve.X(
@@ -248,7 +243,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
 
     expected = torch.ops.aten._lu_with_info.default(matrix_cpu, True, True)
     actual = torch.ops.aten._lu_with_info.default(matrix_dev, True, True)
-    _compare_linalg_tuple(actual, expected, compare, (torch.float32, torch.int32, torch.int32))
+    _compare_non_unique_linalg("_lu_with_info", actual, expected, matrix_dev, compare)
 
     expected = torch.ops.aten.linalg_lstsq.default(matrix_cpu, rhs_cpu, None, driver=None)
     actual = torch.ops.aten.linalg_lstsq.out(
@@ -261,7 +256,7 @@ def test_linalg_dispatcher_out_and_info_surfaces(device, compare):
         rank=torch.empty((), dtype=torch.int64, device=device),
         singular_values=torch.empty(0, device=device),
     )
-    _compare_linalg_tuple(actual, expected, compare, (torch.float32, torch.float32, torch.int64, torch.float32))
+    _compare_non_unique_linalg("linalg.lstsq", actual, expected, matrix_dev, compare, args=(rhs_dev,))
 
     expected = torch.ops.aten.linalg_multi_dot.default([matrix_cpu, rhs_cpu, matrix_cpu])
     out = torch.empty(2, 2, device=device)

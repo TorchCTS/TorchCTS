@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from torchcts.core.device import synchronize
+from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 
 
 def torch_dtype(dtype_name: str) -> torch.dtype:
@@ -77,4 +78,34 @@ def run_device_op(case: dict, device: str, fn: Callable[[], torch.Tensor | tuple
 
 def compare_tensor(actual, expected, compare, *, category: str, dtype: torch.dtype, device: str) -> None:
     synchronize(device)
+    compare(actual, expected, category=category, dtype=dtype)
+
+
+def compare_output(
+    op_name: str,
+    actual,
+    expected,
+    compare,
+    *,
+    category: str,
+    dtype: torch.dtype,
+    device: str,
+    input=None,
+    args=None,
+    kwargs=None,
+) -> None:
+    synchronize(device)
+    if compare_non_unique_output_if_applicable(
+        op_name,
+        actual,
+        expected,
+        input=input,
+        args=args,
+        kwargs=kwargs,
+        input_condition="clean",
+        category=category,
+        dtype=dtype,
+        compare=compare,
+    ):
+        return
     compare(actual, expected, category=category, dtype=dtype)

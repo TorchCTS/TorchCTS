@@ -43,19 +43,8 @@ def test_zero_element_and_scalar_tensors(scalar_val, dtype, device):
 @pytest.mark.stress
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("scale", [1.0])
-def test_large_allocations(scale, dtype, device, manifest):
-    # Check limits
-    limits = manifest.get("resource_limits", {})
-    max_tensor = limits.get("max_tensor_size_mb")
-    
-    hw = manifest.get("hardware", {})
-    dev_mem = hw.get("device_memory_gb", [2])[0]
-    
-    if max_tensor is not None and max_tensor < 2048:
-        pytest.skip(f"Max tensor size is limited to {max_tensor}MB by resource limits.")
-    if dev_mem < 6:
-        pytest.skip(f"Device memory is too small ({dev_mem}GB) for >2GB tensor stress test.")
-        
+def test_large_allocations(scale, dtype, device):
+    # Manifest resource limits are enforced at collection time via conftest.
     # Allocate a 2.1 GB tensor (adjust element count based on dtype element size)
     target_bytes = 2.1 * (1024 ** 3)
     elem_size = torch.tensor([], dtype=dtype).element_size()

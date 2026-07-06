@@ -5,8 +5,9 @@
       "id": "mps-grid-sampler-2d-cpu-fallback-default-pytorch-2-12",
       "backend": "mps",
       "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback[L3]]",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
-      "evidence_scope": "dispatcher_surface",
+      "evidence_scope": "constrained_metadata",
       "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
@@ -18,14 +19,26 @@
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
       "hardware": "any",
-      "review_after": "2026-09-30"
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["functional_data"],
+        "variant_kind": ["functional"],
+        "strategy": ["manual_grid"],
+        "strategy_family": ["_grid_sampler_2d_cpu_fallback"],
+        "semantic_level": [3],
+        "dtype": ["torch.float64", "torch.complex128"],
+        "nodeid_glob": ["torchcts/generated/test_functional_variants.py::test_generated_functional_variant[_grid_sampler_2d_cpu_fallback*"]
+      }
     },
     {
       "id": "mps-grid-sampler-2d-cpu-fallback-out-pytorch-2-12",
       "backend": "mps",
       "match": "dispatcher",
+      "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out[L3]]",
       "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
-      "evidence_scope": "dispatcher_surface",
+      "evidence_scope": "constrained_metadata",
       "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
@@ -37,7 +50,18 @@
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
       "hardware": "any",
-      "review_after": "2026-09-30"
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["out_variant"],
+        "variant_kind": ["out"],
+        "strategy": ["manual_grid"],
+        "strategy_family": ["_grid_sampler_2d_cpu_fallback"],
+        "semantic_level": [3],
+        "dtype": ["torch.float64", "torch.complex128"],
+        "nodeid_glob": ["torchcts/generated/test_out_variants.py::test_generated_out_variant[_grid_sampler_2d_cpu_fallback.out*"]
+      }
     },
     {
       "id": "mps-grid-sampler-2d-cpu-fallback-backward-pytorch-2-12",
@@ -53,6 +77,46 @@
         "case": "grid2_cpu_fallback_backward"
       },
       "reason": "Standalone repro reports a wrong-value mismatch for the internal CPU fallback grid sampler backward path and the child process exits with SIGSEGV after the mismatch is reported; keep this exact until the broader dispatcher behavior is source-proven.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-default-autograd-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_default]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.default",
+      "evidence_scope": "exact_node",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "PYTHONPATH=\"$PWD\" .venv/bin/python -m torchcts run --device mps --level 8 --report-skips --known-segfault-policy isolate --adaptive-isolation auto --results-dir sample-results/mps-full-run-macos/results --tb=short",
+        "case": "grid2_cpu_fallback_default"
+      },
+      "reason": "Full MPS level-8 run on 2026-07-06 segfaulted in the parent process after the runlog recorded this exact autograd node as the last started case. Python stack was in compare_tensors during MPS-to-CPU copy; C stack was in Apple MPS/Metal buffer copy.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
+    },
+    {
+      "id": "mps-grid-sampler-2d-cpu-fallback-out-autograd-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_out]",
+      "dispatcher": "aten::_grid_sampler_2d_cpu_fallback.out",
+      "evidence_scope": "exact_node",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "PYTHONPATH=\"$PWD\" .venv/bin/python -m pytest -q 'torchcts/autograd/test_backward.py::test_internal_dispatcher_surface[grid2_cpu_fallback_out]' --device mps --level 8 --known-segfault-policy off --results-dir scratch/mps-known-segfault-probe --tb=short",
+        "case": "grid2_cpu_fallback_out"
+      },
+      "reason": "Targeted MPS run on 2026-07-06 segfaulted in the parent process while invoking this exact autograd node. Python stack was in _run_grid2_cpu_fallback_out at the aten::_grid_sampler_2d_cpu_fallback.out call; C stack was in Apple MPS/Metal buffer copy through _grid_sampler_2d_cpu_fallback_out.",
       "owner": "torchcts",
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
@@ -77,7 +141,10 @@
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
       "hardware": "any",
-      "review_after": "2026-09-30"
+      "review_after": "2026-09-30",
+      "constraints": {
+        "dtype": ["torch.float64"]
+      }
     },
     {
       "id": "mps-reflection-pad3d-out-pytorch-2-12",
@@ -85,7 +152,7 @@
       "match": "dispatcher",
       "nodeid": "torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out[L3]]",
       "dispatcher": "aten::reflection_pad3d.out",
-      "evidence_scope": "dispatcher_surface",
+      "evidence_scope": "constrained_metadata",
       "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
@@ -97,7 +164,18 @@
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
       "hardware": "any",
-      "review_after": "2026-09-30"
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["out_variant"],
+        "variant_kind": ["out"],
+        "strategy": ["manual_padding"],
+        "strategy_family": ["reflection_pad3d"],
+        "semantic_level": [3],
+        "dtype": ["torch.float64", "torch.complex128"],
+        "nodeid_glob": ["torchcts/generated/test_out_variants.py::test_generated_out_variant[reflection_pad3d.out*"]
+      }
     },
     {
       "id": "mps-generated-unfold-view-copy-pytorch-2-12",
@@ -105,7 +183,7 @@
       "match": "dispatcher",
       "nodeid": "torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold[L3]]",
       "dispatcher": "aten::unfold",
-      "evidence_scope": "dispatcher_surface",
+      "evidence_scope": "constrained_metadata",
       "classification": "confirmed_backend_crash",
       "expected_signal": "SIGSEGV",
       "repro": {
@@ -117,7 +195,17 @@
       "pytorch_min": "2.12.0",
       "pytorch_max": null,
       "hardware": "any",
-      "review_after": "2026-09-30"
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "surface_kind": ["view_or_alias"],
+        "variant_kind": ["view"],
+        "strategy": ["opinfo_view_alias"],
+        "semantic_level": [3],
+        "dtype": ["torch.float64", "torch.complex128"],
+        "nodeid_glob": ["torchcts/generated/test_view_aliases.py::test_generated_view_alias[unfold*"]
+      }
     },
     {
       "id": "mps-hamming-window-periodic-generated-factory-pytorch-2-12",
@@ -146,6 +234,7 @@
         "strategy": ["manual_factory"],
         "strategy_family": ["window"],
         "semantic_level": [2],
+        "dtype": ["torch.float64"],
         "nodeid_glob": ["torchcts/generated/test_factories.py::test_generated_factory[hamming_window.periodic*"]
       }
     },
@@ -176,6 +265,7 @@
         "strategy": ["manual_convolution"],
         "strategy_family": ["col2im"],
         "semantic_level": [4],
+        "dtype": ["torch.float64", "torch.complex128"],
         "nodeid_glob": ["torchcts/generated/test_functional_variants.py::test_generated_functional_variant[col2im*"]
       }
     },
@@ -209,6 +299,57 @@
           "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach*"
         ]
       }
+    },
+    {
+      "id": "mps-generated-foreach-lerp-family-pytorch-2-12",
+      "backend": "mps",
+      "match": "coverage_id",
+      "nodeid": "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_lerp.List[L4]]",
+      "dispatcher": "aten::_foreach_lerp*",
+      "evidence_scope": "constrained_metadata",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "PYTHONPATH=\"$PWD\" .venv/bin/python -m torchcts run --device mps --level 8 --report-skips --known-segfault-policy isolate --adaptive-isolation auto --results-dir sample-results/mps-full-run-macos/results --tb=short",
+        "case": "generated_foreach_lerp_family_l4"
+      },
+      "reason": "Full MPS level-8 runs on 2026-07-06 repeatedly segfaulted the parent process in generated manual-foreach lerp coverage across functional and in-place overloads, including _foreach_lerp.List complex64/float32, _foreach_lerp_.List float16, and _foreach_lerp_.Scalar bfloat16. The Python stacks were either at the foreach call or while transferring foreach arguments to MPS, and C stacks pointed into MPS foreach or MPS buffer copy. Isolate only the generated manual-foreach lerp family so neighboring foreach families still run in-process.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30",
+      "constraints": {
+        "suite": ["generated"],
+        "coverage_kind": ["generated"],
+        "strategy": ["manual_foreach"],
+        "strategy_family": ["lerp"],
+        "semantic_level": [4],
+        "coverage_id_glob": ["aten::_foreach_lerp*"],
+        "nodeid_glob": [
+          "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_lerp*"
+        ]
+      }
+    },
+    {
+      "id": "mps-generated-foreach-pow-list-float16-pytorch-2-12",
+      "backend": "mps",
+      "match": "nodeid",
+      "nodeid": "torchcts/generated/test_foreach_fused.py::test_generated_foreach_or_fused[_foreach_pow.List[L4]-torch.float16]",
+      "dispatcher": "aten::_foreach_pow.List",
+      "evidence_scope": "exact_node",
+      "classification": "confirmed_backend_crash",
+      "expected_signal": "SIGSEGV",
+      "repro": {
+        "script": "PYTHONPATH=\"$PWD\" .venv/bin/python -m torchcts run --device mps --level 8 --report-skips --known-segfault-policy isolate --adaptive-isolation auto --results-dir sample-results/mps-full-run-macos/results --tb=short",
+        "case": "generated_foreach_pow_list_l4_float16"
+      },
+      "reason": "Full MPS level-8 run on 2026-07-06 segfaulted in the parent process after the runlog recorded this exact generated foreach node as the last started case. Python stack was in run_manual_foreach_strategy at the foreach call; C stack was in the MPS pow Tensor-Tensor foreach slow path.",
+      "owner": "torchcts",
+      "pytorch_min": "2.12.0",
+      "pytorch_max": null,
+      "hardware": "any",
+      "review_after": "2026-09-30"
     },
     {
       "id": "mps-path-shape-sdpa-bool-causal-pytorch-2-12",
@@ -263,6 +404,7 @@
         "surface_kind": ["autograd_backward"],
         "variant_kind": ["functional"],
         "coverage_id_glob": ["aten::*backward*"],
+        "dtype": ["torch.float64"],
         "nodeid_glob": ["torchcts/generated/test_autograd_backward_variants.py::test_generated_autograd_backward_variant[*"]
       }
     }

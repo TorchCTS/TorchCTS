@@ -73,7 +73,7 @@ if not op_tests:
 @pytest.mark.requires("training")
 def test_op_backward(op_name, dtype_str, device, compare, request):
     if op_name == "dummy":
-        pytest.skip("No OpInfo autograd tests matched the manifest filters.")
+        pytest.fail("Empty OpInfo autograd selection placeholder was not deselected at collection time.")
         
     dtype = str_to_dtype(dtype_str)
     op_info = get_live_opinfo(op_name)

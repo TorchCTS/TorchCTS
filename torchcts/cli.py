@@ -55,6 +55,65 @@ def _default_test_paths(pkg_dir=None):
     ]
 
 
+_PYTEST_OPTION_VALUE_ARGS = frozenset({
+    "--device",
+    "--dtype",
+    "--suite",
+    "--memory-mode",
+    "--max-device-memory",
+    "--max-tensor-size",
+    "--level",
+    "--level-exact",
+    "--level-range",
+    "--path-shape-family",
+    "--path-shape-category",
+    "--path-shape-case",
+    "--path-shape-runner",
+    "--path-shape-resource-tier",
+    "--path-shape-cost-class",
+    "--path-shape-model-role",
+    "--path-shape-dtype-group",
+    "--results-dir",
+    "--subprocess-timeout",
+    "--known-segfault-policy",
+    "--adaptive-isolation",
+    "--tb",
+    "--rootdir",
+    "--confcutdir",
+    "--basetemp",
+    "--import-mode",
+    "--capture",
+    "--log-level",
+    "--log-cli-level",
+    "--junitxml",
+    "-k",
+    "-m",
+    "-o",
+})
+
+
+def _has_explicit_test_path(pytest_args):
+    skip_next = False
+    for arg in pytest_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--":
+            skip_next = False
+            continue
+        if arg in _PYTEST_OPTION_VALUE_ARGS:
+            skip_next = True
+            continue
+        if arg.startswith("--"):
+            continue
+        if arg.startswith("-") and arg != "-":
+            continue
+        clean_arg = arg.split("::")[0]
+        if os.path.exists(clean_arg) or os.path.exists(os.path.abspath(clean_arg)):
+            return True
+    return False
+
+
 def _project_venv_python(cwd):
     if os.name == "nt":
         return os.path.join(cwd, ".venv", "Scripts", "python.exe")
@@ -251,6 +310,10 @@ def run_coverage_command(command, strict_unknowns=False):
         return run_materialize_command()
     if command == "check":
         return run_check_command(strict_unknowns=strict_unknowns)
+    if command == "non-unique-output-audit":
+        from torchcts.core.non_unique_output_compare import run_ambiguous_output_audit_command
+
+        return run_ambiguous_output_audit_command(json_output=getattr(coverage_args, "json", False))
     if command == "evidence-pack":
         from torchcts.core.evidence_pack import run_evidence_pack_command
 
@@ -568,6 +631,63 @@ def _print_banner():
     print(f"\n  TorchCTS v{__version__}")
     print("  PyTorch backend validation harness with explicit capability reporting\n")
 
+
+def _argv_requests_help(argv):
+    for arg in argv:
+        if arg == "--":
+            return False
+        if arg in {"-h", "--help"}:
+            return True
+    return False
+
+
+def _print_run_help():
+    parser = argparse.ArgumentParser(
+        prog="torchcts run",
+        description=(
+            "Run TorchCTS through pytest. TorchCTS options are consumed by the "
+            "harness; unknown args, explicit paths, and node ids are forwarded to pytest."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  torchcts run --device mps --level-exact 8\n"
+            "  torchcts run --device cuda --level 8 -k 'matmul or conv'\n"
+            "  torchcts run --device mps torchcts/generated/test_foreach_fused.py"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--device", help="Target device name, for example cpu, cuda, mps, or auto")
+    parser.add_argument("--dtype", action="append", help="Override supported dtypes; may be repeated")
+    parser.add_argument("--suite", choices=DEFAULT_TEST_SUITES, help="Limit collection to one TorchCTS suite")
+    parser.add_argument("--memory-mode", choices=("conservative", "balanced", "performance"), help="Memory cleanup cadence")
+    parser.add_argument("--max-device-memory", help="Maximum device memory allowed, in MB")
+    parser.add_argument("--max-tensor-size", help="Maximum single tensor size allowed, in MB")
+    parser.add_argument("--level", type=int, help="Run semantic test cases with semantic_level <= LEVEL (1-8)")
+    parser.add_argument("--level-exact", type=int, help="Run only semantic test cases with semantic_level == LEVEL (1-8)")
+    parser.add_argument("--level-range", help="Run semantic test cases in inclusive MIN:MAX level range")
+    parser.add_argument("--path-shape-family", help="Select tracked path-shape cases by family")
+    parser.add_argument("--path-shape-category", help="Select tracked path-shape cases by category")
+    parser.add_argument("--path-shape-case", help="Select tracked path-shape cases by case_id")
+    parser.add_argument("--path-shape-runner", help="Select tracked path-shape cases by runner")
+    parser.add_argument("--path-shape-resource-tier", help="Select tracked path-shape cases by resource tier")
+    parser.add_argument("--path-shape-cost-class", help="Select tracked path-shape cases by cost class")
+    parser.add_argument("--path-shape-model-role", help="Select tracked path-shape cases by model role")
+    parser.add_argument("--path-shape-dtype-group", help="Select tracked path-shape cases by dtype group")
+    parser.add_argument("--show-skips", action="store_true", help="Dry-run: print skips and exit")
+    parser.add_argument("--report-skips", action="store_true", help="Include skip audit in the report")
+    parser.add_argument("--results-dir", help="Directory to save JSON and Markdown results")
+    parser.add_argument("--non-interactive", action="store_true", help="Error instead of prompting")
+    parser.add_argument("--subprocess-per-test", action="store_true", help="Run each test in a subprocess for crash isolation")
+    parser.add_argument("--subprocess-timeout", help="Seconds allowed for each subprocess-isolated test")
+    parser.add_argument("--known-segfault-policy", choices=("isolate", "off"), help="Handle known backend segfault tests")
+    parser.add_argument("--known-segfault-audit", action="store_true", help="Collect tests, print known-segfault matches, and exit")
+    parser.add_argument("--adaptive-isolation", choices=("auto", "off"), help="Use prior crash/hang evidence for isolation")
+    parser.add_argument("--validation", action="store_true", help="Validate harness and CPU-compatible tests without probing an accelerator")
+    parser.add_argument("--show-traceback", action="store_true", help="Do not force TorchCTS' default --tb=no")
+    parser.add_argument("pytest_args", nargs=argparse.REMAINDER, help="Additional pytest args, explicit paths, or node ids")
+    parser.print_help()
+
+
 def main():
     # Configure stdout/stderr encoding/errors to handle unicode properly
     try:
@@ -576,9 +696,14 @@ def main():
     except Exception:
         pass
 
-    _maybe_reexec_project_venv()
+    help_requested = _argv_requests_help(sys.argv[1:])
+    if help_requested and len(sys.argv) > 1 and sys.argv[1] == "run":
+        _print_run_help()
+        sys.exit(0)
 
-    _print_banner()
+    if not help_requested:
+        _maybe_reexec_project_venv()
+        _print_banner()
 
     # Bypassing argparse entirely for the 'run' subcommand to support forwarding any unknown/arbitrary arguments to pytest.
     if len(sys.argv) > 1 and sys.argv[1] == "run":
@@ -718,14 +843,7 @@ def main():
                     sys.exit(1)
             pytest_args.extend(["--device", device_name])
 
-        has_path = False
-        for arg in pytest_args:
-            if not arg.startswith("-"):
-                clean_arg = arg.split("::")[0]
-                if os.path.exists(clean_arg) or os.path.exists(os.path.abspath(clean_arg)):
-                    has_path = True
-                    break
-        if not has_path:
+        if not _has_explicit_test_path(pytest_args):
             pkg_dir = os.path.dirname(__file__)
             pytest_args.extend(_default_test_paths(pkg_dir))
 
@@ -777,6 +895,11 @@ def main():
     coverage_subparsers.add_parser("audit", help="Build coverage audit using default paths")
     coverage_subparsers.add_parser("report", help="Render coverage report from default audit")
     coverage_subparsers.add_parser("materialize", help="Write deterministic generated coverage cases using default paths")
+    non_unique_audit = coverage_subparsers.add_parser(
+        "non-unique-output-audit",
+        help="Audit non-unique output contract registry coverage",
+    )
+    non_unique_audit.add_argument("--json", action="store_true", help="Emit JSON audit output")
     evidence_pack = coverage_subparsers.add_parser(
         "evidence-pack",
         help="Build a portable backend-pack promotion evidence archive",

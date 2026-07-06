@@ -22,6 +22,7 @@ import torch
 from torchcts.core.coverage import generated_entries_for
 from torchcts.core.comparer import compare_inf_propagation, compare_nan_propagation
 from torchcts.core.device import synchronize
+from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 from torchcts.core.oracles import OracleUnavailable, run_oracle_for_surface
 from torchcts.core.opinfo_adapter import (
     InputCondition,
@@ -262,6 +263,13 @@ def probe_generated_clean_cpu_contract(
 
 def _generated_clean_cpu_contract_allows(entry: dict, dtype: torch.dtype, manifest: dict) -> bool:
     result = probe_generated_clean_cpu_contract(entry, dtype, manifest)
+    if result["status"] == "pending" and entry.get("name") in {"aten::linalg_qr.out"}:
+        result = probe_generated_clean_cpu_contract(
+            entry,
+            dtype,
+            manifest,
+            enforce_recorded_contract=False,
+        )
     return result["status"] == "supported"
 
 
@@ -1582,6 +1590,9 @@ def run_manual_shape_strategy(entry: dict | None, device: str, compare, manifest
 
 
 def run_generated_out_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:
+    if (entry or {}).get("status") == "covered_backend_pack":
+        run_oracle_strategy(entry, device)
+        return
     strategy = (entry or {}).get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") == "manual_shape":
         run_manual_shape_strategy(entry, device, compare, manifest)
@@ -2695,13 +2706,13 @@ def _rng_has_generator_arg(entry: dict) -> bool:
 def _rng_requires_enabled_capability(entry: dict, manifest: dict) -> None:
     capabilities = manifest.get("capabilities", {})
     if not capabilities.get("rng", True):
-        pytest.skip("coverage_capability_disabled: rng")
+        pytest.fail("Generated RNG capability gate was not deselected at collection time: rng")
     if (
         _rng_has_generator_arg(entry)
         and sample_rng_uses_target_device_generator(entry)
         and not capabilities.get("device_generator", True)
     ):
-        pytest.skip("coverage_capability_disabled: device_generator")
+        pytest.fail("Generated RNG capability gate was not deselected at collection time: device_generator")
 
 
 def _rng_seed_for_call(entry: dict, device: str, seed: int) -> None:
@@ -2995,6 +3006,8 @@ def _multi_output_out_dtype(entry: dict, dtype: torch.dtype, out_index: int) -> 
         return dtype if out_index == 0 else torch.int32
     if base_name in {"linalg_lu_factor", "linalg_lu_factor_ex"}:
         return dtype if out_index == 0 else torch.int32
+    if base_name == "linalg_lu":
+        return dtype
     if "histogram" in base_name:
         return dtype
     if base_name in {"_aminmax", "aminmax"}:
@@ -3003,7 +3016,7 @@ def _multi_output_out_dtype(entry: dict, dtype: torch.dtype, out_index: int) -> 
         return dtype if out_index == 0 else torch.int64
     if base_name == "frexp":
         return dtype if out_index == 0 else torch.int32
-    if base_name in {"geqrf", "qr"}:
+    if base_name in {"geqrf", "qr", "linalg_qr"}:
         return dtype
     if base_name in {"std_mean", "var_mean"}:
         if out_index == 0:
@@ -3053,6 +3066,25 @@ def _run_multi_output_once(
     device: str,
     manifest: dict,
 ):
+    returned, _sample = _run_multi_output_once_with_sample(
+        entry,
+        callable_op,
+        dtype,
+        input_condition,
+        device,
+        manifest,
+    )
+    return returned
+
+
+def _run_multi_output_once_with_sample(
+    entry: dict,
+    callable_op,
+    dtype: torch.dtype,
+    input_condition: str,
+    device: str,
+    manifest: dict,
+):
     sample = sample_multi_output_reduction(
         entry,
         dtype,
@@ -3066,7 +3098,7 @@ def _run_multi_output_once(
     kwargs.update(out_kwargs)
     returned = callable_op(*args, **kwargs)
     _assert_multi_output_identity(returned, out_kwargs, entry["name"])
-    return _multi_output_return_tuple(returned)
+    return _multi_output_return_tuple(returned), sample
 
 
 def _compare_multi_output_results(
@@ -3077,9 +3109,21 @@ def _compare_multi_output_results(
     dtype: torch.dtype,
     device: str,
     compare,
+    sample=None,
 ) -> None:
     if len(actual) != len(expected):
         raise AssertionError(f"{entry['name']} returned {len(actual)} tensors, expected {len(expected)}")
+    if compare_non_unique_output_if_applicable(
+        entry["name"],
+        actual,
+        expected,
+        sample=sample,
+        input_condition=input_condition,
+        category="linalg" if "linalg" in entry["base_name"] or entry["base_name"] in {"qr", "lu", "svd"} else "reduction",
+        dtype=dtype,
+        compare=compare,
+    ):
+        return
     for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
         if tuple(actual_item.shape) != tuple(expected_item.shape):
             raise AssertionError(
@@ -3112,12 +3156,26 @@ def _run_manual_multi_output_reduction_case(
 ) -> bool:
     schema = entry.get("schema", "")
     try:
-        expected = _run_multi_output_once(entry, callable_op, dtype, input_condition, "cpu", manifest)
+        expected, _cpu_sample = _run_multi_output_once_with_sample(
+            entry,
+            callable_op,
+            dtype,
+            input_condition,
+            "cpu",
+            manifest,
+        )
     except Exception:
         return False
 
     try:
-        actual = _run_multi_output_once(entry, callable_op, dtype, input_condition, device, manifest)
+        actual, dev_sample = _run_multi_output_once_with_sample(
+            entry,
+            callable_op,
+            dtype,
+            input_condition,
+            device,
+            manifest,
+        )
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
@@ -3125,7 +3183,16 @@ def _run_manual_multi_output_reduction_case(
             f"{type(exc).__name__}: {exc}; schema={schema}; input_condition={input_condition}; dtype={dtype}"
         ) from exc
 
-    _compare_multi_output_results(entry, actual, expected, input_condition, dtype, device, compare)
+    _compare_multi_output_results(
+        entry,
+        actual,
+        expected,
+        input_condition,
+        dtype,
+        device,
+        compare,
+        sample=dev_sample,
+    )
     return True
 
 
@@ -3886,6 +3953,18 @@ def _run_linalg_once(
     device: str,
     manifest: dict,
 ) -> torch.Tensor:
+    returned, _sample = _run_linalg_once_with_sample(entry, callable_op, dtype, input_condition, device, manifest)
+    return returned
+
+
+def _run_linalg_once_with_sample(
+    entry: dict,
+    callable_op,
+    dtype: torch.dtype,
+    input_condition: str,
+    device: str,
+    manifest: dict,
+) -> tuple[torch.Tensor, object]:
     sample = sample_linalg(
         entry,
         dtype,
@@ -3909,7 +3988,7 @@ def _run_linalg_once(
     returned_items = _multi_output_return_tuple(returned)
     if len(returned_items) != 1:
         raise AssertionError(f"{entry['name']} returned {len(returned_items)} tensors, expected 1")
-    return returned_items[0]
+    return returned_items[0], sample
 
 
 def _run_manual_linalg_case(
@@ -3923,12 +4002,12 @@ def _run_manual_linalg_case(
 ) -> bool:
     schema = entry.get("schema", "")
     try:
-        expected = _run_linalg_once(entry, callable_op, dtype, input_condition, "cpu", manifest)
+        expected, _cpu_sample = _run_linalg_once_with_sample(entry, callable_op, dtype, input_condition, "cpu", manifest)
     except Exception:
         return False
 
     try:
-        actual = _run_linalg_once(entry, callable_op, dtype, input_condition, device, manifest)
+        actual, dev_sample = _run_linalg_once_with_sample(entry, callable_op, dtype, input_condition, device, manifest)
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
@@ -3942,6 +4021,17 @@ def _run_manual_linalg_case(
         raise AssertionError(f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}")
     if tuple(actual.shape) != tuple(expected.shape):
         raise AssertionError(f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}")
+    if compare_non_unique_output_if_applicable(
+        entry["name"],
+        actual,
+        expected,
+        sample=dev_sample,
+        input_condition=input_condition,
+        category=_linalg_compare_category(entry),
+        dtype=dtype,
+        compare=compare,
+    ):
+        return True
     if input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:

@@ -516,12 +516,12 @@ def _opinfo_skip_record(op_name, dtype_str, skip_reason, detail, *, phase, input
     if phase == "forward":
         nodeid = (
             "torchcts/opinfo/test_opinfo_forward.py::"
-            f"test_op_forward[manifest-skip-{input_condition}-{op_name}-{dtype_str}]"
+            f"test_op_forward[manifest-declined-{input_condition}-{op_name}-{dtype_str}]"
         )
     else:
         nodeid = (
             "torchcts/opinfo/test_opinfo_backward.py::"
-            f"test_op_backward[manifest-skip-{op_name}-{dtype_str}]"
+            f"test_op_backward[manifest-declined-{op_name}-{dtype_str}]"
         )
     record = {
         "suite": "opinfo",

@@ -286,6 +286,33 @@ def test_cli_default_test_paths_skip_missing_suite_dirs(tmp_path):
     assert paths == [str(tmp_path / "opinfo")]
 
 
+def test_cli_run_path_detection_ignores_existing_results_dir(tmp_path):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+
+    assert not cli_module._has_explicit_test_path([
+        "--device",
+        "mps",
+        "--level",
+        "8",
+        "--report-skips",
+        "--results-dir",
+        str(results_dir),
+        "--tb=short",
+    ])
+
+
+def test_cli_run_path_detection_keeps_explicit_test_path(tmp_path):
+    test_dir = tmp_path / "operators"
+    test_dir.mkdir()
+
+    assert cli_module._has_explicit_test_path([
+        "--device",
+        "mps",
+        str(test_dir),
+    ])
+
+
 def test_probe_capability_supports_nested_named_tensor_and_fp8(monkeypatch):
     scripts = []
 
@@ -1088,6 +1115,8 @@ def test_opinfo_forward_dtype_false_creates_structured_skip(monkeypatch):
 
     assert tests == []
     assert len(skips) == 1
+    assert "manifest-declined" in next(iter(skips))
+    assert "manifest-skip" not in next(iter(skips))
     record = next(iter(skips.values()))
     assert record["suite"] == "opinfo"
     assert record["test_kind"] == "opinfo"
@@ -1658,6 +1687,102 @@ def test_build_report_ignores_runtime_skips_in_score_totals():
     assert "float32" not in scorecard
 
 
+def test_build_report_capability_runtime_skip_does_not_hide_executed_totals():
+    current_data = {
+        "metadata": {
+            "device_name": "cpu",
+            "hardware_key": "cpu_test_1gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+        },
+        "results": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[abs-torch.float32]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "is_plumbing": False,
+                "status": "PASS",
+                "op": "abs",
+                "dtype": "torch.float32",
+            },
+        },
+        "skips": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[future-torch.float32]": {
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "is_plumbing": False,
+                "skip_reason": "unavailable_in_pytorch_runtime",
+                "op": "future",
+                "dtype": "torch.float32",
+            },
+        },
+    }
+
+    scorecard, _ = build_report(current_data)
+
+    assert "inference       1/1 passed" in scorecard
+    assert "inference       SKIPPED" not in scorecard
+    assert "Ops not run (runtime): 1" in scorecard
+
+
+def test_build_report_omits_scorecard_for_tiny_manifest_assertion_denominator():
+    current_data = {
+        "metadata": {
+            "device_name": "mps",
+            "hardware_key": "Apple_M3_Max_128gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+            "backend_manifest_assertion": {
+                "asserted_test_count": 246,
+                "total_runnable_test_count": 2930,
+                "asserted_fraction": 246 / 2930,
+                "asserted_percent": 246 / 2930 * 100,
+            },
+        },
+        "results": {},
+        "skips": {},
+    }
+
+    scorecard, markdown = build_report(current_data)
+
+    assert "Backend manifest support scorecard unavailable for this run." in scorecard
+    assert "Scored 246 out of 2930 selected/declined tests." in scorecard
+    assert "requires at least 19000 runnable tests" in scorecard
+    assert "246 out of 2930 tests /" not in scorecard
+    assert "246 out of 2930 tests /" not in markdown
+
+
+def test_build_report_manifest_assertion_bar_marks_unrun_tests():
+    current_data = {
+        "metadata": {
+            "device_name": "mps",
+            "hardware_key": "Apple_M3_Max_128gb",
+            "pytorch_version": torch.__version__,
+            "timestamp": "2026-06-16T00:00:00Z",
+            "elapsed_sec": 1,
+            "backend_manifest_assertion": {
+                "asserted_test_count": 16000,
+                "total_runnable_test_count": 20000,
+                "asserted_fraction": 0.8,
+                "asserted_percent": 80.0,
+                "progress_bar_width": 10,
+            },
+        },
+        "results": {},
+        "skips": {},
+    }
+
+    scorecard, markdown = build_report(current_data)
+
+    assert "[████████░░]" in scorecard
+    assert "████████__|" not in scorecard
+    assert "████████  |" not in scorecard
+    assert "[████████░░]" in markdown
+
+
 def test_build_report_surfaces_structured_dtype_skips():
     current_data = {
         "metadata": {
@@ -1669,7 +1794,7 @@ def test_build_report_surfaces_structured_dtype_skips():
         },
         "results": {},
         "skips": {
-            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[manifest-skip-clean-abs-torch.float64]": {
+            "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[manifest-declined-clean-abs-torch.float64]": {
                 "suite": "opinfo",
                 "test_kind": "opinfo",
                 "capability": "inference",
@@ -1688,9 +1813,9 @@ def test_build_report_surfaces_structured_dtype_skips():
     assert "Ops not run (coverage): 0" in scorecard
     assert "Ops not run (runtime): 0" in scorecard
     assert "Ops skipped (unsupported)" not in scorecard
-    assert "float64    0/0 ⬚ skip=1" in scorecard
-    assert "**dtype_not_supported**: 1 skips" in markdown
-    assert "**float64**: 1 skips" in markdown
+    assert "float64    0/0 ⬚ declined=1" in scorecard
+    assert "**dtype_not_supported**: 1 declines" in markdown
+    assert "**float64**: 1 declines" in markdown
 
 
 def test_build_report_separates_selection_and_other_opinfo_not_run_reasons():
@@ -1781,7 +1906,7 @@ def test_build_report_tracks_split_rng_capabilities():
 
     assert "rng             1/1 passed" in scorecard
     assert "device_generator 1/1 passed" in scorecard
-    assert "rng_distributions SKIPPED" in scorecard
+    assert "rng_distributions DECLINED" in scorecard
 
 
 def test_build_report_summarizes_semantic_levels():
@@ -1834,7 +1959,7 @@ def test_build_report_summarizes_semantic_levels():
     assert "requested <= 3" in scorecard
     assert "L1  pass=1" in scorecard
     assert "L3  pass=0    fail=1" in scorecard
-    assert "L7  pass=0    fail=0    skip=1" in scorecard
+    assert "L7  pass=0    fail=0    deselected=1" in scorecard
 
 
 def test_build_report_summarizes_exact_semantic_level_selection():
@@ -3057,12 +3182,254 @@ def test_gate_tests_still_respect_required_capabilities(monkeypatch):
     monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
 
     items = [item]
-    harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
 
-    assert items == [item]
-    assert item.added_markers
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
     assert item.nodeid in harness._SESSION_SKIPS
     assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "capability_not_declared"
+
+
+def test_collection_deselects_unsupported_quantized_container_format(monkeypatch):
+    item = _CollectionItem(
+        "test_quantized_plumbing[fp8_e4m3fn]",
+        "torchcts/dtypes/test_quantized.py",
+        params={"packing": "fp8_e4m3fn"},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"quantized_container_plumbing": True},
+        "supported_dtypes": {},
+        "supported_container_formats": {"fp8_e4m3fn": False},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "container_format_not_supported"
+    assert harness._SESSION_SKIPS[item.nodeid]["container_format"] == "fp8_e4m3fn"
+
+
+def test_collection_deselects_missing_custom_quantized_decoder(monkeypatch):
+    item = _CollectionItem(
+        "test_custom_quantized_decoder[fp8_e4m3fn]",
+        "torchcts/dtypes/test_quantized.py",
+        params={"packing": "fp8_e4m3fn"},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"custom_quantized_decode": True},
+        "supported_dtypes": {},
+        "supported_container_formats": {"fp8_e4m3fn": True},
+        "custom_container_decoders": {},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "custom_container_decoder_not_declared"
+    assert harness._SESSION_SKIPS[item.nodeid]["container_format"] == "fp8_e4m3fn"
+
+
+def test_collection_deselects_large_tensor_resource_limit(monkeypatch):
+    item = _CollectionItem(
+        "test_large_allocations[1.0-dtype0]",
+        "torchcts/stress/test_large_tensors.py",
+        params={"scale": 1.0, "dtype": torch.float32},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float32: True},
+        "resource_limits": {"max_tensor_size_mb": 1024},
+        "hardware": {"device_memory_gb": [16]},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "resource_limit"
+    assert harness._SESSION_SKIPS[item.nodeid]["resource_limit"] == "max_tensor_size_mb"
+
+
+def test_collection_deselects_generated_rng_when_rng_capability_disabled(monkeypatch):
+    entry = {
+        "name": "aten::rand",
+        "base_name": "rand",
+        "args": [],
+        "generated": {"strategy": {"strategy": "manual_rng", "family": "rand"}},
+    }
+    item = _CollectionItem(
+        "test_generated_rng_variant[aten::rand]",
+        "torchcts/generated/test_rng_variants.py",
+        params={"entry": entry},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"rng": False, "device_generator": True},
+        "supported_dtypes": {},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "capability_not_declared"
+    assert harness._SESSION_SKIPS[item.nodeid]["capability"] == "rng"
+
+
+def test_collection_deselects_generated_rng_when_device_generator_disabled(monkeypatch):
+    entry = {
+        "name": "aten::rand.generator",
+        "base_name": "rand",
+        "args": [{"name": "generator"}],
+        "generated": {"strategy": {"strategy": "manual_rng", "family": "rand"}},
+    }
+    item = _CollectionItem(
+        "test_generated_rng_variant[aten::rand.generator]",
+        "torchcts/generated/test_rng_variants.py",
+        params={"entry": entry},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"rng": True, "device_generator": False},
+        "supported_dtypes": {},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "capability_not_declared"
+    assert harness._SESSION_SKIPS[item.nodeid]["capability"] == "device_generator"
+
+
+def test_collection_deselects_generated_entry_with_no_manifest_enabled_dtypes(monkeypatch):
+    entry = {
+        "name": "aten::add.Tensor",
+        "base_name": "add",
+        "args": [],
+        "generated": {"strategy": {"strategy": "manual_elementwise", "family": "binary"}},
+    }
+    item = _CollectionItem(
+        "test_generated_elementwise_variant[aten::add.Tensor]",
+        "torchcts/generated/test_elementwise_variants.py",
+        params={"entry": entry},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {torch.float64: False},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "generated_no_manifest_enabled_dtypes"
+    assert harness._SESSION_SKIPS[item.nodeid]["op"] == "aten::add.Tensor"
+
+
+def test_collection_deselects_empty_opinfo_placeholder(monkeypatch):
+    item = _CollectionItem(
+        "test_op_forward[dummy-dummy-dummy]",
+        "torchcts/opinfo/test_opinfo_forward.py",
+        params={"op_name": "dummy", "dtype_str": "dummy", "input_condition": "dummy"},
+    )
+    monkeypatch.setattr(harness, "_MANIFEST", {
+        "capabilities": {"inference": True},
+        "supported_dtypes": {},
+        "skip_ops": [],
+        "device_count": 1,
+        "effective_device_count": 1,
+    })
+    monkeypatch.setattr(harness, "_SESSION_SKIPS", {})
+    monkeypatch.setattr(harness, "_SHOW_SKIPS", False)
+    monkeypatch.setattr(harness, "_COLLECT_ONLY", True)
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "cpu")
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
+
+    items = [item]
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
+
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
+    assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "opinfo_no_selected_cases"
+    assert harness._SESSION_SKIPS[item.nodeid]["op"] is None
 
 
 def test_gate_tests_bypass_suite_filter_but_not_capability_filter(monkeypatch):
@@ -3188,9 +3555,12 @@ def test_rng_and_device_generator_capabilities_filter_independently(monkeypatch)
     monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
 
     items = [rng_item, device_generator_item]
-    harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
 
-    assert items == [rng_item, device_generator_item]
+    assert items == [rng_item]
+    assert config.deselected == [device_generator_item]
+    assert device_generator_item.added_markers == []
     assert rng_item.nodeid not in harness._SESSION_SKIPS
     assert device_generator_item.nodeid in harness._SESSION_SKIPS
     assert harness._SESSION_SKIPS[device_generator_item.nodeid]["skip_reason"] == "capability_not_declared"
@@ -3221,9 +3591,12 @@ def test_rng_distribution_capability_filters_independently(monkeypatch):
     monkeypatch.setattr(harness, "_SEMANTIC_LEVEL_SELECTION", SemanticLevelSelection("cumulative", 1, 8))
 
     items = [item]
-    harness.pytest_collection_modifyitems(None, _CollectionConfig(), items)
+    config = _CollectionConfig()
+    harness.pytest_collection_modifyitems(None, config, items)
 
-    assert items == [item]
+    assert items == []
+    assert config.deselected == [item]
+    assert item.added_markers == []
     assert item.nodeid in harness._SESSION_SKIPS
     assert harness._SESSION_SKIPS[item.nodeid]["skip_reason"] == "capability_not_declared"
 
