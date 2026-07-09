@@ -35,10 +35,14 @@ DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 ])
 def test_guard_alloc_canary(shape, dtype, device):
     mod = get_device_module(device)
-    if mod is None or not hasattr(mod, "guard_allocator_enabled"):
-        pytest.skip("Guard allocator validation requires a backend-specific verifier hook.")
+    assert mod is not None, f"{device} has no device module for guard allocator validation"
+    assert hasattr(mod, "guard_allocator_enabled"), (
+        f"{device} declares guard_alloc but does not expose guard_allocator_enabled()"
+    )
 
-    assert mod.guard_allocator_enabled() is True
+    assert mod.guard_allocator_enabled() is True, (
+        f"{device} guard allocator verifier returned false"
+    )
     x = torch.randn(*shape, dtype=dtype, device=device)
     y = x + 1.0
     assert y.shape == shape

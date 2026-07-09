@@ -154,11 +154,9 @@ def test_scatter_add_determinism(size, device):
 
 @pytest.mark.stress
 @pytest.mark.adversarial
+@pytest.mark.backend_gate("cpu")
 @pytest.mark.parametrize("index_case", ["positive", "negative", "gather"])
 def test_indexing_bounds(index_case, device):
-    if device != "cpu":
-        pytest.skip("Out-of-bounds eager exception semantics are only validated on CPU.")
-
     src = torch.randn(5)
     
     if index_case == "positive":
