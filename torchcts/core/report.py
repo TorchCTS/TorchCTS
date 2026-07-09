@@ -84,17 +84,33 @@ def _backend_manifest_assertion_from_data(metadata, results, skips_dict):
     }
 
 
-def _backend_manifest_assertion_lines(summary):
+def _backend_manifest_assertion_lines(summary, metadata=None):
+    metadata = metadata or {}
     asserted = int(summary.get("asserted_test_count", 0) or 0)
     total = int(summary.get("total_runnable_test_count", 0) or 0)
+    unavailable_reasons = []
+    if metadata.get("session_completed") is False:
+        unavailable_reasons.append(
+            "This run did not complete; use a completed run before publishing backend support percentages."
+        )
+    if metadata.get("collect_only") is True:
+        unavailable_reasons.append("This was a collection-only session; no tests executed.")
     if total < _MIN_FULL_RUN_MANIFEST_TEST_COUNT:
-        return [
+        unavailable_reasons.append(
+            f"A full-run scorecard requires at least {_MIN_FULL_RUN_MANIFEST_TEST_COUNT} runnable tests."
+        )
+        unavailable_reasons.append(
+            "This is a partial, interrupted, or failed collection report."
+        )
+    if unavailable_reasons:
+        lines = [
             "  Backend manifest support scorecard unavailable for this run.",
             f"  Scored {asserted} out of {total} selected/declined tests.",
-            f"  A full-run scorecard requires at least {_MIN_FULL_RUN_MANIFEST_TEST_COUNT} runnable tests.",
-            "  This is a partial, interrupted, or failed collection report; no backend support percentage is shown.",
-            "",
         ]
+        lines.extend(f"  {reason}" for reason in unavailable_reasons)
+        lines.append("  No backend support percentage is shown.")
+        lines.append("")
+        return lines
     fraction = float(summary.get("asserted_fraction", 0.0) or 0.0)
     percent = float(summary.get("asserted_percent", fraction * 100.0) or 0.0)
     width = int(summary.get("progress_bar_width") or _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH)
@@ -220,12 +236,12 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     }
 
     not_run_bucket_labels = {
-        "manifest": "Ops not run (manifest)",
-        "selection": "Ops not run (selection)",
-        "coverage": "Ops not run (coverage)",
-        "contract": "Ops not run (CPU contract)",
-        "runtime": "Ops not run (runtime)",
-        "other": "Ops not run (other)",
+        "manifest": "Ops with not-run cases (manifest)",
+        "selection": "Ops with not-run cases (selection)",
+        "coverage": "Ops with not-run cases (coverage)",
+        "contract": "Ops with not-run cases (CPU contract)",
+        "runtime": "Ops with not-run cases (runtime)",
+        "other": "Ops with not-run cases (other)",
     }
 
     def not_run_bucket_for_reason(reason):
@@ -527,7 +543,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     # Construct the summary output
     summary_lines = []
-    summary_lines.extend(_backend_manifest_assertion_lines(backend_manifest_assertion))
+    summary_lines.extend(_backend_manifest_assertion_lines(backend_manifest_assertion, metadata))
     summary_lines.append("=" * 60)
     summary_lines.append(f"  Backend: {device:<10} | Hardware: {hw_key}")
     summary_lines.append(f"  PyTorch: {pytorch_version:<10} | Run: {timestamp}")
@@ -539,9 +555,10 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         summary_lines.append("")
     summary_lines.append("  OPERATOR COVERAGE")
     summary_lines.append("  " + "─" * 17)
-    summary_lines.append(f"  OpInfo ops discovered:     {total_ops_discovered}")
-    summary_lines.append(f"  Ops tested (PASS):         {num_pass:<4} ({pct(num_pass)})")
-    summary_lines.append(f"  Ops tested (FAIL):         {num_fail:<4} ({pct(num_fail)})")
+    summary_lines.append("  Op categories overlap; an op can pass one case and skip another.")
+    summary_lines.append(f"  OpInfo ops represented:    {total_ops_discovered}")
+    summary_lines.append(f"  Ops with PASS coverage:    {num_pass:<4} ({pct(num_pass)})")
+    summary_lines.append(f"  Ops with FAIL/ERROR:       {num_fail:<4} ({pct(num_fail)})")
     for bucket in ("manifest", "selection", "coverage", "contract", "runtime"):
         count = num_skips_by_bucket[bucket]
         summary_lines.append(f"  {not_run_bucket_labels[bucket]}: {count:<4} ({pct(count)})")
@@ -752,10 +769,11 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     return scorecard_str, markdown_report
 
 def generate_report_cli(from_file=None):
-    results_dir = os.path.join(os.getcwd(), "results")
     if from_file:
-        file_to_load = from_file
+        file_to_load = os.path.abspath(from_file)
+        results_dir = os.path.dirname(file_to_load) or os.getcwd()
     else:
+        results_dir = os.path.join(os.getcwd(), "results")
         # Find latest file
         if not os.path.exists(results_dir):
             print(f"Results directory '{results_dir}' does not exist.", file=sys.stderr)
@@ -778,6 +796,7 @@ def generate_report_cli(from_file=None):
     # Previous run is the latest run in history, or the latest file from history dir
     baseline_data = None
     hw_key = current_data.get("metadata", {}).get("hardware_key", "unknown")
+    current_timestamp = current_data.get("metadata", {}).get("timestamp")
     history_dir = os.path.join(results_dir, f"{hw_key}_history")
     if os.path.exists(history_dir):
         history_files = [os.path.join(history_dir, f) for f in os.listdir(history_dir) if f.endswith(".json")]
@@ -785,11 +804,17 @@ def generate_report_cli(from_file=None):
             # Sort by file mtime to find the previous one
             history_files.sort(key=os.path.getmtime, reverse=True)
             for hf in history_files:
-                if hf != file_to_load:
+                if os.path.abspath(hf) != file_to_load:
                     try:
                         with open(hf, "r", encoding="utf-8") as f:
-                            baseline_data = json.load(f)
-                            break
+                            candidate_data = json.load(f)
+                        candidate_timestamp = candidate_data.get("metadata", {}).get("timestamp")
+                        if current_timestamp and candidate_timestamp == current_timestamp:
+                            continue
+                        if candidate_data.get("metadata", {}).get("session_completed") is False:
+                            continue
+                        baseline_data = candidate_data
+                        break
                     except:
                         pass
 

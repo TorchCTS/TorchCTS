@@ -2343,7 +2343,9 @@ def pytest_configure(config):
         if os.path.exists(latest_json_path):
             try:
                 with open(latest_json_path, "r", encoding="utf-8") as f:
-                    _BASELINE_RESULTS = json.load(f).get("results", {})
+                    baseline_data = json.load(f)
+                if baseline_data.get("metadata", {}).get("session_completed") is not False:
+                    _BASELINE_RESULTS = baseline_data.get("results", {})
             except Exception:
                 pass
 
