@@ -91,6 +91,14 @@ EXCLUDED_OR_PENDING_STATUSES = {
     "pending_backend_pack",
     "pending_property",
 }
+ORACLE_BACKED_STATUSES = {
+    "covered_oracle",
+    "covered_backend_pack",
+    "covered_property",
+    "pending_oracle",
+    "pending_backend_pack",
+    "pending_property",
+}
 
 
 def generated_cases(surface_kind: str) -> list[dict | None]:
@@ -342,6 +350,26 @@ def run_oracle_strategy(entry: dict | None, device: str) -> None:
         run_oracle_for_surface(entry["name"], device)
     except OracleUnavailable as exc:
         pytest.skip(str(exc))
+
+
+def _generated_strategy_name(entry: dict | None) -> str | None:
+    strategy = (entry or {}).get("generated", {}).get("strategy") or {}
+    if isinstance(strategy, dict):
+        return strategy.get("strategy")
+    return str(strategy) if strategy else None
+
+
+def _run_oracle_strategy_if_applicable(entry: dict | None, device: str) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if _generated_strategy_name(entry):
+        return False
+    if not entry.get("oracle"):
+        return False
+    if entry.get("status") not in ORACLE_BACKED_STATUSES:
+        return False
+    run_oracle_strategy(entry, device)
+    return True
 
 
 _FORWARD_CASE_CACHE = {}
@@ -885,6 +913,8 @@ def run_opinfo_view_alias_strategy(entry: dict | None, device: str, compare, man
         pytest.skip("coverage_unknown")
     if entry.get("status") == "excluded":
         pytest.skip("coverage_excluded")
+    if _run_oracle_strategy_if_applicable(entry, device):
+        return
 
     strategy = entry.get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") == "manual_shape":
@@ -1590,8 +1620,7 @@ def run_manual_shape_strategy(entry: dict | None, device: str, compare, manifest
 
 
 def run_generated_out_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:
-    if (entry or {}).get("status") == "covered_backend_pack":
-        run_oracle_strategy(entry, device)
+    if _run_oracle_strategy_if_applicable(entry, device):
         return
     strategy = (entry or {}).get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") == "manual_shape":
@@ -1661,6 +1690,8 @@ def run_generated_out_strategy(entry: dict | None, device: str, compare, manifes
 
 
 def run_generated_inplace_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:
+    if _run_oracle_strategy_if_applicable(entry, device):
+        return
     strategy = (entry or {}).get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") == "manual_shape":
         run_manual_shape_strategy(entry, device, compare, manifest)
@@ -1702,6 +1733,8 @@ def run_generated_inplace_strategy(entry: dict | None, device: str, compare, man
 
 
 def run_generated_functional_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:
+    if _run_oracle_strategy_if_applicable(entry, device):
+        return
     strategy = (entry or {}).get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") == "manual_shape":
         run_manual_shape_strategy(entry, device, compare, manifest)
@@ -1811,6 +1844,8 @@ def run_manual_factory_strategy(entry: dict | None, device: str, compare, manife
         pytest.skip("coverage_unknown")
     if entry.get("status") == "excluded":
         pytest.skip("coverage_excluded")
+    if _run_oracle_strategy_if_applicable(entry, device):
+        return
 
     strategy = entry.get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") != "manual_factory":
@@ -2954,6 +2989,8 @@ def run_manual_rng_strategy(entry: dict | None, device: str, compare, manifest: 
         pytest.skip("coverage_unknown")
     if entry.get("status") == "excluded":
         pytest.skip("coverage_excluded")
+    if _run_oracle_strategy_if_applicable(entry, device):
+        return
 
     strategy = entry.get("generated", {}).get("strategy") or {}
     if strategy.get("strategy") != "manual_rng":
