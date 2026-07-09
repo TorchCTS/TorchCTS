@@ -1,99 +1,138 @@
-# TorchCTS - Validate PyTorch Backends
+# TorchCTS - PyTorch Backend Conformance
 
 [![PyPI Version](https://img.shields.io/pypi/v/torchcts?style=flat-square&color=3B8BF6&label=PyPI)](https://pypi.org/project/torchcts/)
 [![License](https://img.shields.io/github/license/TorchCTS/TorchCTS?style=flat-square&color=gray)](LICENSE)
 
-TorchCTS is a manifest-driven PyTorch backend validation suite for backend
-developers. It imports PyTorch's own OpInfo database from the installed PyTorch
-build, builds tests from OpInfo operator metadata, dtype metadata, sample-input
-generators, and error-input generators. TorchCTS augments that matrix with
-hand-authored suites and generated dispatcher-surface coverage for behavior
-PyTorch's dynamic OpInfo list does not fully express, including layout, stride,
-memory format, sparse/nested tensors, dtype-specific behavior, compiler
-behavior, training workflows, device APIs, memory behavior, stress cases, and
-model workloads.
+TorchCTS is an open-source conformance suite for PyTorch backends.
 
-TorchCTS is intended to be a strict conformance gate. A manifest declaration is
-a claim the backend has to prove: declared dtypes and capabilities collect and
-run, and runtime backend errors are reported as failures or errors. Manifest
-entries that explicitly say a dtype or capability is not supported are recorded
-as structured accounting records instead of disappearing from reports.
-Subprocess isolation for crash-prone tests protects the pytest parent process,
-but it never skips, xfails, or downgrades a backend failure.
+If you are building or shipping a PyTorch device backend, accelerator backend,
+PrivateUse1 backend, or compiler backend, TorchCTS verifies that the backend
+behaves the way its manifest says it does.
+
+Instead of only asking "did the selected tests pass?", TorchCTS asks whether a
+backend can prove every dtype, capability, and coverage claim it declares. It
+builds tests from PyTorch's installed OpInfo database, generated dispatcher
+coverage, and hand-authored suites for behavior OpInfo does not fully express:
+layout, stride, memory format, sparse and nested tensors, dtype-specific
+behavior, compiler behavior, training workflows, device APIs, memory behavior,
+stress cases, and model workloads.
+
+A TorchCTS run produces structured evidence: what passed, what failed, what was
+explicitly not claimed, what was deselected by policy, and what still needs
+coverage work. Crash isolation can protect the pytest parent process, but it
+does not turn backend failures into skips, xfails, or passes.
+
+## At a Glance
+
+These numbers are generated from this checkout and installed PyTorch build, not
+from a backend pass/fail run. Refresh them with
+`python scripts/generate_site_stats.py` before using them in release or website
+copy.
+
+| Metric | Current value |
+| --- | ---: |
+| Generated at | 2026-07-09T15:59:27Z |
+| PyTorch version | 2.12.1 |
+| Pytest nodes collected | 19,416 |
+| Pytest executable nodes | 19,053 |
+| ATen overloads inventoried | 3,225 |
+| Backend-relevant overloads | 3,214 |
+| Covered backend-relevant overloads | 3,062 |
+| Dispatcher coverage | 95.3% |
+| Unknown tensor-touching surfaces | 0 |
+| Known crash isolation rules | 13 |
+
+The generated source for these values is
+[`docs/site-stats.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/site-stats.md).
+
+## Who Should Use TorchCTS?
+
+- Backend developers validating a PyTorch device implementation.
+- Hardware vendors and accelerator teams preparing release evidence.
+- Compiler teams checking `torch.compile` and backend integration behavior.
+- CI engineers who need reproducible backend support accounting.
+- Organizations shipping custom PyTorch builds or PrivateUse1 integrations.
 
 ## Why TorchCTS?
 
-- **Conformance-focused checks**: Every operator/dtype tuple TorchCTS can build
-  from PyTorch OpInfo for the installed PyTorch build, plus hand-authored suites
-  that complete coverage for layout, stride, dtype, device, compiler, training,
-  memory, and workload behavior.
-- **Manifest-driven accounting**: A `manifest.py` declares supported dtypes,
-  capabilities, resource limits, tolerance overrides, container formats, and
-  custom test directories. Positive declarations run as testable claims;
-  negative declarations are visible as structured not-run records.
-- **Honest reports**: Results preserve pass/fail/skip data and generate
-  scorecards that separate unsupported manifest claims, deselected coverage, and
-  backend failures.
-- **Backend-oriented controls**: Resource caps, explicit tolerance overrides,
-  dtype narrowing, capability filters, custom quantized decode hooks, crash
-  isolation, and CPU harness validation are built into the normal workflow.
+Backend validation is difficult because a passing test run can still leave the
+important questions unanswered:
+
+- Which operator and dtype combinations actually ran?
+- Which failures are backend bugs rather than unsupported features?
+- Which declared capabilities became executable requirements?
+- Which tests did not run because of manifest policy, resource policy, semantic
+  depth, or unfinished coverage strategy?
+- What changed between releases, hardware targets, or PyTorch versions?
+
+TorchCTS answers those questions with manifest-driven validation, structured
+not-run accounting, coverage audits, and backend-oriented reports.
+
+## How It Works
+
+```text
+manifest.py
+  -> declared dtypes, capabilities, resources, tolerances
+  -> OpInfo tests, generated dispatcher tests, hand-authored suites
+  -> backend execution
+  -> JSON results, scorecards, coverage audits, evidence packs
+```
+
+A `manifest.py` describes what the backend claims to support. Positive
+declarations become test requirements. Negative declarations remain visible as
+structured accounting records instead of disappearing from the report.
 
 TorchCTS's operator matrix starts from PyTorch OpInfo rather than raw dispatcher
 enumeration of every internal `aten::` overload. Full backend coverage comes
-from that OpInfo matrix plus the hand-authored TorchCTS suites that exercise the
-coverage gaps OpInfo does not dynamically generate.
+from that OpInfo matrix plus TorchCTS-owned generated and hand-authored suites
+that cover behavior OpInfo does not dynamically generate.
+
+## What TorchCTS Adds
+
+| Question | Ordinary backend test run | TorchCTS |
+| --- | --- | --- |
+| Did selected tests pass? | Yes | Yes |
+| Are backend declarations executable requirements? | Usually manual | Manifest-driven |
+| Are unsupported claims accounted for? | Often hidden in skips | Structured not-run records |
+| Can reports separate failure, manifest policy, and coverage gaps? | Usually ad hoc | Built in |
+| Dispatcher coverage audit? | Usually separate work | Built in |
+| Can release evidence be regenerated from saved JSON? | Usually custom | Built in |
+
+TorchCTS is not another backend, compiler, benchmark, or replacement for
+upstream PyTorch tests. It is a conformance framework and evidence generator for
+backend teams.
 
 ## Quick Start
 
-### 1. Install
-
 TorchCTS requires Python >= 3.10 and PyTorch >= 2.7.
-
-```bash
-pip install torchcts
-```
 
 Run TorchCTS from the Python environment that contains the PyTorch and backend
 build you want to validate. The CLI does not silently switch into a project
 `.venv` by default. If you explicitly want that behavior, set
 `TORCHCTS_USE_PROJECT_VENV=1`.
 
-### 2. Init
-
-Create a manifest from one of the shipped templates:
-
 ```bash
+pip install torchcts
+
 torchcts init --template smoke --non-interactive
-```
-
-Available templates are `smoke`, `minimal`, `inference`, `training`, and
-`complete`.
-
-### 3. Check the manifest
-
-Validate the manifest before a long run:
-
-```bash
 torchcts check-manifest --manifest manifest.py
+torchcts run --device mps
+torchcts report
 ```
 
-The checker rejects unknown top-level keys, stale capability names such as
-`generator` and `quantized`, unsupported dtype keys, invalid tolerance
+Available manifest templates are `smoke`, `minimal`, `inference`, `training`,
+and `complete`.
+
+The manifest checker rejects unknown top-level keys, stale capability names
+such as `generator` and `quantized`, unsupported dtype keys, invalid tolerance
 overrides, invalid quantized container formats, and malformed custom decoder
 paths.
 
-### 4. Run
+## Common Run Controls
 
-Execute the suite against the target backend:
-
-```bash
-torchcts run --device mps
-```
-
-Each manifest also declares a semantic run depth with `semantic_level` from `1`
-to `8`. A run at level `N` collects the normal manifest-valid test set, then
-skips cases whose published `semantic_level` is greater than `N`. The CLI can
-override the manifest for one run:
+Each manifest declares a semantic run depth with `semantic_level` from `1` to
+`8`. A run at level `N` collects the normal manifest-valid test set, then skips
+cases whose published `semantic_level` is greater than `N`.
 
 ```bash
 torchcts run --device mps --level 4
@@ -124,25 +163,35 @@ torchcts show-skips --device mps --level 4
 `show-skips` reports structured manifest and semantic-level accounting without
 executing tests.
 
-### 5. Report
+## What Reports Show
 
-Generate HTML/Markdown scorecards and validation reports from saved JSON
-results:
+`torchcts report` regenerates Markdown scorecards and validation reports from
+saved JSON results under `./results/`.
 
-```bash
-torchcts report
-```
+Reports include:
 
-### 6. Audit Coverage
+- backend, hardware key, PyTorch version, run timestamp, and duration;
+- operator coverage split across pass, fail/error, manifest policy, selection,
+  coverage policy, CPU contract, and runtime availability;
+- capability results for manifest-declared feature areas;
+- dtype coverage;
+- semantic-level execution accounting;
+- failure summaries and baseline regressions when baseline history exists.
+
+Full-run scorecards require enough runnable tests to support a meaningful
+backend support percentage. Partial or interrupted runs still produce reports,
+but they are explicitly marked as partial and do not get a backend support
+percentage.
+
+## Coverage Audit
 
 Inventory the installed PyTorch dispatch surface and map each `aten::` overload
-to OpInfo coverage, hand-authored markers, generated coverage, exclusions, or an
-unknown status:
+to OpInfo coverage, hand-authored markers, generated coverage, exclusions,
+backend-pack coverage, or an unknown status:
 
 ```bash
 torchcts coverage audit
 torchcts coverage report
-torchcts coverage check
 torchcts coverage check --fail-on-unknown
 ```
 
@@ -152,9 +201,9 @@ and audit artifacts are written under `./results/coverage/`.
 
 Unknown tensor-touching surfaces warn loudly and exit `0` by default for
 compatibility; release checks should use `coverage check --fail-on-unknown`.
-Malformed exclusion JSON, invalid exclusion names, and inconsistent audit metadata exit nonzero.
-Coverage summaries also include semantic-level counts for covered surfaces and
-generated sample case families.
+Malformed exclusion JSON, invalid exclusion names, and inconsistent audit
+metadata exit nonzero. Coverage summaries also include semantic-level counts
+for covered surfaces and generated sample case families.
 
 Coverage policy, oracle-authoring rules, backend-pack rules, exclusion policy,
 and accepted contract evidence are documented in
@@ -244,11 +293,20 @@ TorchCTS provides these subcommands:
 - `sync-opinfo`: Force-rebuild the OpInfo registry cache.
 - `check-manifest`: Validate manifest syntax and schema.
 - `coverage inventory`: Write `./results/coverage/inventory.json`.
-- `coverage audit`: Write inventory, audit, unknowns, unmapped-tests, and summary
-  artifacts under `./results/coverage/`.
+- `coverage audit`: Write inventory, audit, unknowns, unmapped-tests, and
+  summary artifacts under `./results/coverage/`.
 - `coverage report`: Render the default coverage audit summary.
+- `coverage materialize`: Write deterministic generated coverage cases.
+- `coverage non-unique-audit`: Audit non-unique coverage identifiers.
+- `coverage evidence-pack`: Build backend evidence artifacts.
 - `coverage check`: Validate the default coverage audit. Unknowns warn by
   default; `--fail-on-unknown` or `--strict-unknowns` makes them nonzero.
+- `path-shapes validate`: Validate the curated path-shape corpus.
+- `path-shapes summary`: Summarize corpus families, resource tiers, semantic
+  levels, budgets, and waivers.
+- `path-shapes list`: List corpus cases by selector.
+- `path-shapes run`: Run selected path-shape cases through pytest.
+- `triage mps`: Classify MPS failures and optional crash repros.
 
 `--validation` is a CPU harness validation mode. It validates the harness and
 CPU-compatible tests without probing an accelerator; it is not a substitute for
@@ -268,6 +326,8 @@ Pytest-level controls used by the CLI include:
 - The package entry point is `torchcts`.
 - Manifest templates are in `torchcts/templates/`.
 - Test execution results are saved under `./results/`.
+- Generated current-checkout statistics are in
+  [`docs/site-stats.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/site-stats.md).
 - Runtime harness policy is documented in
   [`docs/harness.md`](https://github.com/TorchCTS/TorchCTS/blob/main/docs/harness.md).
 - Release validation is documented in
