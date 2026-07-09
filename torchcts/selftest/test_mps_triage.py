@@ -751,6 +751,82 @@ def test_harness_known_segfault_process_classification_is_backend_generic():
     )
 
 
+def test_harness_known_segfault_no_execute_record_preserves_crash_metadata(monkeypatch):
+    monkeypatch.setattr(harness, "_REQUESTED_SEMANTIC_LEVEL", 8)
+    entry = {
+        "name": "aten::_foreach_add.Tensor_out",
+        "schema": (
+            "aten::_foreach_add.Tensor_out(Tensor[] self, Tensor[] other, "
+            "Scalar alpha=1, *, Tensor(a!)[] out) -> ()"
+        ),
+        "status": "covered_generated",
+        "coverage_kind": "generated",
+        "surface_kind": "out_variant",
+        "variant_kind": "out",
+        "semantic_level": 4,
+        "generated": {
+            "strategy": {
+                "strategy": "manual_foreach",
+                "family": "binary",
+            },
+        },
+    }
+    item = _generated_item(
+        "torchcts/generated/test_foreach_fused.py::"
+        "test_generated_foreach_or_fused[_foreach_add.Tensor_out[L4]-torch.float16]",
+        entry,
+        fspath="torchcts/generated/test_foreach_fused.py",
+        dtype=torch.float16,
+    )
+    match = known_segfaults.annotate_match(
+        _known_segfault_entry(
+            id="mps-generated-foreach-add-tensor-out-float16-pytorch-2-12",
+            match="coverage_id",
+            nodeid=item.nodeid,
+            dispatcher="aten::_foreach_add.Tensor_out",
+            constraints={
+                "suite": ["generated"],
+                "coverage_kind": ["generated"],
+                "surface_kind": ["out_variant"],
+                "variant_kind": ["out"],
+                "strategy": ["manual_foreach"],
+                "strategy_family": ["binary"],
+                "semantic_level": [4],
+                "dtype": ["torch.float16"],
+                "coverage_id_glob": ["aten::_foreach_add.Tensor_out"],
+            },
+        ),
+        item.nodeid,
+        metadata=harness._extract_result_metadata(item),
+    )
+
+    record = harness._known_segfault_no_execute_record(item, match)
+
+    assert harness._known_segfault_record_without_execution(match)
+    assert record["status"] == "ERROR"
+    assert record["phase"] == "known_segfault"
+    assert record["failure_stage"] == "known_backend_crash"
+    assert record["error_type"] == "KnownSegfaultNotExecuted"
+    assert record["isolation_source"] == "known_segfault"
+    assert record["known_segfault_id"] == "mps-generated-foreach-add-tensor-out-float16-pytorch-2-12"
+    assert record["known_segfault_classification"] == "confirmed_backend_crash"
+    assert record["dispatcher_name"] == "aten::_foreach_add.Tensor_out"
+    assert record["dtype"] == "torch.float16"
+
+
+def test_harness_known_segfault_subprocess_policy_does_not_no_execute():
+    entry = known_segfaults.validate_known_segfaults([
+        {
+            "version": 1,
+            "known_segfaults": [
+                _known_segfault_entry(execution_policy="subprocess"),
+            ],
+        }
+    ])[0]
+
+    assert not harness._known_segfault_record_without_execution(entry)
+
+
 def test_harness_known_segfault_audit_prints_rule_counts(capsys):
     entry = _known_segfault_entry(
         match="dispatcher",

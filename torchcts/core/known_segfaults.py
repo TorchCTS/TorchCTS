@@ -32,6 +32,7 @@ VALID_SIGNALS = {"SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL"}
 VALID_MATCHES = {"nodeid", "dispatcher", "coverage_id"}
 VALID_EVIDENCE_SCOPES = {"exact_node", "constrained_metadata", "dispatcher_surface"}
 VALID_CLASSIFICATIONS = {"confirmed_backend_crash"}
+VALID_EXECUTION_POLICIES = {"record_without_execution", "subprocess"}
 EXACT_CONSTRAINT_KEYS = {
     "suite",
     "test_kind",
@@ -78,7 +79,7 @@ REQUIRED_ENTRY_KEYS = {
     "review_after",
 }
 
-ALLOWED_ENTRY_KEYS = set(REQUIRED_ENTRY_KEYS) | {"nodeid", "coverage_id", "constraints"}
+ALLOWED_ENTRY_KEYS = set(REQUIRED_ENTRY_KEYS) | {"nodeid", "coverage_id", "constraints", "execution_policy"}
 REQUIRED_REPRO_KEYS = {"script", "case"}
 ALLOWED_REPRO_KEYS = set(REQUIRED_REPRO_KEYS)
 
@@ -187,6 +188,11 @@ def _validate_entry(entry: dict, path: str, seen_ids: set[str]) -> dict:
     if entry["classification"] not in VALID_CLASSIFICATIONS:
         raise KnownSegfaultError(
             f"{path}: entry {entry['id']} classification must be one of {sorted(VALID_CLASSIFICATIONS)}"
+        )
+    execution_policy = entry.get("execution_policy", "record_without_execution")
+    if execution_policy not in VALID_EXECUTION_POLICIES:
+        raise KnownSegfaultError(
+            f"{path}: entry {entry['id']} execution_policy must be one of {sorted(VALID_EXECUTION_POLICIES)}"
         )
     if entry["expected_signal"] not in VALID_SIGNALS:
         raise KnownSegfaultError(f"{path}: entry {entry['id']} expected_signal must be one of {sorted(VALID_SIGNALS)}")

@@ -142,10 +142,14 @@ _PATH_SHAPE_SELECTION_SKIP_REASONS = frozenset({
 _EMPTY_SELECTION_SKIP_REASONS = frozenset({
     "opinfo_no_selected_cases",
 })
+_BACKEND_GATE_SELECTION_SKIP_REASONS = frozenset({
+    "backend_gate_mismatch",
+})
 _COLLECTION_SELECTION_SKIP_REASONS = (
     _SEMANTIC_SELECTION_SKIP_REASONS
     | _PATH_SHAPE_SELECTION_SKIP_REASONS
     | _EMPTY_SELECTION_SKIP_REASONS
+    | _BACKEND_GATE_SELECTION_SKIP_REASONS
 )
 _BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
     "dtype_not_supported",
@@ -673,6 +677,116 @@ def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
     if "coverage_strategy_pending" in err_msg:
         return "coverage_strategy_pending"
     return "runtime_skip"
+
+
+_BACKEND_GATE_MATCH = "matches"
+_BACKEND_GATE_MISMATCH = "mismatch"
+_BACKEND_GATE_NOT_PURE_DEVICE = "not_a_pure_device_gate"
+
+
+def _privateuse1_backend_name() -> str:
+    try:
+        return torch._C._get_privateuse1_backend_name()
+    except Exception:
+        return "privateuseone"
+
+
+def _is_privateuse1_device_type(device_type: str) -> bool:
+    return device_type in {"privateuseone", _privateuse1_backend_name()}
+
+
+def _runtime_backend_label(device_name: str) -> str:
+    try:
+        device_type = torch.device(device_name).type
+    except Exception:
+        return str(device_name)
+    if device_type == "cuda" and torch.version.hip is not None:
+        return "rocm"
+    if _is_privateuse1_device_type(device_type):
+        return _privateuse1_backend_name()
+    return device_type
+
+
+def _classify_backend_gate_for_collection(gate: str | None, device_name: str) -> str:
+    """Classify only wrong-backend collection mismatches.
+
+    Runtime/build feature availability stays in the oracle runners. Collection
+    deselection is only for rows that cannot belong to the selected backend.
+    """
+
+    if not gate or gate == "any":
+        return _BACKEND_GATE_MATCH
+
+    try:
+        device_type = torch.device(device_name).type
+    except Exception:
+        return _BACKEND_GATE_NOT_PURE_DEVICE
+
+    is_hip_cuda = device_type == "cuda" and torch.version.hip is not None
+
+    if gate == "cpu":
+        return _BACKEND_GATE_MATCH if device_type == "cpu" else _BACKEND_GATE_MISMATCH
+    if gate == "mps":
+        return _BACKEND_GATE_MATCH if device_type == "mps" else _BACKEND_GATE_MISMATCH
+    if gate == "cuda":
+        return _BACKEND_GATE_MATCH if device_type == "cuda" and not is_hip_cuda else _BACKEND_GATE_MISMATCH
+    if gate == "rocm":
+        return _BACKEND_GATE_MATCH if is_hip_cuda else _BACKEND_GATE_MISMATCH
+    if gate == "xla":
+        return _BACKEND_GATE_MATCH if device_type == "xla" else _BACKEND_GATE_MISMATCH
+    if gate == "privateuse1":
+        return _BACKEND_GATE_MATCH if _is_privateuse1_device_type(device_type) else _BACKEND_GATE_MISMATCH
+
+    if gate in {"cpu_build", "fbgemm", "quantized"}:
+        return _BACKEND_GATE_NOT_PURE_DEVICE if device_type == "cpu" else _BACKEND_GATE_MISMATCH
+
+    return _BACKEND_GATE_NOT_PURE_DEVICE
+
+
+def _backend_gate_for_item(item) -> str | None:
+    if hasattr(item, "callspec"):
+        entry = item.callspec.params.get("entry")
+        if isinstance(entry, dict):
+            oracle = entry.get("oracle") or {}
+            gate = oracle.get("backend_gate")
+            if gate:
+                return str(gate)
+    marker = item.get_closest_marker("backend_gate")
+    if marker:
+        if marker.args:
+            return str(marker.args[0])
+        if "gate" in marker.kwargs:
+            return str(marker.kwargs["gate"])
+    return None
+
+
+def _backend_gate_collection_skip_for_item(item, op_name: str | None) -> tuple[str, str] | None:
+    gate = _backend_gate_for_item(item)
+    if gate:
+        classification = _classify_backend_gate_for_collection(gate, _DEVICE_NAME)
+        if classification == _BACKEND_GATE_MISMATCH:
+            subject = op_name or item.nodeid
+            return (
+                "backend_gate_mismatch",
+                f"{subject} is gated to {gate}, current device is {_runtime_backend_label(_DEVICE_NAME)}",
+            )
+
+    if hasattr(item, "callspec"):
+        path_shape_case = item.callspec.params.get("path_shape_case")
+        if isinstance(path_shape_case, dict):
+            expectations = path_shape_case.get("device_expectation") or {}
+            try:
+                expectation_key = torch.device(_DEVICE_NAME).type
+            except Exception:
+                expectation_key = _DEVICE_NAME
+            expectation = str(expectations.get(expectation_key) or expectations.get("default") or "should_pass")
+            if expectation == "not_applicable":
+                case_id = path_shape_case.get("case_id") or item.nodeid
+                return (
+                    "backend_gate_mismatch",
+                    f"path-shape case {case_id} is not applicable on {_runtime_backend_label(_DEVICE_NAME)}",
+                )
+    return None
 
 
 def _runtime_unsupported_pattern_match(message: str) -> str | None:
@@ -1333,12 +1447,23 @@ def pytest_addoption(parser):
     group.addoption("--device", default="auto", help="Target device name (e.g. mps, cuda, auto)")
     group.addoption("--dtype", action="append", help="Override supported dtypes (can be specified multiple times)")
     group.addoption("--suite", choices=["opinfo", "operators", "training", "compiler", "device_api", "autograd", "memory", "custom", "dtypes", "strides", "workloads", "rng", "serialization", "errors", "stress", "multi_device", "adversarial", "generated"], help="Limit test collection to a specific suite")
-    group.addoption("--memory-mode", default="balanced", choices=["conservative", "balanced", "performance"], help="Memory cleanup cadence")
+    group.addoption(
+        "--memory-mode",
+        default="balanced",
+        choices=["conservative", "synchronize", "balanced", "performance"],
+        help="Memory cleanup cadence",
+    )
     group.addoption("--max-device-memory", type=int, help="Cap maximum device memory allowed (MB)")
     group.addoption("--max-tensor-size", type=int, help="Cap maximum single tensor size allowed (MB)")
     group.addoption("--level", type=int, help="Run semantic test cases with semantic_level <= LEVEL (1-8)")
     group.addoption("--level-exact", type=int, help="Run only semantic test cases with semantic_level == LEVEL (1-8)")
     group.addoption("--level-range", help="Run only semantic test cases in inclusive MIN:MAX level range")
+    group.addoption("--start-at-node", help="Deselect selected tests before this pytest node id")
+    group.addoption("--start-after-node", help="Deselect selected tests through this pytest node id")
+    group.addoption("--skip-selected", type=int, help="Deselect the first N selected tests after other filters")
+    group.addoption("--limit-selected", type=int, help="Keep at most N selected tests after other filters")
+    group.addoption("--max-samples", type=int, help="Override manifest max_samples for clean generated OpInfo samples; 0 = no cap")
+    group.addoption("--max-samples-ieee754", type=int, help="Override manifest max_samples_ieee754 for NaN/Inf generated OpInfo samples; 0 = no cap")
     group.addoption("--path-shape-family", action="append", help="Select tracked path-shape cases by family")
     group.addoption("--path-shape-category", action="append", help="Select tracked path-shape cases by category")
     group.addoption("--path-shape-case", action="append", help="Select tracked path-shape cases by case_id")
@@ -1371,6 +1496,68 @@ def pytest_addoption(parser):
         help="Isolate tests with matching prior crash/hang evidence without skipping them",
     )
     group.addoption("--validation", action="store_true", help="Validate harness and CPU-compatible tests without probing an accelerator")
+
+
+def _apply_selected_item_window(config, keep_items, site_stats_records, site_stats_enabled):
+    start_at_node = config.getoption("--start-at-node")
+    start_after_node = config.getoption("--start-after-node")
+    skip_selected = config.getoption("--skip-selected")
+    limit_selected = config.getoption("--limit-selected")
+
+    if (
+        start_at_node is None
+        and start_after_node is None
+        and skip_selected is None
+        and limit_selected is None
+    ):
+        return keep_items
+
+    if start_at_node and start_after_node:
+        pytest.exit("--start-at-node and --start-after-node cannot be combined", returncode=4)
+    if skip_selected is not None and skip_selected < 0:
+        pytest.exit("--skip-selected must be >= 0", returncode=4)
+    if limit_selected is not None and limit_selected < 0:
+        pytest.exit("--limit-selected must be >= 0", returncode=4)
+
+    start_index = 0
+    anchor_node = start_at_node or start_after_node
+    if anchor_node:
+        for idx, item in enumerate(keep_items):
+            if item.nodeid == anchor_node:
+                start_index = idx + (1 if start_after_node else 0)
+                break
+        else:
+            pytest.exit(f"Selection window anchor did not match a selected node: {anchor_node}", returncode=4)
+
+    if skip_selected:
+        start_index += skip_selected
+
+    start_index = min(start_index, len(keep_items))
+    end_index = len(keep_items) if limit_selected is None else min(len(keep_items), start_index + limit_selected)
+    window_items = keep_items[start_index:end_index]
+    deselected_items = keep_items[:start_index] + keep_items[end_index:]
+
+    if deselected_items:
+        config.hook.pytest_deselected(items=deselected_items)
+        if site_stats_enabled:
+            for item in deselected_items:
+                site_stats_records.append(_site_stats_collection_record(
+                    item,
+                    "structured_deselected",
+                    skip_reason="selection_window",
+                    skip_detail="excluded by selected item window",
+                ))
+
+    if not _IS_XDIST_WORKER:
+        limit_label = limit_selected if limit_selected is not None else "none"
+        print(
+            "Selection window: "
+            f"kept {len(window_items)} of {len(keep_items)} selected tests "
+            f"(start={start_index}, limit={limit_label})"
+        )
+
+    return window_items
+
 
 def load_manifest():
     manifest_py = os.path.join(os.getcwd(), "manifest.py")
@@ -1851,6 +2038,19 @@ def _apply_cli_dtype_filter(manifest, cli_dtypes):
     return labels
 
 
+def _apply_cli_sample_cap_overrides(manifest, config):
+    for option_name, manifest_key in (
+        ("--max-samples", "max_samples"),
+        ("--max-samples-ieee754", "max_samples_ieee754"),
+    ):
+        value = config.getoption(option_name)
+        if value is None:
+            continue
+        if value < 0:
+            pytest.exit(f"{option_name} must be >= 0", returncode=1)
+        manifest[manifest_key] = value
+
+
 def pytest_configure(config):
     global _MANIFEST, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR, _START_TIME, _SHOW_SKIPS, _REPORT_SKIPS
     global _SUBPROCESS_MODE, _MEMORY_MODE, _CLEANUP_THRESHOLD, _MAX_DEVICE_MEM, _MAX_TENSOR_SIZE, _BASELINE_RESULTS
@@ -1870,6 +2070,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "workload: real-world workloads")
     config.addinivalue_line("markers", "stress: stress tests")
     config.addinivalue_line("markers", "requires(capability): required capabilities")
+    config.addinivalue_line("markers", "backend_gate(gate): test is specific to a backend gate")
     config.addinivalue_line("markers", "adversarial: adversarial test suite")
     config.addinivalue_line("markers", "covers(dispatcher_name, surface=None): dispatcher overload covered by this test")
     config.addinivalue_line("markers", "covers_category(category): coverage category covered by this test")
@@ -1982,6 +2183,7 @@ def pytest_configure(config):
                 print(f"Error: {e}", file=sys.stderr)
                 pytest.exit(str(e))
 
+    _apply_cli_sample_cap_overrides(_MANIFEST, config)
     _apply_cli_dtype_filter(_MANIFEST, config.getoption("--dtype"))
 
     declared_device_count = _MANIFEST.get("device_count", 1)
@@ -2307,8 +2509,13 @@ def pytest_collection_modifyitems(session, config, items):
             op_name = contract_surfaces[0]
         contract_exempt_reason = _cpu_contract_exempt_reason(item)
 
+        backend_gate_skip = _backend_gate_collection_skip_for_item(item, op_name)
+        if backend_gate_skip:
+            skip_reason, detail = backend_gate_skip
+
         if (
-            is_validation
+            not skip_reason
+            and is_validation
             and _requires_dtype_contract(item)
             and not contract_surfaces
             and contract_exempt_reason is None
@@ -2558,6 +2765,17 @@ def pytest_collection_modifyitems(session, config, items):
                         f"{_SEMANTIC_LEVEL_SELECTION.label}"
                     )
 
+        if not skip_reason:
+            known_segfault_match = _known_segfault_match_for_item(item)
+            if known_segfault_match and _known_segfault_record_without_execution(known_segfault_match):
+                item._known_segfault_no_execute_match = known_segfault_match
+                skip_reason = "known_backend_crash"
+                detail = (
+                    "known confirmed backend crash recorded without executing "
+                    "the backend op"
+                )
+                skip_record_extra = _known_segfault_result_fields(known_segfault_match)
+
         if skip_reason:
             _SESSION_SKIPS[item.nodeid] = _skip_record_for_item(item, skip_reason, detail, skip_record_extra)
             if dtype_manifest_skip or skip_reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
@@ -2614,6 +2832,8 @@ def pytest_collection_modifyitems(session, config, items):
     elif _KNOWN_SEGFAULT_AUDIT:
         print("\nKnown segfault audit: 0 active rule(s)")
         pytest.exit("Known segfault audit complete", returncode=0)
+
+    keep_items = _apply_selected_item_window(config, keep_items, site_stats_records, site_stats_enabled)
 
     _finalize_adaptive_isolation_for_collection(config, keep_items)
 
@@ -2801,6 +3021,8 @@ def test_setup_teardown(request):
     elif _MEMORY_MODE == "conservative":
         synchronize(_DEVICE_NAME)
         empty_cache(_DEVICE_NAME)
+    elif _MEMORY_MODE == "synchronize":
+        synchronize(_DEVICE_NAME)
     elif _MEMORY_MODE == "balanced":
         # Check memory threshold
         allocated = memory_allocated(_DEVICE_NAME)
@@ -3093,6 +3315,62 @@ def _subprocess_error_record(item, status, error_type, error_message, duration_m
     return record
 
 
+def _known_segfault_record_without_execution(match):
+    execution_policy = match.get("execution_policy", "record_without_execution")
+    return match.get("classification") == "confirmed_backend_crash" and execution_policy == "record_without_execution"
+
+
+def _known_segfault_no_execute_record(item, match):
+    metadata = _extract_result_metadata(item)
+    record = {
+        "nodeid": item.nodeid,
+        "status": "ERROR",
+        "phase": "known_segfault",
+        "failure_stage": "known_backend_crash",
+        "suite": metadata["suite"],
+        "test_kind": metadata["test_kind"],
+        "capability": metadata["capability"],
+        "is_plumbing": metadata["is_plumbing"],
+        "is_conformance": metadata["is_conformance"],
+        "op": metadata["op"] or item.name,
+        "dispatcher_name": metadata["dispatcher_name"],
+        "schema": metadata["schema"],
+        "strategy": metadata["strategy"],
+        "strategy_family": metadata["strategy_family"],
+        "sample_descriptor": metadata["sample_descriptor"],
+        "dtype": metadata["dtype"],
+        "covers": metadata["covers"],
+        "coverage_kind": metadata["coverage_kind"],
+        "surface_kind": metadata["surface_kind"],
+        "variant_kind": metadata["variant_kind"],
+        "coverage_id": metadata["coverage_id"],
+        "coverage_status": metadata["coverage_status"],
+        "semantic_level": metadata["semantic_level"],
+        "requested_level": metadata["requested_level"],
+        "semantic_level_selection": metadata["semantic_level_selection"],
+        "level_reason": metadata["level_reason"],
+        "level_source": metadata["level_source"],
+        "semantic_skip_reason": None,
+        "maxerr": None,
+        "cosim": None,
+        "golden_pass": None,
+        "usable_pass": None,
+        "quality_warning": None,
+        "input_condition": metadata.get("input_condition"),
+        "error_message": (
+            "Known confirmed backend crash was recorded without executing the "
+            "test under --known-segfault-policy isolate."
+        ),
+        "error_type": "KnownSegfaultNotExecuted",
+        "shapes": metadata["shapes"],
+        "duration_ms": 0.0,
+        "last_tested": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    record.update(_known_segfault_result_fields(match))
+    record["classification"] = _known_segfault_process_classification(match)
+    return record
+
+
 def _subprocess_pass_record(item, duration_ms, command, returncode=0, stdout="", stderr=""):
     metadata = _extract_result_metadata(item)
     return {
@@ -3160,6 +3438,11 @@ def pytest_runtest_protocol(item, nextitem):
     is_child = _is_child_process()
     known_segfault_match = _known_segfault_match_for_item(item)
     adaptive_isolation_match = _adaptive_isolation_match_for_item(item)
+    if known_segfault_match and _known_segfault_record_without_execution(known_segfault_match) and not is_child:
+        _SESSION_RESULTS[item.nodeid] = _known_segfault_no_execute_record(item, known_segfault_match)
+        flush_results_to_disk()
+        return True
+
     needs_isolation = _SUBPROCESS_MODE or known_segfault_match is not None or adaptive_isolation_match is not None
     if needs_isolation and not is_child:
         # Run test node in child process
