@@ -18,9 +18,9 @@ dist/
 *.egg-info/
 
 # TorchCTS run artifacts
-results/
-reports/
-artifacts/
+/results/
+/reports/
+/artifacts/
 
 # Local analysis/debug scripts and generated notes
 issues.md
