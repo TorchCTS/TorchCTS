@@ -6753,6 +6753,39 @@ def oracle_spec_for(surface: str) -> OracleSpec | None:
     return _SPECS.get(surface)
 
 
+def oracle_collection_skip_for_surface(surface: str, device: str) -> tuple[str, str] | None:
+    """Return a collection-time not-run reason for oracle surfaces that cannot run."""
+
+    spec = oracle_spec_for(surface)
+    if spec is None:
+        return "coverage_strategy_pending", f"coverage_strategy_pending: no oracle spec for {surface}"
+    if spec.runner not in _RUNNERS:
+        return "coverage_strategy_pending", f"coverage_strategy_pending: no oracle runner {spec.runner!r} for {surface}"
+    try:
+        _check_backend_gate(spec, device)
+    except OracleUnavailable as exc:
+        return "backend_not_available", str(exc)
+
+    if spec.runner == "quantized_flash_attention":
+        device_type = torch.device(device).type
+        dispatch_key = {
+            "cpu": "CPU",
+            "cuda": "CUDA",
+            "mps": "MPS",
+        }.get(device_type)
+        if dispatch_key:
+            try:
+                has_kernel = torch._C._dispatch_has_kernel_for_dispatch_key(spec.surface, dispatch_key)
+            except Exception:
+                has_kernel = True
+            if not has_kernel:
+                return (
+                    "backend_not_available",
+                    f"backend_not_available: {spec.surface}: no {dispatch_key} dispatcher kernel is available",
+                )
+    return None
+
+
 def all_oracle_specs() -> tuple[OracleSpec, ...]:
     return tuple(_SPECS.values())
 

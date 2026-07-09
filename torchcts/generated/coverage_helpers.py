@@ -23,7 +23,7 @@ from torchcts.core.coverage import generated_entries_for
 from torchcts.core.comparer import compare_inf_propagation, compare_nan_propagation
 from torchcts.core.device import synchronize
 from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
-from torchcts.core.oracles import OracleUnavailable, run_oracle_for_surface
+from torchcts.core.oracles import OracleUnavailable, oracle_collection_skip_for_surface, run_oracle_for_surface
 from torchcts.core.opinfo_adapter import (
     InputCondition,
     dtype_manifest_disposition,
@@ -99,6 +99,79 @@ ORACLE_BACKED_STATUSES = {
     "pending_backend_pack",
     "pending_property",
 }
+SUPPORTED_GENERATED_STRATEGIES_BY_RUNNER = {
+    "functional_data": {
+        "manual_shape",
+        "manual_special_math",
+        "manual_elementwise",
+        "manual_reduction",
+        "manual_indexing",
+        "manual_rng",
+        "manual_multi_output_reduction",
+        "manual_upsample",
+        "manual_pooling",
+        "manual_convolution",
+        "manual_grid",
+        "manual_grid_backward",
+        "manual_rnn_cell",
+        "manual_fft",
+        "manual_loss",
+        "manual_linalg",
+        "manual_metadata",
+        "manual_padding",
+    },
+    "out_variant": {
+        "manual_shape",
+        "manual_matmul",
+        "manual_bitwise",
+        "manual_special_math",
+        "manual_elementwise",
+        "manual_reduction",
+        "manual_indexing",
+        "manual_rng",
+        "manual_multi_output_reduction",
+        "manual_upsample",
+        "manual_pooling",
+        "manual_convolution",
+        "manual_grid",
+        "manual_grid_backward",
+        "manual_rnn_cell",
+        "manual_fft",
+        "manual_loss",
+        "manual_linalg",
+        "manual_padding",
+        "manual_factory_out",
+    },
+    "inplace": {
+        "manual_shape",
+        "manual_matmul",
+        "manual_bitwise",
+        "manual_special_math",
+        "manual_elementwise",
+        "manual_reduction",
+        "manual_pooling",
+        "manual_convolution",
+        "manual_linalg",
+        "manual_indexing",
+        "manual_rng",
+        "manual_multi_output_reduction",
+    },
+}
+POST_CONTRACT_PREFLIGHT_STRATEGIES = frozenset({
+    "manual_elementwise",
+    "manual_shape",
+})
+_GENERATED_CPU_CONTRACT_PROBE_CACHE = {}
+_RECORDED_CONTRACT_DISPOSITION_CACHE = {}
+
+
+def _recorded_contract_disposition(dispatcher_name: str | None, dtype: torch.dtype):
+    cache_key = (dispatcher_name, dtype_to_str(dtype))
+    cached = _RECORDED_CONTRACT_DISPOSITION_CACHE.get(cache_key)
+    if cached is None:
+        cached = contract_disposition(dispatcher_name, dtype)
+        _RECORDED_CONTRACT_DISPOSITION_CACHE[cache_key] = cached
+    return cached
 
 
 def generated_cases(surface_kind: str) -> list[dict | None]:
@@ -192,6 +265,20 @@ def probe_generated_clean_cpu_contract(
     enforce_recorded_contract: bool = True,
 ) -> dict:
     manifest = manifest or {}
+    cache_key = (
+        entry.get("name"),
+        dtype_to_str(dtype),
+        manifest.get("ieee754_seed", 67),
+        bool(enforce_recorded_contract),
+    )
+    cached = _GENERATED_CPU_CONTRACT_PROBE_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    def _cached(result: dict) -> dict:
+        _GENERATED_CPU_CONTRACT_PROBE_CACHE[cache_key] = dict(result)
+        return result
+
     contract = contract_disposition(entry.get("name"), dtype)
     if enforce_recorded_contract and not contract.allowed and contract.status != "not_recorded":
         status = "unknown"
@@ -199,11 +286,11 @@ def probe_generated_clean_cpu_contract(
             status = "unsupported"
         elif contract.status == "cpu_pending":
             status = "pending"
-        return {
+        return _cached({
             "status": status,
             "detail": contract.detail,
             "contract_status": contract.status,
-        }
+        })
 
     strategy = (entry.get("generated", {}) or {}).get("strategy") or {}
     callable_op = _dispatcher_callable(entry)
@@ -248,25 +335,25 @@ def probe_generated_clean_cpu_contract(
             ("dtype" in message and ("require" in message or "got torch." in message))
             or ("got torch." in message and ("require" in message or "expected" in message or "support" in message))
         ):
-            return {
+            return _cached({
                 "status": "unsupported",
                 "detail": f"generated clean CPU sample rejected dtype: {type(exc).__name__}: {exc}",
-            }
-        return {
+            })
+        return _cached({
             "status": "unknown",
             "detail": f"generated clean CPU sample generation failed: {type(exc).__name__}: {exc}",
-        }
+        })
     except Exception as exc:
         if is_deterministic_cpu_unsupported(exc):
-            return {
+            return _cached({
                 "status": "unsupported",
                 "detail": f"generated clean CPU probe failed: {type(exc).__name__}: {exc}",
-            }
-        return {
+            })
+        return _cached({
             "status": "unknown",
             "detail": f"generated clean CPU probe failed: {type(exc).__name__}: {exc}",
-        }
-    return {"status": "supported", "detail": "generated clean CPU sample executed"}
+        })
+    return _cached({"status": "supported", "detail": "generated clean CPU sample executed"})
 
 
 def _generated_clean_cpu_contract_allows(entry: dict, dtype: torch.dtype, manifest: dict) -> bool:
@@ -400,6 +487,114 @@ def _contract_dtype_items(entry: dict | None, manifest: dict) -> list[tuple[torc
             f"the PyTorch CPU contract for {entry.get('name')}"
         )
     return items
+
+
+def generated_collection_skip_for_entry(
+    entry: dict | None,
+    manifest: dict,
+    *,
+    runner: str,
+    device: str,
+) -> tuple[str, str, dict] | None:
+    """Classify generated entries that should not become runtime pytest skips."""
+
+    if not isinstance(entry, dict):
+        return None
+
+    name = entry.get("name") or "<unknown>"
+    status = entry.get("status")
+    if status == "pending_backend_pack":
+        return "pending_backend_pack", "pending_backend_pack", {"op": name}
+    if status == "pending_property":
+        return "pending_property", "pending_property", {"op": name}
+    if status == "pending_oracle":
+        return "coverage_strategy_pending", f"coverage_strategy_pending: oracle strategy is pending for {name}", {"op": name}
+    if status == "unknown":
+        return "coverage_unknown", "coverage_unknown", {"op": name}
+    if status in EXCLUDED_OR_PENDING_STATUSES:
+        return status, status, {"op": name}
+
+    if runner == "oracle_surface":
+        oracle_skip = oracle_collection_skip_for_surface(name, device)
+        if oracle_skip:
+            reason, detail = oracle_skip
+            return reason, detail, {"op": name}
+        if status not in ORACLE_BACKED_STATUSES:
+            return "coverage_strategy_pending", f"coverage_strategy_pending: {name} is not oracle-backed", {"op": name}
+        return None
+
+    base_items = sample_manifest_dtype_items(manifest)
+    if not base_items:
+        return (
+            "generated_no_manifest_enabled_dtypes",
+            f"No manifest-enabled dtypes selected for generated {name}",
+            {"op": name},
+        )
+
+    strategy = (entry.get("generated") or {}).get("strategy") or {}
+    strategy_name = strategy.get("strategy")
+    supported = SUPPORTED_GENERATED_STRATEGIES_BY_RUNNER.get(runner)
+    if supported is not None and strategy_name and strategy_name not in supported:
+        label = {
+            "functional_data": "functional_data",
+            "out_variant": "out_variant",
+            "inplace": "inplace",
+        }.get(runner, runner)
+        return (
+            "coverage_strategy_pending",
+            f"coverage_strategy_pending: {label} strategy is not implemented for {name}",
+            {"op": name, "strategy": strategy_name},
+        )
+
+    if strategy_name == "manual_elementwise":
+        returns = entry.get("returns") or []
+        if len(returns) != 1 or returns[0].get("type") != "Tensor":
+            return (
+                "coverage_strategy_pending",
+                f"coverage_strategy_pending: manual elementwise strategy cannot validate non-Tensor return for {name}",
+                {"op": name, "strategy": strategy_name},
+            )
+
+    contract_items = []
+    not_recorded_items = []
+    for dtype, dtype_str in base_items:
+        contract = _recorded_contract_disposition(name, dtype)
+        if contract.allowed:
+            contract_items.append((dtype, dtype_str))
+            if strategy_name not in POST_CONTRACT_PREFLIGHT_STRATEGIES:
+                return None
+        elif contract.status == "not_recorded":
+            not_recorded_items.append((dtype, dtype_str))
+    if not contract_items and not_recorded_items:
+        for dtype, dtype_str in not_recorded_items:
+            if _generated_clean_cpu_contract_allows(entry, dtype, manifest):
+                contract_items.append((dtype, dtype_str))
+                if strategy_name not in POST_CONTRACT_PREFLIGHT_STRATEGIES:
+                    return None
+    if not contract_items:
+        return (
+            "cpu_contract_unsupported",
+            f"cpu_contract_unsupported: no selected dtype is executable under the PyTorch CPU contract for {name}",
+            {"op": name},
+        )
+
+    if strategy_name == "manual_elementwise" and not any(
+        _manual_input_conditions(manifest, entry.get("base_name") or name.replace("aten::", ""), dtype)
+        for dtype, _dtype_str in contract_items
+    ):
+        return (
+            "coverage_strategy_pending",
+            f"coverage_strategy_pending: no manifest-enabled elementwise cases for {name}",
+            {"op": name, "strategy": strategy_name},
+        )
+    if strategy_name == "manual_shape" and not _manual_shape_has_collection_case(entry, manifest, contract_items):
+        return (
+            "coverage_strategy_pending",
+            f"coverage_strategy_pending: no manifest-enabled shape cases for {name}",
+            {"op": name, "strategy": strategy_name},
+        )
+
+    return None
 
 
 def _contract_dtype_items_or(entry: dict | None, manifest: dict, fallback: list[torch.dtype]) -> list[tuple[torch.dtype, str]]:
@@ -1592,6 +1787,31 @@ def _manual_shape_dtype_supported(entry: dict, dtype: torch.dtype) -> bool:
     if entry["name"] == "aten::_neg_view":
         return dtype != torch.bool
     return True
+
+
+def _manual_shape_has_collection_case(
+    entry: dict,
+    manifest: dict,
+    dtype_items: list[tuple[torch.dtype, str]],
+) -> bool:
+    def _noop_compare(*args, **kwargs):
+        return None
+
+    try:
+        callable_op = _dispatcher_callable(entry)
+    except Exception:
+        return False
+
+    for dtype, _dtype_str in dtype_items:
+        if not _manual_shape_dtype_supported(entry, dtype):
+            continue
+        for input_condition in _manual_shape_input_conditions(manifest, entry, dtype):
+            try:
+                if _run_manual_shape_case(entry, callable_op, dtype, input_condition, "cpu", _noop_compare, manifest):
+                    return True
+            except Exception:
+                continue
+    return False
 
 
 def run_manual_shape_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:

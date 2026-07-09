@@ -679,7 +679,7 @@ def _print_run_help():
     parser.add_argument("--path-shape-cost-class", help="Select tracked path-shape cases by cost class")
     parser.add_argument("--path-shape-model-role", help="Select tracked path-shape cases by model role")
     parser.add_argument("--path-shape-dtype-group", help="Select tracked path-shape cases by dtype group")
-    parser.add_argument("--show-skips", action="store_true", help="Dry-run: print skips and exit")
+    parser.add_argument("--show-skips", action="store_true", help="Dry-run: print not-run audit and exit")
     parser.add_argument("--report-skips", action="store_true", help="Include skip audit in the report")
     parser.add_argument("--results-dir", help="Directory to save JSON and Markdown results")
     parser.add_argument("--non-interactive", action="store_true", help="Error instead of prompting")
@@ -874,7 +874,7 @@ def main():
     subparsers.add_parser("run", help="Run the test suite")
 
     # Show-skips subcommand
-    show_parser = subparsers.add_parser("show-skips", help="Show which tests will be skipped and why")
+    show_parser = subparsers.add_parser("show-skips", help="Show which tests will not run and why")
     show_parser.add_argument("--device", help="Target device name (e.g., mps, cuda)")
     show_parser.add_argument("--dtype", action="append", help="Target dtypes to show skips for")
     show_parser.add_argument("--level", type=int, help="Semantic level to show skips for (1-8)")

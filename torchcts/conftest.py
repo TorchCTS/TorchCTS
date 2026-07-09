@@ -151,6 +151,33 @@ _COLLECTION_SELECTION_SKIP_REASONS = (
     | _EMPTY_SELECTION_SKIP_REASONS
     | _BACKEND_GATE_SELECTION_SKIP_REASONS
 )
+_COVERAGE_DEBT_SKIP_REASONS = frozenset({
+    "coverage_unknown",
+    "coverage_excluded",
+    "coverage_strategy_pending",
+    "pending_property",
+    "backend_not_available",
+    "unavailable_in_pytorch_runtime",
+    "excluded",
+    "excluded_framework_plumbing",
+    "excluded_deprecated_or_removed",
+    "excluded_unsupported_public_api",
+    "excluded_distributed_scope",
+    "excluded_host_storage",
+})
+_BACKEND_PACK_DEBT_SKIP_REASONS = frozenset({
+    "pending_backend_pack",
+})
+_KNOWN_UNSAFE_SKIP_REASONS = frozenset({
+    "framework_bug",
+})
+_STRUCTURED_DESELECT_SKIP_REASONS = (
+    _COLLECTION_SELECTION_SKIP_REASONS
+    | _DTYPE_CONTRACT_SKIP_REASONS
+    | _COVERAGE_DEBT_SKIP_REASONS
+    | _BACKEND_PACK_DEBT_SKIP_REASONS
+    | _KNOWN_UNSAFE_SKIP_REASONS
+)
 _BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
     "dtype_not_supported",
     "dtype_regex_filtered",
@@ -666,6 +693,19 @@ def _runtime_skip_reason(err_msg: str, previous_skip: dict | None, item) -> str:
 
     if previous_skip:
         return previous_skip["skip_reason"]
+    semantic_prefixes = (
+        "cpu_contract_unsupported",
+        "cpu_contract_pending",
+        "cpu_contract_unknown",
+        "coverage_strategy_pending",
+        "backend_not_available",
+        "pending_backend_pack",
+        "pending_property",
+        "framework_bug",
+    )
+    for prefix in semantic_prefixes:
+        if err_msg == prefix or err_msg.startswith(f"{prefix}:"):
+            return prefix
     if "coverage_unknown" in err_msg:
         return "coverage_unknown"
     if "coverage_excluded" in err_msg:
@@ -1472,7 +1512,7 @@ def pytest_addoption(parser):
     group.addoption("--path-shape-cost-class", action="append", help="Select tracked path-shape cases by cost class")
     group.addoption("--path-shape-model-role", action="append", help="Select tracked path-shape cases by model role")
     group.addoption("--path-shape-dtype-group", action="append", help="Select tracked path-shape cases by dtype group")
-    group.addoption("--show-skips", action="store_true", help="Dry-run: print skips and exit")
+    group.addoption("--show-skips", action="store_true", help="Dry-run: print not-run audit and exit")
     group.addoption("--report-skips", action="store_true", help="Include skip audit in report")
     group.addoption("--results-dir", default="./results", help="Directory to save JSON/Markdown results")
     group.addoption("--non-interactive", action="store_true", help="Error instead of prompting in auto device selection")
@@ -1706,32 +1746,67 @@ def _generated_rng_capability_skip_for_item(item):
     return None
 
 
-def _generated_manifest_dtype_skip_for_item(item):
+def _generated_runner_for_item(item):
+    params = _callspec_params(item)
+    if not isinstance(params.get("entry"), dict):
+        return None
+    function_name = getattr(item, "originalname", None) or item.name.split("[", 1)[0]
+    if function_name == "test_oracle_surface":
+        return "oracle_surface"
+    if function_name == "test_generated_out_variant":
+        return "out_variant"
+    if function_name == "test_generated_inplace_variant":
+        return "inplace"
+    if function_name in {
+        "test_generated_functional_variant",
+        "test_generated_layout_storage_variant",
+        "test_generated_autograd_backward_variant",
+        "test_generated_rng_variant",
+        "test_generated_view_alias",
+    }:
+        return "functional_data"
+    if function_name == "test_generated_factory":
+        return "factory"
+    return None
+
+
+def _generated_collection_preflight_skip_for_item(item):
     params = _callspec_params(item)
     entry = params.get("entry")
     if not isinstance(entry, dict):
         return None
     if "generated/" not in str(item.fspath).replace("\\", "/"):
         return None
+    runner = _generated_runner_for_item(item)
+    if runner is None:
+        return None
 
     try:
-        from torchcts.generated.coverage_helpers import manifest_effective_dtype_items
+        from torchcts.generated.coverage_helpers import (
+            generated_collection_skip_for_entry,
+            manifest_effective_dtype_items,
+        )
 
-        dtype_items = manifest_effective_dtype_items(
+        if runner != "oracle_surface":
+            dtype_items = manifest_effective_dtype_items(
+                _MANIFEST,
+                op_name=entry.get("name"),
+                enforce_cpu_contract=False,
+            )
+            if not dtype_items:
+                return (
+                    "generated_no_manifest_enabled_dtypes",
+                    f"No manifest-enabled dtypes selected for generated {entry.get('name')}",
+                    {"op": entry.get("name")},
+                )
+        return generated_collection_skip_for_entry(
+            entry,
             _MANIFEST,
-            op_name=entry.get("name"),
-            enforce_cpu_contract=False,
+            runner=runner,
+            device=_DEVICE_NAME,
         )
     except Exception:
         return None
-
-    if dtype_items:
-        return None
-    return (
-        "generated_no_manifest_enabled_dtypes",
-        f"No manifest-enabled dtypes selected for generated {entry.get('name')}",
-        {"op": entry.get("name")},
-    )
 
 
 def _opinfo_empty_selection_skip_for_item(item):
@@ -2662,9 +2737,9 @@ def pytest_collection_modifyitems(session, config, items):
                 skip_reason, detail, skip_record_extra = generated_rng_skip
 
         if not skip_reason:
-            generated_dtype_skip = _generated_manifest_dtype_skip_for_item(item)
-            if generated_dtype_skip:
-                skip_reason, detail, skip_record_extra = generated_dtype_skip
+            generated_skip = _generated_collection_preflight_skip_for_item(item)
+            if generated_skip:
+                skip_reason, detail, skip_record_extra = generated_skip
 
         # 6. CPU device cannot run cross-device or device-module tests
         if not skip_reason and _DEVICE_NAME == "cpu":
@@ -2789,7 +2864,7 @@ def pytest_collection_modifyitems(session, config, items):
                         skip_reason=skip_reason,
                         skip_detail=detail,
                     ))
-            elif skip_reason in _COLLECTION_SELECTION_SKIP_REASONS:
+            elif skip_reason in _STRUCTURED_DESELECT_SKIP_REASONS:
                 selection_deselected_items.append(item)
                 if site_stats_enabled:
                     site_stats_records.append(_site_stats_collection_record(
@@ -2847,8 +2922,8 @@ def pytest_collection_modifyitems(session, config, items):
 
     if _SHOW_SKIPS:
         # Print audit report and exit
-        print(f"\n  SKIP AUDIT ({len(_SESSION_SKIPS)} skipped)")
-        print("  " + "─" * 25)
+        print(f"\n  NOT-RUN AUDIT ({len(_SESSION_SKIPS)} records)")
+        print("  " + "─" * 32)
         
         # Group by reason
         reasons = {}
@@ -2857,15 +2932,14 @@ def pytest_collection_modifyitems(session, config, items):
         for k, v in reasons.items():
             print(f"    {k:<25}: {v}")
             
-        print("\n  Full skip list:")
-        print("  " + "─" * 15)
+        print("\n  Full not-run list:")
+        print("  " + "─" * 19)
         for nid, r in _SESSION_SKIPS.items():
             # Truncate long nodeids
             short_nid = nid.split("/")[-1]
             print(f"  {short_nid:<60} {r['skip_reason']:<25} {r['detail']}")
-            
-        # Empty items to stop test run
-        items.clear()
+
+        pytest.exit("Not-run audit complete", returncode=0)
 
 def flush_results_to_disk():
     global _SESSION_RESULTS, _SESSION_SKIPS, _START_TIME, _DEVICE_NAME, _HARDWARE_KEY, _RESULTS_DIR

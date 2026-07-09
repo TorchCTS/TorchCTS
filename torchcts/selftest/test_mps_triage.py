@@ -138,6 +138,191 @@ def _unfold_view_alias_entry():
     }
 
 
+def _generated_preflight_entry(**overrides):
+    entry = {
+        "name": "aten::example",
+        "base_name": "example",
+        "status": "covered_generated",
+        "surface_kind": "functional_data",
+        "returns": [{"type": "Tensor", "tensor": True}],
+        "generated": {"strategy": {"strategy": "manual_elementwise", "family": "example"}},
+    }
+    entry.update(overrides)
+    return entry
+
+
+def test_generated_collection_preflight_blocks_cpu_contract(monkeypatch):
+    entry = _generated_preflight_entry()
+    manifest = {"supported_dtypes": {"torch.float32": True}}
+    coverage_helpers._RECORDED_CONTRACT_DISPOSITION_CACHE.clear()
+    monkeypatch.setattr(
+        coverage_helpers,
+        "contract_disposition",
+        lambda name, dtype: SimpleNamespace(allowed=False, status="cpu_unsupported"),
+    )
+
+    reason, detail, extra = coverage_helpers.generated_collection_skip_for_entry(
+        entry,
+        manifest,
+        runner="functional_data",
+        device="mps",
+    )
+
+    assert reason == "cpu_contract_unsupported"
+    assert "no selected dtype is executable" in detail
+    assert extra["op"] == "aten::example"
+
+
+def test_generated_collection_preflight_probes_unrecorded_cpu_contract_gap(monkeypatch):
+    entry = _generated_preflight_entry(
+        name="aten::unrecorded_gap",
+        generated={"strategy": {"strategy": "manual_shape", "family": "shape"}},
+    )
+    manifest = {"supported_dtypes": {"torch.float32": True, "torch.uint32": True}}
+    coverage_helpers._RECORDED_CONTRACT_DISPOSITION_CACHE.clear()
+
+    def disposition(_name, dtype):
+        status = "not_recorded" if dtype is torch.uint32 else "cpu_unsupported"
+        return SimpleNamespace(allowed=False, status=status)
+
+    monkeypatch.setattr(coverage_helpers, "contract_disposition", disposition)
+    monkeypatch.setattr(coverage_helpers, "_generated_clean_cpu_contract_allows", lambda _entry, _dtype, _manifest: False)
+
+    reason, detail, extra = coverage_helpers.generated_collection_skip_for_entry(
+        entry,
+        manifest,
+        runner="functional_data",
+        device="mps",
+    )
+
+    assert reason == "cpu_contract_unsupported"
+    assert "no selected dtype is executable" in detail
+    assert extra["op"] == "aten::unrecorded_gap"
+
+
+def test_generated_collection_preflight_classifies_coverage_debt():
+    manifest = {"supported_dtypes": {"torch.float32": True}}
+    reason, detail, _extra = coverage_helpers.generated_collection_skip_for_entry(
+        _generated_preflight_entry(
+            name="aten::_foreach_abs.out",
+            status="covered_generated",
+            surface_kind="out_variant",
+            generated={"strategy": {"strategy": "manual_foreach", "family": "unary"}},
+        ),
+        manifest,
+        runner="out_variant",
+        device="mps",
+    )
+
+    assert reason == "coverage_strategy_pending"
+    assert "out_variant strategy is not implemented" in detail
+
+
+def test_generated_collection_preflight_rejects_elementwise_non_tensor_return():
+    manifest = {"supported_dtypes": {"torch.float32": True}}
+    reason, detail, _extra = coverage_helpers.generated_collection_skip_for_entry(
+        _generated_preflight_entry(
+            name="aten::where",
+            base_name="where",
+            returns=[{"type": "List[Tensor]", "tensor": True}],
+        ),
+        manifest,
+        runner="functional_data",
+        device="mps",
+    )
+
+    assert reason == "coverage_strategy_pending"
+    assert "non-Tensor return" in detail
+
+
+def test_generated_collection_preflight_classifies_empty_shape_strategy(monkeypatch):
+    manifest = {"supported_dtypes": {"torch.float32": True}}
+    entry = _generated_preflight_entry(
+        name="aten::split_copy.Tensor_out",
+        base_name="split_copy",
+        surface_kind="out_variant",
+        generated={"strategy": {"strategy": "manual_shape", "family": "split_copy"}},
+    )
+    coverage_helpers._RECORDED_CONTRACT_DISPOSITION_CACHE.clear()
+    monkeypatch.setattr(coverage_helpers, "contract_disposition", lambda _name, _dtype: SimpleNamespace(allowed=True, status="cpu_supported"))
+    monkeypatch.setattr(coverage_helpers, "_manual_shape_has_collection_case", lambda _entry, _manifest, _dtype_items: False)
+
+    reason, detail, _extra = coverage_helpers.generated_collection_skip_for_entry(
+        entry,
+        manifest,
+        runner="out_variant",
+        device="mps",
+    )
+
+    assert reason == "coverage_strategy_pending"
+    assert "no manifest-enabled shape cases" in detail
+
+
+def test_generated_view_alias_items_use_collection_preflight(monkeypatch):
+    monkeypatch.setattr(harness, "_MANIFEST", {"supported_dtypes": {"torch.float32": True}})
+    monkeypatch.setattr(harness, "_DEVICE_NAME", "mps")
+    entry = _generated_preflight_entry(
+        name="aten::_philox_key_split",
+        base_name="_philox_key_split",
+        status="pending_backend_pack",
+        surface_kind="view_or_alias",
+        generated={},
+    )
+    item = _generated_item(
+        "torchcts/generated/test_view_aliases.py::test_generated_view_alias[_philox_key_split[L3]]",
+        entry,
+        fspath="torchcts/generated/test_view_aliases.py",
+    )
+
+    reason, detail, extra = harness._generated_collection_preflight_skip_for_item(item)
+
+    assert (reason, detail) == ("pending_backend_pack", "pending_backend_pack")
+    assert extra["op"] == "aten::_philox_key_split"
+
+
+def test_generated_collection_preflight_classifies_pending_property_and_backend_pack():
+    manifest = {"supported_dtypes": {"torch.float32": True}}
+
+    property_reason, property_detail, _ = coverage_helpers.generated_collection_skip_for_entry(
+        _generated_preflight_entry(status="pending_property"),
+        manifest,
+        runner="functional_data",
+        device="mps",
+    )
+    backend_reason, backend_detail, _ = coverage_helpers.generated_collection_skip_for_entry(
+        _generated_preflight_entry(status="pending_backend_pack"),
+        manifest,
+        runner="functional_data",
+        device="mps",
+    )
+
+    assert (property_reason, property_detail) == ("pending_property", "pending_property")
+    assert (backend_reason, backend_detail) == ("pending_backend_pack", "pending_backend_pack")
+
+
+def test_oracle_collection_preflight_classifies_unavailable_backend():
+    reason, detail, _extra = coverage_helpers.generated_collection_skip_for_entry(
+        _generated_preflight_entry(
+            name="aten::_flash_attention_forward.quantized",
+            status="covered_property",
+            generated={},
+        ),
+        {},
+        runner="oracle_surface",
+        device="mps",
+    )
+
+    assert reason == "backend_not_available"
+    assert "backend_not_available" in detail
+
+
+def test_runtime_skip_reason_normalizes_semantic_fallbacks():
+    assert harness._runtime_skip_reason("cpu_contract_unsupported: no selected dtype", None, None) == "cpu_contract_unsupported"
+    assert harness._runtime_skip_reason("pending_property", None, None) == "pending_property"
+    assert harness._runtime_skip_reason("framework_bug: hangs on MPS", None, None) == "framework_bug"
+    assert "framework_bug" in harness._STRUCTURED_DESELECT_SKIP_REASONS
+
+
 def _hamming_window_periodic_factory_entry():
     return {
         "name": "aten::hamming_window.periodic",

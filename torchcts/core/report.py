@@ -42,8 +42,65 @@ _BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
     "set_device_not_supported",
     "oom_not_recoverable",
 })
+_SELECTION_SKIP_REASONS = frozenset({
+    "semantic_level_gt_requested",
+    "semantic_level_out_of_range",
+    "opinfo_no_selected_cases",
+    "backend_gate_mismatch",
+    "path_shape_no_selected_cases",
+})
+_CONTRACT_SKIP_REASONS = frozenset({
+    "cpu_contract_unsupported",
+    "cpu_contract_unknown",
+    "cpu_contract_pending",
+})
+_COVERAGE_DEBT_SKIP_REASONS = frozenset({
+    "coverage_unknown",
+    "coverage_excluded",
+    "coverage_strategy_pending",
+    "pending_property",
+    "backend_not_available",
+    "unavailable_in_pytorch_runtime",
+    "excluded",
+    "excluded_framework_plumbing",
+    "excluded_deprecated_or_removed",
+    "excluded_unsupported_public_api",
+    "excluded_distributed_scope",
+    "excluded_host_storage",
+})
+_BACKEND_PACK_DEBT_SKIP_REASONS = frozenset({
+    "pending_backend_pack",
+})
+_KNOWN_UNSAFE_SKIP_REASONS = frozenset({
+    "framework_bug",
+    "known_backend_crash",
+})
+_SEMANTIC_RUNTIME_SKIP_PREFIXES = (
+    "cpu_contract_unsupported",
+    "cpu_contract_unknown",
+    "cpu_contract_pending",
+    "coverage_strategy_pending",
+    "pending_property",
+    "pending_backend_pack",
+    "backend_not_available",
+    "framework_bug",
+)
 _BACKEND_MANIFEST_ASSERTION_BAR_WIDTH = 37
 _MIN_FULL_RUN_MANIFEST_TEST_COUNT = 19000
+
+
+def _skip_detail(record):
+    return str(record.get("detail") or record.get("skip_detail") or record.get("error_message") or "")
+
+
+def _effective_skip_reason(record):
+    reason = record.get("skip_reason", "unknown")
+    if reason == "runtime_skip":
+        detail = _skip_detail(record).strip()
+        for prefix in _SEMANTIC_RUNTIME_SKIP_PREFIXES:
+            if detail == prefix or detail.startswith(f"{prefix}:"):
+                return prefix
+    return reason
 
 
 def _backend_manifest_assertion_from_data(metadata, results, skips_dict):
@@ -193,38 +250,14 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     results = current_data.get("results", {})
     skips_dict = current_data.get("skips", {})
     backend_manifest_assertion = _backend_manifest_assertion_from_data(metadata, results, skips_dict)
-    manifest_skip_reasons = {
-        "op_excluded",
-        "dtype_not_supported",
-        "dtype_regex_filtered",
-        "dtype_not_listed",
-        "capability_not_declared",
-        "container_format_not_supported",
-        "custom_container_decoder_not_declared",
-        "generated_no_manifest_enabled_dtypes",
-        "resource_limit",
-    }
-    selection_skip_reasons = {
-        "semantic_level_gt_requested",
-        "semantic_level_out_of_range",
-        "opinfo_no_selected_cases",
-    }
-    coverage_skip_reasons = {
-        "coverage_unknown",
-        "coverage_excluded",
-        "coverage_strategy_pending",
-        "pending_backend_pack",
-        "backend_not_available",
-        "coverage_capability_disabled",
-    }
-    contract_skip_reasons = {
-        "cpu_contract_unsupported",
-        "cpu_contract_unknown",
-        "cpu_contract_pending",
-    }
+    manifest_skip_reasons = _BACKEND_MANIFEST_DECLINED_SKIP_REASONS
+    selection_skip_reasons = _SELECTION_SKIP_REASONS
+    coverage_skip_reasons = _COVERAGE_DEBT_SKIP_REASONS
+    contract_skip_reasons = _CONTRACT_SKIP_REASONS
+    backend_pack_skip_reasons = _BACKEND_PACK_DEBT_SKIP_REASONS
+    known_unsafe_skip_reasons = _KNOWN_UNSAFE_SKIP_REASONS
     runtime_skip_reasons = {
         "runtime_skip",
-        "unavailable_in_pytorch_runtime",
     }
     dtype_skip_reasons = {
         "dtype_not_supported",
@@ -240,6 +273,8 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         "selection": "Ops with not-run cases (selection)",
         "coverage": "Ops with not-run cases (coverage)",
         "contract": "Ops with not-run cases (CPU contract)",
+        "backend_pack": "Ops with not-run cases (backend pack)",
+        "known_unsafe": "Ops with not-run cases (known unsafe)",
         "runtime": "Ops with not-run cases (runtime)",
         "other": "Ops with not-run cases (other)",
     }
@@ -253,6 +288,10 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             return "coverage"
         if reason in contract_skip_reasons:
             return "contract"
+        if reason in backend_pack_skip_reasons:
+            return "backend_pack"
+        if reason in known_unsafe_skip_reasons:
+            return "known_unsafe"
         if reason in runtime_skip_reasons:
             return "runtime"
         return "other"
@@ -334,7 +373,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         op_name = res.get("op")
         if not op_name:
             continue
-        bucket = not_run_bucket_for_reason(res.get("skip_reason"))
+        bucket = not_run_bucket_for_reason(_effective_skip_reason(res))
         skipped_ops_by_bucket[bucket].add(op_name)
 
     skipped_ops_all = set()
@@ -358,7 +397,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
     # Inspect non-executed records to distinguish manifest declines from runtime skips.
     for nodeid, res in skips_dict.items():
-        reason = res.get("skip_reason")
+        reason = _effective_skip_reason(res)
         cap = capability_for(nodeid, res)
         if reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
             if cap in capability_counts:
@@ -430,7 +469,8 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         else:
             dtype_counts[dt]["fail"] += 1
     for nodeid, res in skips_dict.items():
-        if res.get("skip_reason") not in dtype_skip_reasons:
+        reason = _effective_skip_reason(res)
+        if reason not in dtype_skip_reasons:
             continue
         dt = res.get("dtype")
         if not dt:
@@ -438,7 +478,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         dt = dt.replace("torch.", "")
         if dt not in dtype_counts:
             dtype_counts[dt] = {"pass": 0, "total": 0, "fail": 0, "skip": 0, "declined": 0}
-        if res.get("skip_reason") in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
+        if reason in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS:
             dtype_counts[dt]["declined"] += 1
         else:
             dtype_counts[dt]["skip"] += 1
@@ -463,8 +503,12 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             elif status in ("FAIL", "ERROR"):
                 semantic_counts[level]["fail"] += 1
             elif (
-                res.get("skip_reason") in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS
-                or res.get("skip_reason") in selection_skip_reasons
+                _effective_skip_reason(res) in _BACKEND_MANIFEST_DECLINED_SKIP_REASONS
+                or _effective_skip_reason(res) in selection_skip_reasons
+                or _effective_skip_reason(res) in contract_skip_reasons
+                or _effective_skip_reason(res) in coverage_skip_reasons
+                or _effective_skip_reason(res) in backend_pack_skip_reasons
+                or _effective_skip_reason(res) in known_unsafe_skip_reasons
             ):
                 semantic_counts[level]["deselected"] += 1
             else:
@@ -559,7 +603,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     summary_lines.append(f"  OpInfo ops represented:    {total_ops_discovered}")
     summary_lines.append(f"  Ops with PASS coverage:    {num_pass:<4} ({pct(num_pass)})")
     summary_lines.append(f"  Ops with FAIL/ERROR:       {num_fail:<4} ({pct(num_fail)})")
-    for bucket in ("manifest", "selection", "coverage", "contract", "runtime"):
+    for bucket in ("manifest", "selection", "coverage", "contract", "backend_pack", "known_unsafe", "runtime"):
         count = num_skips_by_bucket[bucket]
         summary_lines.append(f"  {not_run_bucket_labels[bucket]}: {count:<4} ({pct(count)})")
     other_count = num_skips_by_bucket["other"]
@@ -712,6 +756,14 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             return "declines"
         if reason in selection_skip_reasons:
             return "deselections"
+        if reason in contract_skip_reasons:
+            return "contract-blocked"
+        if reason in coverage_skip_reasons:
+            return "coverage debt"
+        if reason in backend_pack_skip_reasons:
+            return "backend-pack debt"
+        if reason in known_unsafe_skip_reasons:
+            return "known unsafe"
         return "skips"
 
     # ── Not-Run Audit Section ──
@@ -722,7 +774,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         # Group non-executed records by reason
         reason_groups = {}
         for nodeid, res in skips_dict.items():
-            reason = res.get("skip_reason", "unknown")
+            reason = _effective_skip_reason(res)
             if reason not in reason_groups:
                 reason_groups[reason] = []
             reason_groups[reason].append(res)
@@ -734,18 +786,38 @@ def build_report(current_data, baseline_data=None, include_skips=False):
 
         dtype_not_run_groups = {}
         for _nodeid, res in skips_dict.items():
-            if res.get("skip_reason") not in dtype_skip_reasons:
+            reason = _effective_skip_reason(res)
+            if reason not in dtype_skip_reasons:
                 continue
             dt = (res.get("dtype") or "unknown").replace("torch.", "")
-            label = not_run_record_label(res.get("skip_reason"))
-            dtype_not_run_groups.setdefault(dt, {"declines": 0, "deselections": 0, "skips": 0})
+            label = not_run_record_label(reason)
+            dtype_not_run_groups.setdefault(
+                dt,
+                {
+                    "declines": 0,
+                    "deselections": 0,
+                    "contract-blocked": 0,
+                    "coverage debt": 0,
+                    "backend-pack debt": 0,
+                    "known unsafe": 0,
+                    "skips": 0,
+                },
+            )
             dtype_not_run_groups[dt][label] += 1
         if dtype_not_run_groups:
             md_lines.append("### Dtype Not Run:")
             for dt, counts in sorted(dtype_not_run_groups.items()):
                 parts = [
                     f"{count} {label}"
-                    for label, count in (("declines", counts["declines"]), ("deselections", counts["deselections"]), ("skips", counts["skips"]))
+                    for label, count in (
+                        ("declines", counts["declines"]),
+                        ("deselections", counts["deselections"]),
+                        ("contract-blocked", counts["contract-blocked"]),
+                        ("coverage debt", counts["coverage debt"]),
+                        ("backend-pack debt", counts["backend-pack debt"]),
+                        ("known unsafe", counts["known unsafe"]),
+                        ("skips", counts["skips"]),
+                    )
                     if count
                 ]
                 md_lines.append(f"- **{dt}**: {', '.join(parts)}")
@@ -757,8 +829,8 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         for nodeid, res in skips_dict.items():
             op = res.get("op") or nodeid.split("[")[0].split(".")[-1]
             dt = (res.get("dtype") or "").replace("torch.", "")
-            reason = res.get("skip_reason")
-            detail = res.get("detail", "").replace("\n", " ")
+            reason = _effective_skip_reason(res)
+            detail = _skip_detail(res).replace("\n", " ")
             md_lines.append(f"| `{nodeid.split('/')[-1]}` | `{reason}` | {detail} |")
         md_lines.append("")
 

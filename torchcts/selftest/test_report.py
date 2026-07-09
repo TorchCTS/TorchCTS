@@ -189,3 +189,77 @@ def test_report_from_file_skips_current_history_copy_for_baseline(tmp_path, monk
     report_text = (source_dir / "Apple_Test_64gb_report.md").read_text(encoding="utf-8")
     assert "REGRESSIONS SINCE LAST RUN (2026-07-08T12:00:00Z)" in report_text
     assert "1 new failures" in report_text
+
+
+def test_not_run_audit_labels_structured_non_runtime_reasons():
+    payload = _payload(total_runnable=1)
+    payload["skips"] = {
+        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]": {
+            **_manifest_decline(
+                "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]",
+                op="aten::blocked",
+                dtype="torch.float32",
+            ),
+            "skip_reason": "cpu_contract_unsupported",
+            "detail": "cpu_contract_unsupported: no selected dtype is executable",
+        },
+        "torchcts/generated/test_out_variants.py::test_generated_out_variant[pending]": {
+            **_manifest_decline(
+                "torchcts/generated/test_out_variants.py::test_generated_out_variant[pending]",
+                op="aten::pending",
+                dtype="torch.float32",
+            ),
+            "skip_reason": "coverage_strategy_pending",
+            "detail": "coverage_strategy_pending: out_variant strategy is not implemented",
+        },
+        "torchcts/generated/test_oracle_surfaces.py::test_oracle_surface[pack]": {
+            **_manifest_decline(
+                "torchcts/generated/test_oracle_surfaces.py::test_oracle_surface[pack]",
+                op="aten::pack",
+                dtype="torch.float32",
+            ),
+            "skip_reason": "pending_backend_pack",
+            "detail": "pending_backend_pack",
+        },
+        "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[index_reduce]": {
+            **_manifest_decline(
+                "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[index_reduce]",
+                op="index_reduce",
+                dtype="torch.float32",
+            ),
+            "skip_reason": "framework_bug",
+            "detail": "index_reduce hangs infinitely on MPS",
+        },
+    }
+
+    scorecard, markdown = build_report(payload, include_skips=True)
+
+    assert "**cpu_contract_unsupported**: 1 contract-blocked" in markdown
+    assert "**coverage_strategy_pending**: 1 coverage debt" in markdown
+    assert "**pending_backend_pack**: 1 backend-pack debt" in markdown
+    assert "**framework_bug**: 1 known unsafe" in markdown
+    assert "**float32**: 1 contract-blocked" in markdown
+    assert "Ops with not-run cases (CPU contract): 1" in scorecard
+    assert "Ops with not-run cases (coverage): 1" in scorecard
+    assert "Ops with not-run cases (backend pack): 1" in scorecard
+    assert "Ops with not-run cases (known unsafe): 1" in scorecard
+
+
+def test_not_run_audit_normalizes_legacy_runtime_skip_details():
+    payload = _payload(total_runnable=1)
+    payload["skips"] = {
+        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]": {
+            **_manifest_decline(
+                "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]",
+                op="aten::blocked",
+                dtype="torch.float32",
+            ),
+            "skip_reason": "runtime_skip",
+            "detail": "cpu_contract_unsupported: no selected dtype is executable",
+        }
+    }
+
+    _scorecard, markdown = build_report(payload, include_skips=True)
+
+    assert "**cpu_contract_unsupported**: 1 contract-blocked" in markdown
+    assert "**runtime_skip**" not in markdown

@@ -39,6 +39,10 @@ DENIED_PACKAGE_PATHS = {
     ("torchcts", "opinfo_cache", "known_failures.json"),
 }
 
+ALLOWED_DENIED_COMPONENTS_BY_PREFIX = {
+    ("sample-results",): {"results"},
+}
+
 FORBIDDEN_TEXT_TOKENS = {
     "metal" "core",
 }
@@ -78,9 +82,13 @@ def _is_denied_path(path: str, *, artifact: bool = False) -> str | None:
     pure = PurePosixPath(normalized)
     parts = pure.parts
     lower_name = pure.name.lower()
+    allowed_denied_components = set()
+    for prefix, components in ALLOWED_DENIED_COMPONENTS_BY_PREFIX.items():
+        if parts[: len(prefix)] == prefix:
+            allowed_denied_components.update(components)
 
     for part in parts:
-        if part in DENIED_COMPONENTS:
+        if part in DENIED_COMPONENTS and part not in allowed_denied_components:
             return f"denied component {part!r}"
         if part.endswith(".egg-info") and not artifact:
             return "local egg-info metadata"
