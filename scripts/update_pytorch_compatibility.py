@@ -177,7 +177,11 @@ def main(argv: list[str] | None = None) -> int:
             "--update-tracked",
             "--compact",
         ])
-        run_command([
+        preview_root = REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced"
+        preview_op_metadata = preview_root / "op_metadata.preview.json"
+        preview_runtime = preview_root / "op_dtype_contracts.preview.json"
+        preview_evidence = preview_root / "dtype-contract-evidence.preview"
+        dtype_command = [
             sys.executable,
             "scripts/reduce_pytorch_dtype_contracts.py",
             *[str(path) for path in dtype_paths],
@@ -185,35 +189,46 @@ def main(argv: list[str] | None = None) -> int:
             "--verify-equivalence",
             "--max-runtime-bytes",
             str(args.max_runtime_bytes),
-            "--update-tracked" if args.update_tracked else "--runtime-out",
-            str(REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "op_dtype_contracts.preview.json"),
-        ] if not args.update_tracked else [
-            sys.executable,
-            "scripts/reduce_pytorch_dtype_contracts.py",
-            *[str(path) for path in dtype_paths],
-            "--no-existing-contracts",
-            "--verify-equivalence",
-            "--max-runtime-bytes",
-            str(args.max_runtime_bytes),
-            "--update-tracked",
-        ])
+        ]
+        if args.update_tracked:
+            dtype_command.append("--update-tracked")
+        else:
+            dtype_command.extend([
+                "--runtime-out",
+                str(preview_runtime),
+                "--evidence-out",
+                str(preview_evidence),
+                "--op-metadata",
+                str(preview_op_metadata),
+            ])
+        run_command(dtype_command)
 
         runtime = reduce_pytorch_dtype_contracts.load_existing_contracts(
             reduce_pytorch_dtype_contracts.TRACKED_RUNTIME_OUTPUT
             if args.update_tracked
-            else REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "op_dtype_contracts.preview.json"
+            else preview_runtime
         )
         upper_bound = (runtime.get("metadata") or {}).get("dependency_upper_bound")
         if args.update_tracked and upper_bound:
             update_pyproject_torch_bound(str(upper_bound))
 
         if args.verify:
-            run_command([
+            verification_command = [
                 sys.executable,
                 "scripts/verify_pytorch_dtype_contract_artifacts.py",
                 "--max-runtime-bytes",
                 str(args.max_runtime_bytes),
-            ])
+            ]
+            if not args.update_tracked:
+                verification_command.extend([
+                    "--runtime",
+                    str(preview_runtime),
+                    "--evidence",
+                    str(preview_evidence),
+                    "--op-metadata",
+                    str(preview_op_metadata),
+                ])
+            run_command(verification_command)
             if not args.skip_selftests:
                 run_command([
                     sys.executable,

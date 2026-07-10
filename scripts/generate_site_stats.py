@@ -31,6 +31,7 @@ from torchcts.core.coverage import (
     build_audit,
 )
 from torchcts.core import known_segfaults as known_segfaults_module
+from scripts import pytorch_dtype_evidence_store
 
 
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "site-stats.md"
@@ -592,7 +593,7 @@ def _dtype_contract_stats() -> dict:
     version_rule_counts = Counter()
     source_condition_counts = Counter()
     mismatch_counts = Counter()
-    evidence_path = REPO_ROOT / "data" / "pytorch-version-matrix" / "op_dtype_contract_evidence.jsonl"
+    evidence_path = REPO_ROOT / "evidence" / "pytorch" / "dtype-contracts" / "manifest.json"
     evidence_records = 0
     evidence_warnings = 0
 
@@ -613,20 +614,16 @@ def _dtype_contract_stats() -> dict:
             for condition, dtypes in (profile.get("source_expected") or {}).items():
                 source_condition_counts[str(condition)] += len(dtypes or ())
         if evidence_path.exists():
-            for line in evidence_path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                if record.get("record_kind") == "op_contract_evidence":
-                    evidence_records += 1
-                    for version_entry in (record.get("versions") or {}).values():
-                        for mismatch in version_entry.get("source_probe_mismatches") or ():
-                            if isinstance(mismatch, dict):
-                                mismatch_counts[mismatch.get("kind") or "unknown"] += 1
-                            else:
-                                mismatch_counts[str(mismatch)] += 1
-                elif record.get("record_kind") == "warning":
-                    evidence_warnings += 1
+            evidence = pytorch_dtype_evidence_store.load_evidence(evidence_path, verify_canonical=True)
+            evidence_records = len(evidence.get("contracts") or {})
+            evidence_warnings = len(evidence.get("warnings") or [])
+            for versioned in (evidence.get("contracts") or {}).values():
+                for version_entry in versioned.values():
+                    for mismatch in version_entry.get("source_probe_mismatches") or ():
+                        if isinstance(mismatch, dict):
+                            mismatch_counts[mismatch.get("kind") or "unknown"] += 1
+                        else:
+                            mismatch_counts[str(mismatch)] += 1
 
         return {
             "exists": True,

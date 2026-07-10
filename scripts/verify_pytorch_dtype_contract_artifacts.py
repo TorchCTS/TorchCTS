@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any
 
 
@@ -15,10 +16,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts import reduce_pytorch_dtype_contracts as reducer
+from scripts import pytorch_dtype_evidence_store as evidence_store
+from scripts import pytorch_dtype_evidence_taxonomy as evidence_taxonomy
 
 
 DEFAULT_RUNTIME = REPO_ROOT / "torchcts" / "op_dtype_contracts.json"
-DEFAULT_EVIDENCE = REPO_ROOT / "data" / "pytorch-version-matrix" / "op_dtype_contract_evidence.jsonl"
+DEFAULT_EVIDENCE = REPO_ROOT / "evidence" / "pytorch" / "dtype-contracts" / "manifest.json"
 
 
 def _version_key(version: str) -> tuple[int, int, int]:
@@ -34,6 +37,41 @@ def load_runtime(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a JSON object")
     return data
+
+
+def _tree_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def verify_deterministic_evidence_regeneration(
+    evidence_path: Path,
+    evidence: dict[str, Any],
+    metadata_categories: dict[str, str],
+) -> list[str]:
+    manifest_path = evidence_store.resolve_manifest_path(evidence_path)
+    if not manifest_path.is_file():
+        return []
+    with tempfile.TemporaryDirectory(prefix="torchcts-dtype-evidence-verify-") as temp_dir:
+        regenerated_manifest = evidence_store.write_evidence_store(
+            Path(temp_dir) / "store",
+            evidence,
+            metadata_categories=metadata_categories,
+        )
+        actual = _tree_bytes(manifest_path.parent)
+        regenerated = _tree_bytes(regenerated_manifest.parent)
+    if actual == regenerated:
+        return []
+    missing = sorted(set(actual) - set(regenerated))
+    extra = sorted(set(regenerated) - set(actual))
+    changed = sorted(path for path in set(actual) & set(regenerated) if actual[path] != regenerated[path])
+    return [
+        "evidence store differs from deterministic regeneration "
+        f"(missing={missing!r}, extra={extra!r}, changed={changed!r})"
+    ]
 
 
 def validate_runtime_schema(data: dict[str, Any]) -> list[str]:
@@ -124,11 +162,29 @@ def validate_runtime_schema(data: dict[str, Any]) -> list[str]:
     return errors
 
 
-def verify_artifacts(runtime_path: Path, evidence_path: Path, *, max_runtime_bytes: int = 0) -> tuple[list[str], dict[str, Any]]:
+def verify_artifacts(
+    runtime_path: Path,
+    evidence_path: Path,
+    *,
+    max_runtime_bytes: int = 0,
+    op_metadata_path: Path = evidence_taxonomy.OP_METADATA_PATH,
+) -> tuple[list[str], dict[str, Any]]:
     errors: list[str] = []
     runtime = load_runtime(runtime_path)
-    evidence = reducer.load_evidence_jsonl(evidence_path)
+    metadata_categories = evidence_taxonomy.load_metadata_categories(op_metadata_path)
+    evidence = evidence_store.load_evidence(
+        evidence_path,
+        verify_canonical=True,
+        metadata_categories=metadata_categories,
+    )
     errors.extend(validate_runtime_schema(runtime))
+    errors.extend(
+        verify_deterministic_evidence_regeneration(
+            evidence_path,
+            evidence,
+            metadata_categories,
+        )
+    )
 
     recomputed = reducer.compact_runtime_from_expanded(evidence)
     if _json_canonical(recomputed) != _json_canonical(runtime):
@@ -140,6 +196,12 @@ def verify_artifacts(runtime_path: Path, evidence_path: Path, *, max_runtime_byt
     if max_runtime_bytes and runtime_bytes > max_runtime_bytes:
         errors.append(f"runtime artifact is {runtime_bytes} bytes, above limit {max_runtime_bytes}")
 
+    manifest_path = evidence_store.resolve_manifest_path(evidence_path)
+    evidence_record_count = len(evidence.get("contracts") or {})
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        evidence_record_count = sum(entry["record_count"] for entry in manifest.get("categories") or [])
+
     summary = {
         "runtime": str(runtime_path),
         "evidence": str(evidence_path),
@@ -148,15 +210,21 @@ def verify_artifacts(runtime_path: Path, evidence_path: Path, *, max_runtime_byt
         "versions": len(runtime.get("metadata", {}).get("collected_versions") or []),
         "profiles": len(runtime.get("profiles") or {}),
         "ranges": runtime.get("metadata", {}).get("range_count"),
-        "evidence_records": len(evidence.get("contracts") or {}),
+        "evidence_ops": len(evidence.get("contracts") or {}),
+        "evidence_records": evidence_record_count,
+        "evidence_bytes": evidence_store.evidence_store_bytes(evidence_path)
+        if evidence_store.resolve_manifest_path(evidence_path).exists()
+        else evidence_path.stat().st_size,
+        "evidence_warnings": len(evidence.get("warnings") or []),
     }
     return errors, summary
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
-    parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    parser.add_argument("--runtime", "--runtime-artifact", dest="runtime", type=Path, default=DEFAULT_RUNTIME)
+    parser.add_argument("--evidence", "--evidence-artifact", dest="evidence", type=Path, default=DEFAULT_EVIDENCE)
+    parser.add_argument("--op-metadata", type=Path, default=evidence_taxonomy.OP_METADATA_PATH)
     parser.add_argument("--max-runtime-bytes", type=int, default=0)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -166,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
             args.runtime,
             args.evidence,
             max_runtime_bytes=args.max_runtime_bytes,
+            op_metadata_path=args.op_metadata,
         )
     except Exception as exc:
         errors = [f"{type(exc).__name__}: {exc}"]

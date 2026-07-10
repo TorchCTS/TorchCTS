@@ -5,7 +5,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-07-09T15:59:27.435104Z |
+| Generated at | 2026-07-10T01:31:09.023918Z |
 | TorchCTS version | 0.3.6 |
 | Installed TorchCTS metadata version | 0.3.6 |
 | pyproject.toml version | 0.3.6 |
@@ -14,17 +14,17 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-07-09T15:57:07.057925Z |
+| Coverage audit timestamp | 2026-07-10T01:27:21.986203Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 19416 |
-| Pytest executable nodes | 19053 |
+| Pytest nodes collected | 19448 |
+| Pytest executable nodes | 18633 |
 | Pytest skip-marked nodes | 3 |
-| Structured deselected nodes | 360 |
+| Structured deselected nodes | 812 |
 | ATen overloads inventoried | 3225 |
 | Backend-relevant overloads | 3214 |
 | Covered backend-relevant overloads | 3062 |
@@ -45,12 +45,12 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 474 | 474 | 0 | 0 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
-| 2 | 13773 | 13675 | 0 | 98 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
-| 3 | 1084 | 947 | 3 | 134 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
-| 4 | 2405 | 2346 | 0 | 59 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
-| 5 | 1248 | 1230 | 0 | 18 | 380 | 347 | Advanced numeric, layout, storage, sparse, nested, and stride-sensitive behavior. |
-| 6 | 199 | 175 | 0 | 24 | 19 | 19 | Specialized backend integration such as compiler, device API, allocator, quantization-adjacent, and low-level implementation surfaces. |
+| 1 | 506 | 505 | 0 | 1 | 422 | 422 | Core primitive behavior that every backend should run continuously. |
+| 2 | 13773 | 13641 | 0 | 132 | 952 | 145 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
+| 3 | 1084 | 740 | 3 | 341 | 1051 | 713 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
+| 4 | 2405 | 2174 | 0 | 231 | 384 | 275 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
+| 5 | 1248 | 1196 | 0 | 52 | 380 | 347 | Advanced numeric, layout, storage, sparse, nested, and stride-sensitive behavior. |
+| 6 | 199 | 171 | 0 | 28 | 19 | 19 | Specialized backend integration such as compiler, device API, allocator, quantization-adjacent, and low-level implementation surfaces. |
 | 7 | 203 | 179 | 0 | 24 | 6 | 0 | Heavy integration and workload coverage that validates realistic model or multi-device behavior. |
 | 8 | 30 | 27 | 0 | 3 | 0 | 0 | Release-depth stress and adversarial coverage intended for exhaustive validation passes. |
 
@@ -60,18 +60,18 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 19416 |
-| Node IDs parsed from stdout | 19056 |
-| Pytest summary count | 19416 |
-| Parameterized node IDs | 19214 |
-| Unparameterized node IDs | 202 |
+| Structured records parsed | 19448 |
+| Node IDs parsed from stdout | 18636 |
+| Pytest summary count | 19448 |
+| Parameterized node IDs | 19228 |
+| Unparameterized node IDs | 220 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 19053 |
-| structured_deselected | 360 |
+| executable | 18633 |
+| structured_deselected | 812 |
 | pytest_skip_marked | 3 |
 
 ## Pytest Collection Skip Reasons
@@ -79,13 +79,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Name | Count |
 | --- | --- |
 | backend_gate_mismatch | 238 |
+| coverage_strategy_pending | 228 |
+| cpu_contract_unsupported | 123 |
 | capability_not_declared | 78 |
+| pending_property | 68 |
 | cpu_contract_pending | 30 |
+| pending_backend_pack | 27 |
+| backend_not_available | 8 |
 | oom_not_recoverable | 6 |
 | cpu_not_applicable | 3 |
 | device_count | 3 |
 | resource_limit | 3 |
-| cpu_contract_unsupported | 2 |
 
 ## Pytest Nodes By Suite
 
@@ -98,9 +102,9 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | compiler | 144 |
 | dtypes | 135 |
 | strides | 87 |
+| selftest | 84 |
 | autograd | 77 |
 | training | 56 |
-| selftest | 52 |
 | stress | 30 |
 | rng | 28 |
 | memory | 24 |
@@ -116,7 +120,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13098 |
 | generated | 4258 |
 | handwritten | 2008 |
-| selftest | 52 |
+| selftest | 84 |
 
 ## Pytest Nodes By File
 
@@ -144,9 +148,9 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/generated/test_autograd_backward_variants.py | 38 |
 | torchcts/operators/test_matmul.py | 37 |
 | torchcts/operators/test_binary.py | 36 |
+| torchcts/selftest/test_mps_triage.py | 35 |
 | torchcts/operators/test_sparse.py | 34 |
 | torchcts/operators/test_view_shape.py | 33 |
-| torchcts/selftest/test_mps_triage.py | 26 |
 | torchcts/rng/test_generator.py | 25 |
 | torchcts/compiler/test_compile_training.py | 24 |
 | torchcts/generated/test_layout_storage_variants.py | 24 |
@@ -156,6 +160,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/operators/test_loss.py | 21 |
 | torchcts/workloads/test_model_shapes.py | 21 |
 | torchcts/generated/test_factories.py | 20 |
+| torchcts/selftest/test_pytorch_dtype_evidence.py | 20 |
 | torchcts/dtypes/test_native_quantization.py | 19 |
 | torchcts/operators/test_creation.py | 19 |
 | torchcts/operators/test_misc.py | 19 |
@@ -192,6 +197,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/errors/test_error_handling.py | 5 |
 | torchcts/operators/test_fft.py | 5 |
 | torchcts/operators/test_padding.py | 5 |
+| torchcts/selftest/test_report.py | 5 |
 | torchcts/stress/test_edge_numerics.py | 5 |
 | torchcts/workloads/test_transformer.py | 5 |
 | torchcts/autograd/test_gradcheck.py | 4 |
@@ -201,13 +207,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/multi_device/test_multi_device.py | 3 |
 | torchcts/operators/test_foreach.py | 3 |
 | torchcts/rng/test_dropout_rrelu_variants.py | 3 |
-| torchcts/selftest/test_report.py | 3 |
 | torchcts/serialization/test_save_load.py | 3 |
 | torchcts/workloads/test_attention_dispatcher.py | 3 |
 | torchcts/autograd/test_tensor_metadata_mutation.py | 2 |
 | torchcts/operators/test_fractional_pooling_backward.py | 2 |
 | torchcts/stress/test_rapid_alloc.py | 2 |
 | torchcts/dtypes/test_metadata_ops.py | 1 |
+| torchcts/selftest/test_release_hygiene.py | 1 |
 | torchcts/strides/test_channels_last.py | 1 |
 | torchcts/strides/test_memory_format.py | 1 |
 | torchcts/training/test_checkpoint.py | 1 |
@@ -256,6 +262,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | test_inplace_safety_checks | 12 |
 | test_mm_layouts | 12 |
 | test_unary_int_op | 12 |
+| test_taxonomy_representative_aliases_and_semantic_families | 11 |
 | test_compile_training_optimizer | 9 |
 | test_fused_optimizer_pipelines | 9 |
 | test_internal_dispatcher_surface | 9 |
@@ -291,7 +298,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | test_cross_attention_shapes | 4 |
 | test_empty_tensors | 4 |
 | test_fft_ops_1d | 4 |
-| test_gradcheck_ops | 4 |
 
 ## Top Suite And Function Pairs
 
@@ -336,6 +342,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | operators::test_mm_layouts | 12 |
 | operators::test_unary_int_op | 12 |
 | workloads::test_gemv_m1_shapes | 12 |
+| selftest::test_taxonomy_representative_aliases_and_semantic_families | 11 |
 | autograd::test_internal_dispatcher_surface | 9 |
 | compiler::test_compile_training_optimizer | 9 |
 | training::test_fused_optimizer_pipelines | 9 |
@@ -371,7 +378,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | autograd::test_gradcheck_ops | 4 |
 | operators::test_fft_ops_1d | 4 |
 | operators::test_scatter_ops | 4 |
-| selftest::test_torch_status_detail_names_validated_range_and_bound | 4 |
 
 ## Visible Dtype Tokens In Node IDs
 
@@ -389,7 +395,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torch.int16 | 558 |
 | torch.int8 | 558 |
 | torch.bool | 403 |
-| torch.ops | 22 |
+| torch.ops | 23 |
 
 ## Visible Generated Level Tokens In Node IDs
 
@@ -406,7 +412,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16612 |
+| none | 16644 |
 | training | 2400 |
 | compile | 120 |
 | sparse | 36 |
@@ -512,13 +518,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | generated | 4258 |
 | path_shape | 850 |
 | handwritten | 736 |
-| category | 474 |
+| category | 506 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 15138 |
+| none | 15170 |
 | out_variant | 1637 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -532,7 +538,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 15158 |
+| none | 15190 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1261,14 +1267,14 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| present | 18690 |
-| missing | 726 |
+| present | 18701 |
+| missing | 747 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13572 |
+| missing | 13604 |
 | present | 5844 |
 
 ## Collection Nodes By Coverage Category
@@ -1295,6 +1301,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | convolution_path_shape | 90 |
 | stride_behavior | 87 |
 | reduction_path_shape | 85 |
+| selftest | 84 |
 | attention_path_shape | 80 |
 | indexing_path_shape | 80 |
 | autograd_behavior | 77 |
@@ -1305,7 +1312,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | broadcasting_path_shape | 55 |
 | model_pattern_path_shape | 55 |
 | sorting_path_shape | 55 |
-| selftest | 52 |
 | quantized_container | 50 |
 | dtype_copy_cast | 49 |
 | fft_path_shape | 45 |
@@ -1354,7 +1360,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Count |
 | --- | --- |
-| 1 | 474 |
+| 1 | 506 |
 | 2 | 13773 |
 | 3 | 1084 |
 | 4 | 2405 |
@@ -1369,43 +1375,44 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 474 |
+| executable | 505 |
+| structured_deselected | 1 |
 
 ### Level 2
 
 | Name | Count |
 | --- | --- |
-| executable | 13675 |
-| structured_deselected | 98 |
+| executable | 13641 |
+| structured_deselected | 132 |
 
 ### Level 3
 
 | Name | Count |
 | --- | --- |
-| executable | 947 |
+| executable | 740 |
 | pytest_skip_marked | 3 |
-| structured_deselected | 134 |
+| structured_deselected | 341 |
 
 ### Level 4
 
 | Name | Count |
 | --- | --- |
-| executable | 2346 |
-| structured_deselected | 59 |
+| executable | 2174 |
+| structured_deselected | 231 |
 
 ### Level 5
 
 | Name | Count |
 | --- | --- |
-| executable | 1230 |
-| structured_deselected | 18 |
+| executable | 1196 |
+| structured_deselected | 52 |
 
 ### Level 6
 
 | Name | Count |
 | --- | --- |
-| executable | 175 |
-| structured_deselected | 24 |
+| executable | 171 |
+| structured_deselected | 28 |
 
 ### Level 7
 
@@ -2706,7 +2713,7 @@ No entries.
 | --- | --- |
 | Contracted dispatcher entries | 3046 |
 | Runtime contract format | runtime_profile_ranges |
-| Runtime contract artifact bytes | 292669 |
+| Runtime contract artifact bytes | 292655 |
 | Runtime dtype profiles | 216 |
 | Runtime profile ranges | 3091 |
 | Collected PyTorch versions | 2.7.0, 2.7.1, 2.8.0, 2.9.0, 2.9.1, 2.10.0, 2.11.0, 2.12.0, 2.12.1 |
@@ -2818,8 +2825,8 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 396 |
-| Category markers discovered | 531 |
+| Coverage markers discovered | 416 |
+| Category markers discovered | 551 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2841,8 +2848,8 @@ No entries.
 | Name | Count |
 | --- | --- |
 | operators | 188 |
+| selftest | 69 |
 | workloads | 58 |
-| selftest | 49 |
 | strides | 40 |
 | device_api | 33 |
 | training | 31 |

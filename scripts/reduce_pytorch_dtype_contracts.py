@@ -5,17 +5,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
+import shutil
+import sys
+import tempfile
 from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts import pytorch_dtype_evidence_store as evidence_store
+from scripts import pytorch_dtype_evidence_taxonomy as evidence_taxonomy
+
+
 DEFAULT_RUNTIME_PREVIEW_PATH = REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "op_dtype_contracts.preview.json"
-DEFAULT_EVIDENCE_PREVIEW_PATH = REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "op_dtype_contract_evidence.preview.jsonl"
+DEFAULT_EVIDENCE_PREVIEW_PATH = REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "dtype-contract-evidence.preview"
+DEFAULT_TAXONOMY_AUDIT_PATH = REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix" / "reduced" / "dtype-contract-taxonomy-audit.json"
 TRACKED_RUNTIME_OUTPUT = REPO_ROOT / "torchcts" / "op_dtype_contracts.json"
-TRACKED_EVIDENCE_OUTPUT = REPO_ROOT / "data" / "pytorch-version-matrix" / "op_dtype_contract_evidence.jsonl"
+TRACKED_EVIDENCE_OUTPUT = REPO_ROOT / "evidence" / "pytorch" / "dtype-contracts" / "manifest.json"
 
 RUNTIME_BUCKETS = (
     "cpu_supported",
@@ -31,13 +43,6 @@ EVIDENCE_ONLY_KEYS = {
     "replace_contract",
     "source_probe_mismatches",
 }
-LOCAL_EVIDENCE_PATH_REPLACEMENTS = (
-    (str(REPO_ROOT / "scratch" / "pytorch-2.7-compat" / "matrix"), "<matrix-workdir>"),
-    (str(REPO_ROOT / "scratch"), "<torchcts-workdir>"),
-    ("scratch/pytorch-2.7-compat/matrix", "<matrix-workdir>"),
-)
-
-
 def parse_version_parts(version: str) -> tuple[int, int, int]:
     match = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", str(version))
     if not match:
@@ -59,35 +64,10 @@ def load_artifact(path: Path) -> dict[str, Any]:
     return data
 
 
-def repo_relative(path: str | None) -> str | None:
-    if not path:
-        return None
-    try:
-        return str(Path(path).resolve().relative_to(REPO_ROOT)).replace("\\", "/")
-    except Exception:
-        return str(path).replace("\\", "/")
-
-
 def artifact_name(path: str | None) -> str | None:
     if not path:
         return None
     return Path(path).name
-
-
-def sanitize_tracked_evidence(value: Any) -> Any:
-    if isinstance(value, str):
-        sanitized = value
-        for original, replacement in LOCAL_EVIDENCE_PATH_REPLACEMENTS:
-            sanitized = sanitized.replace(original, replacement)
-        return sanitized
-    if isinstance(value, list):
-        return [sanitize_tracked_evidence(item) for item in value]
-    if isinstance(value, dict):
-        return {
-            str(key): sanitize_tracked_evidence(item)
-            for key, item in value.items()
-        }
-    return value
 
 
 def next_patch_upper_bound(version: str) -> str:
@@ -276,7 +256,13 @@ def build_expanded_evidence(
             "max_validated_version": all_versions[-1] if all_versions else None,
             "dependency_upper_bound": next_patch_upper_bound(all_versions[-1]) if all_versions else None,
             "preserved_versions": preserved_versions,
-            "artifact_names": [artifact_name(artifact.get("_path")) for artifact in artifacts],
+            "artifact_names": [
+                artifact_name(artifact.get("_path"))
+                for artifact in sorted(
+                    artifacts,
+                    key=lambda item: parse_version_parts(item["collection"]["normalized_torch_version"]),
+                )
+            ],
             "contract_count": len(contracts),
             "version_entry_semantics": "replace_contract",
             "contract_counts": _contract_counter(contracts),
@@ -424,70 +410,51 @@ def write_json(path: Path, payload: dict[str, Any], *, compact: bool = True) -> 
     path.write_text(text + "\n", encoding="utf-8")
 
 
-def write_evidence_jsonl(path: Path, expanded: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        json.dumps(
-            sanitize_tracked_evidence({
-                "record_kind": "metadata",
-                "version": 2,
-                "format": "expanded_evidence_jsonl",
-                "metadata": expanded.get("metadata") or {},
-            }),
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    ]
-    for op_name, versions in sorted((expanded.get("contracts") or {}).items()):
-        lines.append(json.dumps(
-            sanitize_tracked_evidence({
-                "record_kind": "op_contract_evidence",
-                "op": op_name,
-                "versions": versions,
-            }),
-            sort_keys=True,
-            separators=(",", ":"),
-        ))
-    for warning in expanded.get("warnings") or []:
-        lines.append(json.dumps(
-            sanitize_tracked_evidence({
-                "record_kind": "warning",
-                "warning": warning,
-            }),
-            sort_keys=True,
-            separators=(",", ":"),
-        ))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def load_evidence_jsonl(path: Path) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
-    contracts: dict[str, Any] = {}
-    warnings: list[Any] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        record = json.loads(line)
-        kind = record.get("record_kind")
-        if kind == "metadata":
-            metadata = record.get("metadata") or {}
-        elif kind == "op_contract_evidence":
-            op_name = record.get("op")
-            versions = record.get("versions")
-            if not isinstance(op_name, str) or not isinstance(versions, dict):
-                raise ValueError(f"{path}:{line_number}: invalid op evidence record")
-            contracts[op_name] = versions
-        elif kind == "warning":
-            warnings.append(record.get("warning"))
-        else:
-            raise ValueError(f"{path}:{line_number}: unknown record_kind {kind!r}")
-    return {
-        "version": 2,
-        "format": "expanded_evidence",
-        "metadata": metadata,
-        "contracts": dict(sorted(contracts.items())),
-        "warnings": warnings,
-    }
+    """Load legacy v2 JSONL evidence for migration and compatibility checks."""
+    return evidence_store.load_legacy_evidence_jsonl(path)
+
+
+def _replace_outputs(
+    runtime_staging: Path,
+    runtime_destination: Path,
+    evidence_staging: Path,
+    evidence_destination: Path,
+) -> None:
+    runtime_destination.parent.mkdir(parents=True, exist_ok=True)
+    evidence_destination.parent.mkdir(parents=True, exist_ok=True)
+    runtime_backup = runtime_destination.with_name(f".{runtime_destination.name}.backup")
+    evidence_backup = evidence_destination.with_name(f".{evidence_destination.name}.backup")
+    for backup in (runtime_backup, evidence_backup):
+        if backup.is_dir():
+            shutil.rmtree(backup)
+        elif backup.exists():
+            backup.unlink()
+
+    runtime_existed = runtime_destination.exists()
+    evidence_existed = evidence_destination.exists()
+    try:
+        if runtime_existed:
+            os.replace(runtime_destination, runtime_backup)
+        if evidence_existed:
+            os.replace(evidence_destination, evidence_backup)
+        os.replace(evidence_staging, evidence_destination)
+        os.replace(runtime_staging, runtime_destination)
+    except Exception:
+        if runtime_destination.exists():
+            runtime_destination.unlink()
+        if evidence_destination.exists():
+            shutil.rmtree(evidence_destination)
+        if runtime_existed and runtime_backup.exists():
+            os.replace(runtime_backup, runtime_destination)
+        if evidence_existed and evidence_backup.exists():
+            os.replace(evidence_backup, evidence_destination)
+        raise
+    finally:
+        if runtime_backup.exists():
+            runtime_backup.unlink()
+        if evidence_backup.exists():
+            shutil.rmtree(evidence_backup)
 
 
 def verify_runtime_equivalence(expanded: dict[str, Any], runtime: dict[str, Any]) -> list[str]:
@@ -525,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=None, help="Backward-compatible alias for --runtime-out.")
     parser.add_argument("--runtime-out", type=Path, default=DEFAULT_RUNTIME_PREVIEW_PATH)
     parser.add_argument("--evidence-out", type=Path, default=DEFAULT_EVIDENCE_PREVIEW_PATH)
+    parser.add_argument("--taxonomy-audit-out", type=Path, default=DEFAULT_TAXONOMY_AUDIT_PATH)
+    parser.add_argument("--op-metadata", type=Path, default=evidence_taxonomy.OP_METADATA_PATH)
     parser.add_argument("--update-tracked", action="store_true")
     parser.add_argument("--existing-contracts", type=Path, default=TRACKED_RUNTIME_OUTPUT)
     parser.add_argument("--no-existing-contracts", action="store_true")
@@ -534,7 +503,9 @@ def main(argv: list[str] | None = None) -> int:
 
     runtime_out = TRACKED_RUNTIME_OUTPUT if args.update_tracked else (args.out or args.runtime_out)
     evidence_out = TRACKED_EVIDENCE_OUTPUT if args.update_tracked else args.evidence_out
+    evidence_manifest = evidence_store.resolve_manifest_path(evidence_out)
     existing_contracts = {} if args.no_existing_contracts else load_existing_contracts(args.existing_contracts)
+    metadata_categories = evidence_taxonomy.load_metadata_categories(args.op_metadata)
     expanded = build_expanded_evidence(
         [load_artifact(path) for path in args.artifacts],
         existing_contracts=existing_contracts,
@@ -546,10 +517,51 @@ def main(argv: list[str] | None = None) -> int:
             for error in errors:
                 print(error)
             return 1
-    write_json(runtime_out, runtime, compact=True)
-    write_evidence_jsonl(evidence_out, expanded)
+    runtime_out.parent.mkdir(parents=True, exist_ok=True)
+    evidence_manifest.parent.parent.mkdir(parents=True, exist_ok=True)
+    runtime_fd, runtime_staging_name = tempfile.mkstemp(
+        prefix=f".{runtime_out.name}.",
+        dir=runtime_out.parent,
+    )
+    os.close(runtime_fd)
+    runtime_staging = Path(runtime_staging_name)
+    runtime_staging.unlink()
+    evidence_staging = Path(tempfile.mkdtemp(
+        prefix=f".{evidence_manifest.parent.name}.",
+        dir=evidence_manifest.parent.parent,
+    ))
+    try:
+        write_json(runtime_staging, runtime, compact=True)
+        staging_manifest = evidence_store.write_evidence_store(
+            evidence_staging,
+            expanded,
+            metadata_categories=metadata_categories,
+            audit_report=args.taxonomy_audit_out,
+        )
+        reloaded = evidence_store.load_evidence_store(
+            staging_manifest,
+            verify_canonical=True,
+            metadata_categories=metadata_categories,
+        )
+        if evidence_store.normalize_expanded_evidence(reloaded) != evidence_store.normalize_expanded_evidence(expanded):
+            raise RuntimeError("v3 evidence does not expand to the normalized source evidence")
+        recomputed_runtime = compact_runtime_from_expanded(reloaded)
+        if canonical_profile(recomputed_runtime) != canonical_profile(runtime):
+            raise RuntimeError("runtime artifact changed after v3 evidence round trip")
+        _replace_outputs(
+            runtime_staging,
+            runtime_out,
+            evidence_staging,
+            evidence_manifest.parent,
+        )
+    finally:
+        if runtime_staging.exists():
+            runtime_staging.unlink()
+        if evidence_staging.exists():
+            shutil.rmtree(evidence_staging)
     print(f"Wrote compact dtype contracts: {runtime_out}")
-    print(f"Wrote dtype contract evidence: {evidence_out}")
+    print(f"Wrote dtype contract evidence: {evidence_manifest}")
+    print(f"Wrote dtype evidence taxonomy audit: {args.taxonomy_audit_out}")
     if args.max_runtime_bytes and runtime_size(runtime_out) > args.max_runtime_bytes:
         print(f"Runtime artifact is {runtime_size(runtime_out)} bytes, above limit {args.max_runtime_bytes}")
         return 1

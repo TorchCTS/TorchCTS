@@ -1,0 +1,226 @@
+{
+  "categories": [
+    {
+      "category": "autograd/backward",
+      "path": "autograd/backward.jsonl",
+      "record_count": 141
+    },
+    {
+      "category": "framework/control-flow",
+      "path": "framework/control-flow.jsonl",
+      "record_count": 4
+    },
+    {
+      "category": "framework/metadata",
+      "path": "framework/metadata.jsonl",
+      "record_count": 39
+    },
+    {
+      "category": "language/containers",
+      "path": "language/containers.jsonl",
+      "record_count": 9
+    },
+    {
+      "category": "language/operator-protocol",
+      "path": "language/operator-protocol.jsonl",
+      "record_count": 38
+    },
+    {
+      "category": "linear-algebra/decomposition",
+      "path": "linear-algebra/decomposition.jsonl",
+      "record_count": 258
+    },
+    {
+      "category": "linear-algebra/matmul",
+      "path": "linear-algebra/matmul.jsonl",
+      "record_count": 84
+    },
+    {
+      "category": "math/comparison",
+      "path": "math/comparison.jsonl",
+      "record_count": 207
+    },
+    {
+      "category": "math/elementwise-binary",
+      "path": "math/elementwise-binary.jsonl",
+      "record_count": 447
+    },
+    {
+      "category": "math/elementwise-unary",
+      "path": "math/elementwise-unary.jsonl",
+      "record_count": 584
+    },
+    {
+      "category": "math/reduction",
+      "path": "math/reduction.jsonl",
+      "record_count": 246
+    },
+    {
+      "category": "math/special",
+      "path": "math/special.jsonl",
+      "record_count": 393
+    },
+    {
+      "category": "neural-network/attention",
+      "path": "neural-network/attention.jsonl",
+      "record_count": 2
+    },
+    {
+      "category": "neural-network/convolution",
+      "path": "neural-network/convolution.jsonl",
+      "record_count": 71
+    },
+    {
+      "category": "neural-network/dropout",
+      "path": "neural-network/dropout.jsonl",
+      "record_count": 5
+    },
+    {
+      "category": "neural-network/interpolation",
+      "path": "neural-network/interpolation.jsonl",
+      "record_count": 89
+    },
+    {
+      "category": "neural-network/loss",
+      "path": "neural-network/loss.jsonl",
+      "record_count": 96
+    },
+    {
+      "category": "neural-network/normalization",
+      "path": "neural-network/normalization.jsonl",
+      "record_count": 58
+    },
+    {
+      "category": "neural-network/padding",
+      "path": "neural-network/padding.jsonl",
+      "record_count": 29
+    },
+    {
+      "category": "neural-network/pooling",
+      "path": "neural-network/pooling.jsonl",
+      "record_count": 74
+    },
+    {
+      "category": "neural-network/rnn",
+      "path": "neural-network/rnn.jsonl",
+      "record_count": 4
+    },
+    {
+      "category": "neural-network/softmax",
+      "path": "neural-network/softmax.jsonl",
+      "record_count": 31
+    },
+    {
+      "category": "optimization/foreach",
+      "path": "optimization/foreach.jsonl",
+      "record_count": 395
+    },
+    {
+      "category": "quantization/core",
+      "path": "quantization/core.jsonl",
+      "record_count": 11
+    },
+    {
+      "category": "random/sampling",
+      "path": "random/sampling.jsonl",
+      "record_count": 67
+    },
+    {
+      "category": "sparse/core",
+      "path": "sparse/core.jsonl",
+      "record_count": 9
+    },
+    {
+      "category": "spectral/fft",
+      "path": "spectral/fft.jsonl",
+      "record_count": 69
+    },
+    {
+      "category": "spectral/windows",
+      "path": "spectral/windows.jsonl",
+      "record_count": 50
+    },
+    {
+      "category": "tensor/conversion",
+      "path": "tensor/conversion.jsonl",
+      "record_count": 53
+    },
+    {
+      "category": "tensor/copy",
+      "path": "tensor/copy.jsonl",
+      "record_count": 89
+    },
+    {
+      "category": "tensor/creation",
+      "path": "tensor/creation.jsonl",
+      "record_count": 125
+    },
+    {
+      "category": "tensor/indexing",
+      "path": "tensor/indexing.jsonl",
+      "record_count": 157
+    },
+    {
+      "category": "tensor/masked",
+      "path": "tensor/masked.jsonl",
+      "record_count": 54
+    },
+    {
+      "category": "tensor/shape",
+      "path": "tensor/shape.jsonl",
+      "record_count": 189
+    },
+    {
+      "category": "tensor/sorting",
+      "path": "tensor/sorting.jsonl",
+      "record_count": 117
+    },
+    {
+      "category": "tensor/utility",
+      "path": "tensor/utility.jsonl",
+      "record_count": 50
+    }
+  ],
+  "collected_versions": [
+    "2.7.0",
+    "2.7.1",
+    "2.8.0",
+    "2.9.0",
+    "2.9.1",
+    "2.10.0",
+    "2.11.0",
+    "2.12.0",
+    "2.12.1"
+  ],
+  "format": "categorized_scoped_contract_evidence",
+  "format_version": 3,
+  "metadata": {
+    "artifact_names": [
+      "torch-2.7.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.7.1-cpu-dtype-contracts-layers-all.json",
+      "torch-2.8.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.9.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.9.1-cpu-dtype-contracts-layers-all.json",
+      "torch-2.10.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.11.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.12.0-cpu-dtype-contracts-layers-all.json",
+      "torch-2.12.1-cpu-dtype-contracts-layers-all.json"
+    ],
+    "contract_authority": "versioned_cpu_probe",
+    "generated_by": "scripts/reduce_pytorch_dtype_contracts.py",
+    "input_artifact_versions": [
+      "2.7.0",
+      "2.7.1",
+      "2.8.0",
+      "2.9.0",
+      "2.9.1",
+      "2.10.0",
+      "2.11.0",
+      "2.12.0",
+      "2.12.1"
+    ]
+  },
+  "replace_contract": true,
+  "taxonomy_version": 1,
+  "warnings": []
+}
