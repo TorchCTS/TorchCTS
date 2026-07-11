@@ -142,6 +142,31 @@ def test_report_suppresses_manifest_scorecard_for_incomplete_full_run():
     assert "Backend manifest support scorecard unavailable for this run." in markdown
 
 
+def test_report_preserves_error_text_verbatim():
+    payload = _payload(total_runnable=1, result_status="FAIL")
+    message = (
+        '  File "/Users/alice/project/backend.py", line 42\n'
+        "RuntimeError: backend exploded at C:\\work\\backend.cpp:17"
+    )
+    next(iter(payload["results"].values()))["error_message"] = message
+
+    _, markdown = build_report(payload, include_failure_details=True)
+
+    assert message in markdown
+
+
+def test_default_report_does_not_duplicate_failure_diagnostics():
+    payload = _payload(total_runnable=1, result_status="FAIL")
+    message = "diagnostic remains canonical"
+    next(iter(payload["results"].values()))["error_message"] = message
+
+    scorecard, markdown = build_report(payload)
+
+    assert message in scorecard
+    assert "Per-Test Failure Details" not in markdown
+    assert "Full per-test records and verbatim diagnostics" in markdown
+
+
 def test_report_from_file_writes_next_to_source_json(tmp_path, monkeypatch):
     source_dir = tmp_path / "custom-results"
     source_dir.mkdir()

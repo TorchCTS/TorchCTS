@@ -1,6 +1,6 @@
 # TorchCTS Site Stats
 
-This generated file is a statistics source for website copy and AI-assisted site updates.
+This generated file is a statistics source for website and release copy.
 It describes the current checkout and installed PyTorch build; it is not a backend pass/fail report.
 
 | Field | Value |
@@ -10,7 +10,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | Installed TorchCTS metadata version | 0.3.6 |
 | pyproject.toml version | 0.3.6 |
 | TorchCTS versions agree | True |
-| TorchCTS import path | /Users/kris/localprojects/torchcts/torchcts/__init__.py |
+| TorchCTS import path | torchcts/__init__.py |
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |

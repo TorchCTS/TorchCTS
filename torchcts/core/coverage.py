@@ -45,6 +45,7 @@ from torchcts.core.semantic_levels import (
 )
 from torchcts.core.dtype_contracts import mismatch_counts as dtype_contract_mismatch_counts
 from torchcts.core.oracles import oracle_spec_for
+from torchcts.core.result_sanitization import sanitize_result_payload
 from torchcts.op_metadata import runtime_unavailable_op_entries
 from torchcts.path_shapes import corpus_summary as path_shape_corpus_summary
 
@@ -3574,10 +3575,21 @@ def _ensure_output_dir() -> None:
     DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _write_result_json(path: Path, payload: object, *, sort_keys: bool = False) -> None:
+    path.write_text(
+        json.dumps(sanitize_result_payload(payload), indent=2, sort_keys=sort_keys) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_result_text(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+
+
 def write_inventory() -> dict:
     _ensure_output_dir()
     inventory = build_dispatcher_inventory()
-    DEFAULT_INVENTORY_PATH.write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+    _write_result_json(DEFAULT_INVENTORY_PATH, inventory)
     return inventory
 
 
@@ -4172,9 +4184,9 @@ def render_generated_cases_module(manifest: dict) -> str:
 
 def write_generated_cases_artifacts(audit: dict, *, write_module: bool = False) -> dict:
     _ensure_output_dir()
-    manifest = build_generated_cases_manifest(audit)
+    manifest = sanitize_result_payload(build_generated_cases_manifest(audit))
     DEFAULT_GENERATED_CASES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DEFAULT_GENERATED_CASES_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    _write_result_json(DEFAULT_GENERATED_CASES_PATH, manifest)
     if write_module:
         DEFAULT_GENERATED_CASES_MODULE_PATH.parent.mkdir(parents=True, exist_ok=True)
         DEFAULT_GENERATED_CASES_MODULE_PATH.write_text(render_generated_cases_module(manifest), encoding="utf-8")
@@ -4183,7 +4195,8 @@ def write_generated_cases_artifacts(audit: dict, *, write_module: bool = False) 
 
 def write_audit_artifacts(audit: dict) -> None:
     _ensure_output_dir()
-    DEFAULT_AUDIT_PATH.write_text(json.dumps(audit, indent=2), encoding="utf-8")
+    audit = sanitize_result_payload(audit)
+    _write_result_json(DEFAULT_AUDIT_PATH, audit)
     inventory = {
         "metadata": {
             "pytorch_version": audit["metadata"]["pytorch_version"],
@@ -4196,26 +4209,20 @@ def write_audit_artifacts(audit: dict) -> None:
             for entry in audit["entries"]
         ],
     }
-    DEFAULT_INVENTORY_PATH.write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+    _write_result_json(DEFAULT_INVENTORY_PATH, inventory)
     write_generated_cases_artifacts(audit)
-    DEFAULT_UNKNOWNS_PATH.write_text(render_unknowns_markdown(audit), encoding="utf-8")
-    DEFAULT_UNMAPPED_TESTS_PATH.write_text(render_unmapped_tests_markdown(audit), encoding="utf-8")
-    DEFAULT_SUMMARY_PATH.write_text(render_summary_markdown(audit), encoding="utf-8")
-    DEFAULT_SEMANTIC_LEVELS_PATH.write_text(render_semantic_levels_markdown(audit), encoding="utf-8")
-    DEFAULT_PENDING_REVIEW_PATH.write_text(
-        json.dumps(build_pending_review_artifact(audit), indent=2),
-        encoding="utf-8",
-    )
-    DEFAULT_PENDING_REVIEW_MD_PATH.write_text(render_pending_review_markdown(audit), encoding="utf-8")
+    _write_result_text(DEFAULT_UNKNOWNS_PATH, render_unknowns_markdown(audit))
+    _write_result_text(DEFAULT_UNMAPPED_TESTS_PATH, render_unmapped_tests_markdown(audit))
+    _write_result_text(DEFAULT_SUMMARY_PATH, render_summary_markdown(audit))
+    _write_result_text(DEFAULT_SEMANTIC_LEVELS_PATH, render_semantic_levels_markdown(audit))
+    _write_result_json(DEFAULT_PENDING_REVIEW_PATH, build_pending_review_artifact(audit))
+    _write_result_text(DEFAULT_PENDING_REVIEW_MD_PATH, render_pending_review_markdown(audit))
     DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.parent.mkdir(parents=True, exist_ok=True)
     backend_pack_feasibility = _preserve_generated_at_when_semantically_unchanged(
         DEFAULT_BACKEND_PACK_FEASIBILITY_PATH,
         build_backend_pack_feasibility_artifact(audit),
     )
-    DEFAULT_BACKEND_PACK_FEASIBILITY_PATH.write_text(
-        json.dumps(backend_pack_feasibility, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_result_json(DEFAULT_BACKEND_PACK_FEASIBILITY_PATH, backend_pack_feasibility, sort_keys=True)
 
 
 def run_inventory_command() -> int:
@@ -4279,13 +4286,10 @@ def run_report_command() -> int:
     audit = _build_and_write_default_audit()
     summary = render_summary_markdown(audit)
     _ensure_output_dir()
-    DEFAULT_SUMMARY_PATH.write_text(summary, encoding="utf-8")
-    DEFAULT_SEMANTIC_LEVELS_PATH.write_text(render_semantic_levels_markdown(audit), encoding="utf-8")
-    DEFAULT_PENDING_REVIEW_PATH.write_text(
-        json.dumps(build_pending_review_artifact(audit), indent=2),
-        encoding="utf-8",
-    )
-    DEFAULT_PENDING_REVIEW_MD_PATH.write_text(render_pending_review_markdown(audit), encoding="utf-8")
+    _write_result_text(DEFAULT_SUMMARY_PATH, summary)
+    _write_result_text(DEFAULT_SEMANTIC_LEVELS_PATH, render_semantic_levels_markdown(audit))
+    _write_result_json(DEFAULT_PENDING_REVIEW_PATH, build_pending_review_artifact(audit))
+    _write_result_text(DEFAULT_PENDING_REVIEW_MD_PATH, render_pending_review_markdown(audit))
     print(summary)
     return 0
 

@@ -16,7 +16,7 @@ hand-maintained documentation.
   README validation, PyTorch compatibility updates, backend hardware checks,
   and repository hygiene.
 - [Site Stats](site-stats.md): generated current-checkout statistics intended
-  as source material for website copy and AI-assisted site updates.
+  as source material for website and release copy.
 
 ## Generated Artifacts
 

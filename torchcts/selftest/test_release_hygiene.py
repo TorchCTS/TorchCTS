@@ -42,3 +42,14 @@ def test_release_hygiene_allows_tracked_sample_result_artifacts():
     assert hygiene._is_denied_path("sample-results/mps-full-run-macos/results/Apple_M3_Max_128gb_report.md") is None
     assert hygiene._is_denied_path("results/Apple_M3_Max_128gb_report.md") == "denied component 'results'"
     assert hygiene._is_denied_path("sample-results/mps-full-run-macos/scratch/tmp.txt") == "denied component 'scratch'"
+
+
+def test_release_hygiene_identifies_public_result_artifacts():
+    hygiene = _release_hygiene_module()
+
+    assert hygiene._is_public_result_artifact(
+        "sample-results/mps-full-run-macos/results/example_latest.json"
+    )
+    assert hygiene._is_public_result_artifact("docs/site-stats.md")
+    assert not hygiene._is_public_result_artifact("docs/harness.md")
+    assert not hygiene._is_public_result_artifact("torchcts/selftest/test_report.py")

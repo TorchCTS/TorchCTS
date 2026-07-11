@@ -35,6 +35,9 @@ import time
 from pathlib import Path
 from typing import Iterable
 
+from torchcts.core.result_artifacts import load_result_artifact, write_result_artifact
+from torchcts.core.result_sanitization import sanitize_result_payload, sanitize_text
+
 
 TRIAGE_CLASSIFICATIONS = (
     "confirmed_mps_crash",
@@ -67,7 +70,15 @@ def _utc_now() -> str:
 
 def _json_dump(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = sanitize_result_payload(payload)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _sanitize_copied_runlog(path: Path) -> None:
+    path.write_text(
+        sanitize_text(path.read_text(encoding="utf-8", errors="replace")),
+        encoding="utf-8",
+    )
 
 
 def tail_text(text: str | None, limit: int = 12000) -> str:
@@ -128,14 +139,14 @@ def load_result_file(path: str | Path | None) -> tuple[Path | None, dict]:
     result_path = Path(path)
     if not result_path.exists():
         return result_path, {}
-    return result_path, json.loads(result_path.read_text(encoding="utf-8"))
+    return result_path, load_result_artifact(result_path)
 
 
 def find_default_mps_result(results_dir: str | Path = "results") -> Path | None:
     candidates = []
     for path in Path(results_dir).glob("*_latest.json"):
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = load_result_artifact(path)
         except Exception:
             continue
         if data.get("metadata", {}).get("device_name") == "mps":
@@ -161,7 +172,7 @@ def freeze_input_snapshot(result_path: Path | None, data: dict, triage_dir: Path
     if result_path and result_path.exists():
         target = snapshot_dir / result_path.name
         if result_path.resolve() != target.resolve():
-            shutil.copy2(result_path, target)
+            write_result_artifact(target, data)
         copied.append(str(target))
 
     key = _hardware_key_from_result(result_path, data)
@@ -173,6 +184,8 @@ def freeze_input_snapshot(result_path: Path | None, data: dict, triage_dir: Path
                 target = snapshot_dir / source.name
                 if source.resolve() != target.resolve():
                     shutil.copy2(source, target)
+                    if source.name.endswith("_runlog.txt"):
+                        _sanitize_copied_runlog(target)
                 copied.append(str(target))
     return copied
 
@@ -515,7 +528,7 @@ def run_subprocess_command(
         stdout = exc.stdout or ""
         stderr = exc.stderr or ""
     duration_ms = (time.time() - start) * 1000
-    return {
+    return sanitize_result_payload({
         "command": command,
         "command_string": command_string(command),
         "returncode": returncode,
@@ -524,7 +537,7 @@ def run_subprocess_command(
         "duration_ms": duration_ms,
         "stdout_tail": tail_text(stdout),
         "stderr_tail": tail_text(stderr),
-    }
+    })
 
 
 def run_pytest_node(
@@ -570,7 +583,7 @@ def run_pytest_node(
     stderr_path.write_text(result["stderr_tail"], encoding="utf-8")
     result["stdout_path"] = str(stdout_path)
     result["stderr_path"] = str(stderr_path)
-    return result
+    return sanitize_result_payload(result)
 
 
 def _probe_program(body: str) -> str:
@@ -1087,6 +1100,7 @@ def run_mps_triage(
     }
     _json_dump(triage_path / "classifications.json", classifications)
     _json_dump(triage_path / "failures.json", {"generated_at": payload["generated_at"], "runs": subprocess_runs})
+    payload = sanitize_result_payload(payload)
     _json_dump(triage_path / "adjudication_queue.json", adjudication_queue)
     _json_dump(triage_path / "triage.json", payload)
     summary = render_summary(payload)

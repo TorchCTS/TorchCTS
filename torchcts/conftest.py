@@ -99,6 +99,13 @@ from torchcts.core.runtime_evidence import (
     harness_probe_failure_key,
     record_harness_probe_failure,
 )
+from torchcts.core.result_sanitization import sanitize_result_payload
+from torchcts.core.result_artifacts import (
+    load_result_artifact,
+    write_result_artifact,
+    write_result_reference,
+)
+from torchcts.core.run_log import RollingRunLog
 from torchcts.core.semantic_levels import (
     DEFAULT_REQUESTED_SEMANTIC_LEVEL,
     SemanticLevelError,
@@ -317,7 +324,7 @@ _ADAPTIVE_ISOLATION_REJECTED = []
 _ADAPTIVE_ISOLATION_WARNINGS = []
 _MEMORY_MODE = "balanced"
 _CLEANUP_THRESHOLD = 80
-_RUN_LOG_FH = None
+_RUN_LOG = None
 _REQUESTED_SEMANTIC_LEVEL = DEFAULT_REQUESTED_SEMANTIC_LEVEL
 _SEMANTIC_LEVEL_SELECTION = SemanticLevelSelection("cumulative", 1, DEFAULT_REQUESTED_SEMANTIC_LEVEL)
 _SESSION_COMPLETED = False
@@ -401,6 +408,7 @@ def _text_tail(text, limit=12000):
 def _atomic_json_dump(path, payload):
     """Write JSON without exposing a partially-written target file."""
 
+    payload = sanitize_result_payload(payload)
     target = os.fspath(path)
     directory = os.path.dirname(target) or "."
     os.makedirs(directory, exist_ok=True)
@@ -430,6 +438,12 @@ def _atomic_json_dump(path, payload):
         except OSError:
             pass
         raise
+
+
+def _atomic_result_dump(path, payload, *, optimize_tables=True):
+    """Write a result artifact using the compact, lossless storage format."""
+
+    write_result_artifact(path, payload, optimize_tables=optimize_tables)
 
 
 def _signal_name(returncode):
@@ -2417,8 +2431,7 @@ def pytest_configure(config):
         latest_json_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
         if os.path.exists(latest_json_path):
             try:
-                with open(latest_json_path, "r", encoding="utf-8") as f:
-                    baseline_data = json.load(f)
+                baseline_data = load_result_artifact(latest_json_path)
                 if baseline_data.get("metadata", {}).get("session_completed") is not False:
                     _BASELINE_RESULTS = baseline_data.get("results", {})
             except Exception:
@@ -2448,11 +2461,12 @@ def pytest_configure(config):
     _START_TIME = time.time()
 
     # Open per-test run log for hang diagnosis
-    global _RUN_LOG_FH
+    global _RUN_LOG
     if _ARTIFACT_WRITES_ENABLED:
         log_suffix = f".{_XDIST_WORKER_ID}" if _IS_XDIST_WORKER else ""
         run_log_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_runlog{log_suffix}.txt")
-        _RUN_LOG_FH = open(run_log_path, "w", encoding="utf-8")
+        _RUN_LOG = RollingRunLog(run_log_path)
+        _RUN_LOG.open()
         print(f"  Run log: {run_log_path}")
 
     # Append custom_test_dirs from manifest to pytest collection paths
@@ -2983,7 +2997,7 @@ def flush_results_to_disk():
         latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.{_XDIST_WORKER_ID}.json")
     else:
         latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
-    _atomic_json_dump(latest_path, data)
+    _atomic_result_dump(latest_path, data, optimize_tables=False)
 
 def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     """Merge per-worker result files into a single latest.json.
@@ -3022,8 +3036,7 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
 
     if os.path.exists(latest_path):
         try:
-            with open(latest_path, "r", encoding="utf-8") as f:
-                existing = json.load(f)
+            existing = load_result_artifact(latest_path)
             merged_results = existing.get("results", {})
             merged_skips = existing.get("skips", {})
             add_probe_failures(existing.get("harness_probe_failures", []))
@@ -3037,8 +3050,7 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
     # Merge worker files on top
     for wf in worker_files:
         try:
-            with open(wf, "r", encoding="utf-8") as f:
-                wdata = json.load(f)
+            wdata = load_result_artifact(wf)
             merged_results.update(wdata.get("results", {}))
             merged_skips.update(wdata.get("skips", {}))
             add_probe_failures(wdata.get("harness_probe_failures", []))
@@ -3066,7 +3078,7 @@ def _merge_xdist_worker_files(results_dir, hardware_key, latest_path=None):
         "skips": merged_skips,
         "harness_probe_failures": merged_probe_failures,
     }
-    _atomic_json_dump(latest_path, merged_data)
+    _atomic_result_dump(latest_path, merged_data, optimize_tables=False)
     
     # Clean up worker files
     for wf in worker_files:
@@ -3262,15 +3274,14 @@ def pytest_runtest_makereport(item, call):
         flush_results_to_disk()
 
 def pytest_runtest_logstart(nodeid, location):
-    """Write each test's node ID to the run log before it executes.
+    """Record the test start in the compact rolling run log.
 
-    The file is flushed immediately so that if the process hangs,
-    the last line in the log is the test that caused the freeze.
+    The recent window is flushed immediately so a hang or crash preserves the
+    last-started node and nearby execution context without a full-run trace.
     """
-    if _RUN_LOG_FH is not None:
+    if _RUN_LOG is not None:
         elapsed = time.time() - _START_TIME
-        _RUN_LOG_FH.write(f"{elapsed:8.1f}s  {nodeid}\n")
-        _RUN_LOG_FH.flush()
+        _RUN_LOG.record_start(elapsed, nodeid)
 
 
 def _subprocess_child_command(item):
@@ -3322,8 +3333,7 @@ def _load_latest_result_for_item(item):
     if not os.path.exists(latest_path):
         return None
     try:
-        with open(latest_path, "r", encoding="utf-8") as f:
-            latest_data = json.load(f)
+        latest_data = load_result_artifact(latest_path)
     except Exception:
         return None
     return latest_data.get("results", {}).get(item.nodeid)
@@ -3674,19 +3684,19 @@ def pytest_runtest_protocol(item, nextitem):
 
 def pytest_sessionfinish(session, exitstatus):
     global _SESSION_RESULTS, _RESULTS_DIR, _HARDWARE_KEY, _BASELINE_RESULTS
-    global _ARTIFACT_WRITES_ENABLED, _RUN_LOG_FH, _SESSION_COMPLETED
+    global _ARTIFACT_WRITES_ENABLED, _RUN_LOG, _SESSION_COMPLETED
 
     if not _is_child_process():
         if any(record.get("status") in ("FAIL", "ERROR") for record in _SESSION_RESULTS.values()):
             session.exitstatus = 1
 
     # Close run log
-    if _RUN_LOG_FH is not None:
+    if _RUN_LOG is not None:
         try:
-            _RUN_LOG_FH.close()
+            _RUN_LOG.close()
         except Exception:
             pass
-        _RUN_LOG_FH = None
+        _RUN_LOG = None
 
     if not _ARTIFACT_WRITES_ENABLED:
         return
@@ -3705,16 +3715,16 @@ def pytest_sessionfinish(session, exitstatus):
     # Load the completed latest.json
     latest_path = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_latest.json")
     if os.path.exists(latest_path):
-        with open(latest_path, "r", encoding="utf-8") as f:
-            current_data = json.load(f)
+        current_data = load_result_artifact(latest_path)
             
-        # Copy to history directory
+        # Store the completed run once and replace latest.json with a reference.
         history_dir = os.path.join(_RESULTS_DIR, f"{_HARDWARE_KEY}_history")
         os.makedirs(history_dir, exist_ok=True)
         
         timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
         history_path = os.path.join(history_dir, f"{timestamp_str}.json")
-        _atomic_json_dump(history_path, current_data)
+        _atomic_result_dump(history_path, current_data)
+        write_result_reference(latest_path, history_path)
             
         # Build report
         from torchcts.core.report import build_report

@@ -19,13 +19,14 @@
 # SOFTWARE.
 
 import os
-import json
 import sys
 import datetime
 import re
 import torch
 import psutil
 from torchcts.core.manifest_schema import CAPABILITY_ORDER, KNOWN_CAPABILITIES
+from torchcts.core.result_artifacts import load_result_artifact
+from torchcts.core.result_sanitization import sanitize_result_payload
 
 _BACKEND_MANIFEST_DECLINED_SKIP_REASONS = frozenset({
     "dtype_not_supported",
@@ -238,7 +239,15 @@ def get_hardware_key(device_name, manifest=None):
                 pass
         return f"{device_name}_{node}_{mem_gb}gb"
 
-def build_report(current_data, baseline_data=None, include_skips=False):
+def build_report(
+    current_data,
+    baseline_data=None,
+    include_skips=False,
+    include_failure_details=False,
+):
+    current_data = sanitize_result_payload(current_data)
+    if baseline_data is not None:
+        baseline_data = sanitize_result_payload(baseline_data)
     metadata = current_data.get("metadata", {})
     device = metadata.get("device_name", "unknown")
     hw_key = metadata.get("hardware_key", "unknown")
@@ -515,7 +524,7 @@ def build_report(current_data, baseline_data=None, include_skips=False):
                 semantic_counts[level]["skip"] += 1
 
     # ── Failures List ──
-    failures_summary = []
+    failures_summary: list[list[str]] = []
     for nodeid, res in results.items():
         if res.get("status") in ("FAIL", "ERROR"):
             op = res.get("op") or nodeid.split("[")[0].split(".")[-1]
@@ -524,15 +533,18 @@ def build_report(current_data, baseline_data=None, include_skips=False):
             err_msg = res.get("error_message", "")
             
             if maxerr is not None:
-                failures_summary.append(f"  {op:<22} {dt:<9} maxerr={maxerr:<7}")
+                failure_lines = [f"  {op:<22} {dt:<9} maxerr={maxerr:<7}"]
             else:
                 # Truncate exception message
                 msg_summary = err_msg.split("\n")[0][:40]
-                failures_summary.append(f"  {op:<22} {dt:<9} {res.get('status')}: {msg_summary}")
+                failure_lines = [
+                    f"  {op:<22} {dt:<9} {res.get('status')}: {msg_summary}"
+                ]
             # Append diagnostic hint if available
             diag = res.get("diagnosis")
             if diag:
-                failures_summary.append(f"    ↳ Hint: {diag['likely_cause']}")
+                failure_lines.append(f"    ↳ Hint: {diag['likely_cause']}")
+            failures_summary.append(failure_lines)
 
     # ── Regressions ──
     regressions_text = []
@@ -684,11 +696,14 @@ def build_report(current_data, baseline_data=None, include_skips=False):
         summary_lines.append("")
 
     if num_fail > 0:
-        summary_lines.append(f"  FAILURES ({num_fail})")
+        summary_lines.append(f"  FAILURE RECORDS ({len(failures_summary)})")
         summary_lines.append("  " + "─" * 12)
-        summary_lines.extend(failures_summary[:20]) # Limit to 20 in summary
+        for failure_lines in failures_summary[:20]:
+            summary_lines.extend(failure_lines)
         if len(failures_summary) > 20:
-            summary_lines.append(f"  ... and {len(failures_summary) - 20} more failures")
+            summary_lines.append(
+                f"  ... and {len(failures_summary) - 20} more failure records"
+            )
         summary_lines.append("")
 
     scorecard_str = "\n".join(summary_lines)
@@ -701,8 +716,13 @@ def build_report(current_data, baseline_data=None, include_skips=False):
     md_lines.append(scorecard_str)
     md_lines.append("```")
     md_lines.append("")
+    md_lines.append(
+        f"Full per-test records and verbatim diagnostics are available through "
+        f"`{hw_key}_latest.json`."
+    )
+    md_lines.append("")
 
-    if num_fail > 0:
+    if num_fail > 0 and include_failure_details:
         md_lines.append("## Per-Test Failure Details")
         md_lines.append("")
         for nodeid, res in results.items():
@@ -858,8 +878,7 @@ def generate_report_cli(from_file=None):
         file_to_load = max(files, key=os.path.getmtime)
 
     try:
-        with open(file_to_load, "r", encoding="utf-8") as f:
-            current_data = json.load(f)
+        current_data = load_result_artifact(file_to_load)
     except Exception as e:
         print(f"Error loading results file {file_to_load}: {e}", file=sys.stderr)
         return 1
@@ -878,8 +897,7 @@ def generate_report_cli(from_file=None):
             for hf in history_files:
                 if os.path.abspath(hf) != file_to_load:
                     try:
-                        with open(hf, "r", encoding="utf-8") as f:
-                            candidate_data = json.load(f)
+                        candidate_data = load_result_artifact(hf)
                         candidate_timestamp = candidate_data.get("metadata", {}).get("timestamp")
                         if current_timestamp and candidate_timestamp == current_timestamp:
                             continue
@@ -890,7 +908,7 @@ def generate_report_cli(from_file=None):
                     except:
                         pass
 
-    scorecard, markdown = build_report(current_data, baseline_data, include_skips=True)
+    scorecard, markdown = build_report(current_data, baseline_data, include_skips=False)
     
     # Print scorecard to stdout
     try:

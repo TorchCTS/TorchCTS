@@ -4,11 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
+
+from torchcts.core.result_artifacts import ResultArtifactError, load_result_artifact
+from torchcts.core.result_sanitization import (
+    absolute_paths_in_text,
+    structural_absolute_paths,
+)
 
 
 DENIED_COMPONENTS = {
@@ -45,6 +52,13 @@ ALLOWED_DENIED_COMPONENTS_BY_PREFIX = {
 
 FORBIDDEN_TEXT_TOKENS = {
     "metal" "core",
+}
+
+PUBLIC_RESULT_PREFIXES = (
+    ("sample-results",),
+)
+PUBLIC_GENERATED_RESULT_FILES = {
+    ("docs", "site-stats.md"),
 }
 
 
@@ -155,6 +169,51 @@ def _check_forbidden_text(repo: Path) -> list[str]:
     return errors
 
 
+def _is_public_result_artifact(path: str) -> bool:
+    parts = PurePosixPath(path.replace("\\", "/").strip("/")).parts
+    return (
+        any(parts[: len(prefix)] == prefix for prefix in PUBLIC_RESULT_PREFIXES)
+        or parts in PUBLIC_GENERATED_RESULT_FILES
+    )
+
+
+def _check_public_result_paths(repo: Path) -> list[str]:
+    errors: list[str] = []
+    for rel in _run_git(["ls-files"], repo):
+        if not _is_public_result_artifact(rel):
+            continue
+        path = repo / rel
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
+        except UnicodeDecodeError:
+            continue
+        try:
+            if PurePosixPath(rel).parts in PUBLIC_GENERATED_RESULT_FILES:
+                matches = absolute_paths_in_text(text)
+            elif path.suffix == ".json":
+                matches = structural_absolute_paths(load_result_artifact(path))
+            elif path.suffix == ".jsonl":
+                matches = []
+                for line in text.splitlines():
+                    if line:
+                        matches.extend(structural_absolute_paths(json.loads(line)))
+            elif path.name.endswith("_runlog.txt"):
+                matches = absolute_paths_in_text(text)
+            else:
+                # Reports intentionally preserve verbatim exception and stream text.
+                continue
+        except (json.JSONDecodeError, ResultArtifactError, OSError) as exc:
+            errors.append(f"could not parse public result {rel}: {exc}")
+            continue
+        if matches:
+            errors.append(
+                f"public result contains {len(matches)} structural absolute filesystem path(s): {rel}"
+            )
+    return errors
+
+
 def _artifact_members(path: Path) -> list[str]:
     if path.suffix == ".whl":
         with ZipFile(path) as archive:
@@ -192,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         repo = _repo_root()
         errors = _check_git_paths(repo)
         errors.extend(_check_forbidden_text(repo))
+        errors.extend(_check_public_result_paths(repo))
         errors.extend(_check_artifacts(args.artifacts))
     except Exception as exc:
         print(f"release hygiene check failed: {type(exc).__name__}: {exc}", file=sys.stderr)

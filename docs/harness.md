@@ -29,14 +29,42 @@ setup. Probe failures are diagnostic only.
 
 Probe failures are recorded in:
 
-- `metadata.harness_probe_failure_count` in the latest result JSON;
-- `metadata.harness_probe_failure_artifact` in the latest result JSON;
-- top-level `harness_probe_failures` in the latest result JSON;
+- `metadata.harness_probe_failure_count` in the latest resolved result;
+- `metadata.harness_probe_failure_artifact` in the latest resolved result;
+- top-level `harness_probe_failures` in the latest resolved result;
 - `results/<hardware-key>_harness_probe_failures_<pid>.jsonl`.
 
 Probe evidence does not rewrite the manifest, skip tests, xfail tests, or abort
 the session. If a declared capability is broken, the capability tests run and
 fail normally.
+
+## Result Artifacts
+
+While a run is active, `<hardware-key>_latest.json` is an atomic recovery
+snapshot. When the run completes, TorchCTS writes the canonical result once in
+`<hardware-key>_history/` and replaces `latest.json` with a small relative
+reference to it.
+
+For large completed results, TorchCTS chooses a self-describing compact JSON
+representation when it is smaller than ordinary compact JSON. Repeated field
+names and exact repeated string values are stored once in tables; decoding
+restores the existing `metadata`, `results`, `skips`, and diagnostic strings
+without changing their values. Small results remain ordinary compact JSON when
+the table envelope would cost more. Legacy expanded result JSON remains
+readable.
+
+Internal tools resolve both formats through the shared loader:
+
+```python
+from torchcts.core.result_artifacts import load_result_artifact
+
+result = load_result_artifact("results/my_backend_latest.json")
+```
+
+Markdown reports contain the scorecard and aggregate audit summaries. Full
+tracebacks, stdout, and stderr remain verbatim in the canonical JSON instead of
+being duplicated into the report. Run logs retain only the latest 32 test
+starts needed for crash and hang diagnosis.
 
 ## Structured Accounting
 

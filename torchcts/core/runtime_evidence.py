@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 
+from torchcts.core.result_sanitization import sanitize_result_payload
+
 
 def _safe_text(value, *, limit: int = 4000) -> str:
     try:
@@ -86,6 +88,7 @@ def record_opinfo_oracle_failure(
             "error_type": type(exc).__name__,
             "error_message": _safe_text(exc),
         }
+        record = sanitize_result_payload(record)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
     except Exception:
@@ -133,6 +136,7 @@ def record_harness_probe_failure(
                 for arg in evidence.get("command_args", [])
             ],
         }
+        record = sanitize_result_payload(record)
         path = _harness_probe_evidence_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:

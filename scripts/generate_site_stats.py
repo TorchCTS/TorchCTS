@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a Markdown stats source for website copy and AI-assisted site work."""
+"""Generate the tracked Markdown statistics source for public project copy."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
 import torch
 
 import torchcts
+from torchcts.core.result_sanitization import sanitize_text
 from torchcts.core.coverage import (
     COVERED_STATUSES,
     DISPATCH_KEYS,
@@ -105,7 +106,7 @@ def _version_provenance() -> dict:
         "module_version": module_version,
         "installed_version": installed_version,
         "pyproject_version": pyproject_version,
-        "import_path": str(Path(getattr(torchcts, "__file__", "") or "namespace package")),
+        "import_path": sanitize_text(str(Path(getattr(torchcts, "__file__", "") or "namespace package"))),
         "versions_agree": versions_agree,
     }
 
@@ -761,7 +762,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
     lines: list[str] = []
     lines.append("# TorchCTS Site Stats")
     lines.append("")
-    lines.append("This generated file is a statistics source for website copy and AI-assisted site updates.")
+    lines.append("This generated file is a statistics source for website and release copy.")
     lines.append("It describes the current checkout and installed PyTorch build; it is not a backend pass/fail report.")
     lines.append("")
     lines.extend(_table(

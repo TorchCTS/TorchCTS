@@ -9,11 +9,15 @@
 from __future__ import annotations
 
 import datetime as _datetime
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+from torchcts.core.result_artifacts import (
+    load_result_artifact,
+    resolve_result_artifact_path,
+)
 
 from torchcts.core.known_segfaults import canonicalize_nodeid
 
@@ -61,7 +65,7 @@ def _utc_now() -> str:
 
 def _read_json(path: Path, warnings: list[str]) -> dict | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return load_result_artifact(path)
     except Exception as exc:
         warnings.append(f"{path}: ignored malformed adaptive-isolation artifact: {exc}")
         return None
@@ -94,7 +98,10 @@ def _artifact_paths(results_dir: Path, hardware_key: str, history_limit: int) ->
     seen: set[Path] = set()
     ordered: list[Path] = []
     for path in paths:
-        resolved = path.resolve()
+        try:
+            resolved = resolve_result_artifact_path(path).resolve()
+        except Exception:
+            resolved = path.resolve()
         if resolved not in seen:
             seen.add(resolved)
             ordered.append(path)
