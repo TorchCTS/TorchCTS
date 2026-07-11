@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-09T15:09:56.580394Z",
+  "mode": "auto",
+  "metadata": {
+    "device_name": "mps",
+    "hardware_key": "Apple_M3_Max_128gb",
+    "pytorch_version": "2.12.1"
+  },
+  "accepted": {},
+  "rejected": [],
+  "warnings": [],
+  "artifacts_considered": []
+}
