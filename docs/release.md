@@ -122,8 +122,12 @@ public package copy.
 
 Only after validation passes:
 
-- update the package version;
+- update the package version and prepare concise release notes;
 - rebuild wheel and sdist from a clean tree;
-- run package metadata checks again;
+- run package metadata and isolated-install checks again;
+- push the source commit and wait for its CI run to pass;
 - upload the artifacts through the project's release process;
-- tag the release after the published artifact is confirmed.
+- install the published version from PyPI in a clean environment;
+- create an annotated version tag and GitHub release after the published artifact is confirmed;
+- publish the matching versioned website installers and update the website only
+  after the new package is available from PyPI.
