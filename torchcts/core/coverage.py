@@ -33,6 +33,7 @@ from pathlib import Path
 
 import torch
 
+from torchcts.core.backend_evidence import canonical_backend, parse_promotion_reference
 from torchcts.core.semantic_levels import (
     SemanticLevelInfo,
     generated_level_for_entry,
@@ -4374,6 +4375,22 @@ def _validate_audit_consistency(audit: dict) -> list[str]:
                     errors.append(
                         f"entries[{index}] {entry.get('name')} is covered_backend_pack without promotion_evidence"
                     )
+                else:
+                    try:
+                        evidence_backend = parse_promotion_reference(oracle["promotion_evidence"])
+                        if evidence_backend is not None:
+                            expected_backend = canonical_backend(
+                                oracle.get("promotion_backend") or oracle.get("backend_gate")
+                            )
+                            if evidence_backend != expected_backend:
+                                errors.append(
+                                    f"entries[{index}] {entry.get('name')} promotion evidence backend "
+                                    f"{evidence_backend!r} disagrees with {expected_backend!r}"
+                                )
+                    except ValueError as exc:
+                        errors.append(
+                            f"entries[{index}] {entry.get('name')} has invalid promotion evidence: {exc}"
+                        )
                 if oracle.get("runner") == "backend_property":
                     errors.append(
                         f"entries[{index}] {entry.get('name')} is covered_backend_pack with placeholder runner"

@@ -490,7 +490,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                                   'dispatcher calls against public nn.LSTM '
                                                                   'forward/backward references and out identity.',
@@ -572,7 +572,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_fused_rms_norm_backward_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'Fused RMSNorm backward is validated by a CUDA '
                                                                   'runner that checks direct gradients against an '
                                                                   'explicit RMSNorm autograd reference.',
@@ -996,7 +996,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_thnn_cell_backward_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'CUDA fused THNN cell backward helper is validated '
                                                                   'by a runner that checks direct gradients against '
                                                                   'explicit GRU/LSTM autograd formulas.',
@@ -1135,7 +1135,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_thnn_cell_backward_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'CUDA fused THNN cell backward helper is validated '
                                                                   'by a runner that checks direct gradients against '
                                                                   'explicit GRU/LSTM autograd formulas.',
@@ -1339,7 +1339,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_batch_norm_internal_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'CUDA batch-norm internal helper is validated by a '
                                                                   'runner that checks explicit per-channel '
                                                                   'backward/gather formulas and running-stat updates.',
@@ -1422,7 +1422,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_batch_norm_internal_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'CUDA batch-norm internal helper is validated by a '
                                                                   'runner that checks explicit per-channel '
                                                                   'backward/gather formulas and running-stat updates.',
@@ -1491,7 +1491,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                                   'dispatcher calls against public '
                                                                   'affine-grid/grid-sample values and gradients.',
@@ -1582,7 +1582,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'cuDNN batch-norm internals are validated by direct '
                                                                   'CUDA dispatcher calls against public '
                                                                   'batch_norm/autograd references.',
@@ -1638,7 +1638,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                         'promotion_backend': 'cuda',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cuda',
                                                         'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                                   'dispatcher calls against public '
                                                                   'affine-grid/grid-sample values and gradients.',
@@ -2468,7 +2468,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_pooling_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN pooling helper has a source-derived '
                                                                   'candidate runner that compares forward and backward '
                                                                   'values to public dense pooling/autograd references.',
@@ -2526,7 +2526,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_linear_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                                   'runner that compares forward and backward values to '
                                                                   'public dense linear/autograd references.',
@@ -2581,7 +2581,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_linear_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                                   'runner that compares forward and backward values to '
                                                                   'public dense linear/autograd references.',
@@ -2639,7 +2639,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_linear_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                                   'runner that compares forward and backward values to '
                                                                   'public dense linear/autograd references.',
@@ -2981,7 +2981,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_rnn_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN RNN helper has a source-derived candidate '
                                                                   'runner that compares one-layer LSTM forward and '
                                                                   'backward values to public torch.nn.LSTM references.',
@@ -3329,7 +3329,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                         'coverage_kind': 'backend_pack',
                                                         'oracle_id': 'mkldnn_shape_backend_pack',
                                                         'promotion_backend': 'cpu_build',
-                                                        'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                        'promotion_evidence': 'backend-evidence:cpu-build',
                                                         'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                                   'candidate runner that validates dense logical '
                                                                   'values, MKLDNN layout, and out identity where '
@@ -6940,7 +6940,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cslt_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuSparseLt direct dispatcher helpers are validated by '
                                                                 'a CUDA runner that checks compressed matmul against '
                                                                 'dense references on a PyTorch build where cuSparseLt '
@@ -7221,7 +7221,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_attention_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN attention forward is validated by a CUDA runner '
                                                                 'that checks direct dispatcher output against public '
                                                                 'scaled-dot-product attention on a PyTorch build with '
@@ -7332,7 +7332,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_ctc_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN CTC internals are validated by direct CUDA '
                                                                 'dispatcher calls against public ctc_loss and '
                                                                 'use-cudnn predicate contracts.',
@@ -7409,7 +7409,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_ctc_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN CTC internals are validated by direct CUDA '
                                                                 'dispatcher calls against public ctc_loss and '
                                                                 'use-cudnn predicate contracts.',
@@ -7540,7 +7540,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                                 'dispatcher calls against public nn.LSTM '
                                                                 'forward/backward references and out identity.',
@@ -15148,7 +15148,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'nnpack_convolution_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'NNPACK spatial convolution has a source-derived '
                                                                 'candidate runner that compares the direct helper to '
                                                                 'public dense conv2d when NNPACK executes.',
@@ -15911,7 +15911,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_attention_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN attention forward is validated by a CUDA runner '
                                                                 'that checks direct dispatcher output against public '
                                                                 'scaled-dot-product attention on a PyTorch build with '
@@ -18412,7 +18412,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_ctc_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN CTC internals are validated by direct CUDA '
                                                                 'dispatcher calls against public ctc_loss and '
                                                                 'use-cudnn predicate contracts.',
@@ -18475,7 +18475,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_ctc_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN CTC internals are validated by direct CUDA '
                                                                 'dispatcher calls against public ctc_loss and '
                                                                 'use-cudnn predicate contracts.',
@@ -20536,7 +20536,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_batch_norm_internal_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'CUDA batch-norm internal helper is validated by a '
                                                                 'runner that checks explicit per-channel '
                                                                 'backward/gather formulas and running-stat updates.',
@@ -20619,7 +20619,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_batch_norm_internal_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'CUDA batch-norm internal helper is validated by a '
                                                                 'runner that checks explicit per-channel '
                                                                 'backward/gather formulas and running-stat updates.',
@@ -22861,7 +22861,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                                 'dispatcher calls against public '
                                                                 'affine-grid/grid-sample values and gradients.',
@@ -22945,7 +22945,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN batch-norm internals are validated by direct '
                                                                 'CUDA dispatcher calls against public '
                                                                 'batch_norm/autograd references.',
@@ -23037,7 +23037,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN convolution internals are validated by direct '
                                                                 'CUDA dispatcher calls against public convolution '
                                                                 'formulas, including out identity.',
@@ -23125,7 +23125,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN convolution internals are validated by direct '
                                                                 'CUDA dispatcher calls against public convolution '
                                                                 'formulas, including out identity.',
@@ -23201,7 +23201,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN convolution internals are validated by direct '
                                                                 'CUDA dispatcher calls against public convolution '
                                                                 'formulas, including out identity.',
@@ -23247,7 +23247,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                                 'dispatcher calls against public '
                                                                 'affine-grid/grid-sample values and gradients.',
@@ -23289,7 +23289,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'cuda_cudnn_is_acceptable_backend_pack',
                                                       'promotion_backend': 'cuda',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cuda',
                                                       'reason': 'cuDNN acceptability predicate is validated by '
                                                                 'comparing direct dispatcher output to '
                                                                 'torch.backends.cudnn.is_acceptable.',
@@ -24921,7 +24921,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'fbgemm_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:fbgemm',
                                                       'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                                 'candidate runner that uses PyTorch-created packed '
                                                                 'weights and compares values to dense/dequantized '
@@ -24973,7 +24973,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'fbgemm_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:fbgemm',
                                                       'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                                 'candidate runner that uses PyTorch-created packed '
                                                                 'weights and compares values to dense/dequantized '
@@ -25167,7 +25167,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'fbgemm_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:fbgemm',
                                                       'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                                 'candidate runner that uses PyTorch-created packed '
                                                                 'weights and compares values to dense/dequantized '
@@ -25210,7 +25210,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'fbgemm_linear_backend_pack',
                                                       'promotion_backend': 'fbgemm',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:fbgemm',
                                                       'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                                 'candidate runner that uses PyTorch-created packed '
                                                                 'weights and compares values to dense/dequantized '
@@ -35481,7 +35481,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_pooling_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                                 'runner that compares forward and backward values to '
                                                                 'public dense pooling/autograd references.',
@@ -35556,7 +35556,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_convolution_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN convolution/reorder helper has a '
                                                                 'source-derived candidate runner that checks direct '
                                                                 'convolution values against public dense conv '
@@ -35609,7 +35609,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_linear_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                                 'runner that compares forward and backward values to '
                                                                 'public dense linear/autograd references.',
@@ -35678,7 +35678,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_pooling_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                                 'runner that compares forward and backward values to '
                                                                 'public dense pooling/autograd references.',
@@ -35748,7 +35748,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_pooling_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                                 'runner that compares forward and backward values to '
                                                                 'public dense pooling/autograd references.',
@@ -48939,7 +48939,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                       'coverage_kind': 'backend_pack',
                                                       'oracle_id': 'mkldnn_shape_backend_pack',
                                                       'promotion_backend': 'cpu_build',
-                                                      'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                      'promotion_evidence': 'backend-evidence:cpu-build',
                                                       'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                                 'candidate runner that validates dense logical values, '
                                                                 'MKLDNN layout, and out identity where PyTorch exposes '
@@ -51157,7 +51157,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'cuda_cslt_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'cuSparseLt direct dispatcher helpers are validated by '
                                                                'a CUDA runner that checks compressed matmul against '
                                                                'dense references on a PyTorch build where cuSparseLt '
@@ -51229,7 +51229,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'cuda_cslt_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'cuSparseLt direct dispatcher helpers are validated by '
                                                                'a CUDA runner that checks compressed matmul against '
                                                                'dense references on a PyTorch build where cuSparseLt '
@@ -51978,7 +51978,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
                                                                'internals are covered by a CUDA direct-dispatch runner '
                                                                'using PyTorch-created 2:4 compressed values and dense '
@@ -52027,7 +52027,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse tile/apply internals have a '
                                                                'source-derived candidate runner that checks tile/apply '
                                                                'packed equivalence, dense mask application, and '
@@ -52148,7 +52148,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
                                                                'internals are covered by a CUDA direct-dispatch runner '
                                                                'using PyTorch-created 2:4 compressed values and dense '
@@ -52209,7 +52209,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
                                                                'internals are covered by a CUDA direct-dispatch runner '
                                                                'using PyTorch-created 2:4 compressed values and dense '
@@ -52263,7 +52263,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_thread_mask_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse tile/apply internals have a '
                                                                'source-derived candidate runner that checks tile/apply '
                                                                'packed equivalence, dense mask application, and '
@@ -52309,7 +52309,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                      'coverage_kind': 'backend_pack',
                                                      'oracle_id': 'semi_structured_sparse_backend_pack',
                                                      'promotion_backend': 'cuda',
-                                                     'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz',
+                                                     'promotion_evidence': 'backend-evidence:cuda',
                                                      'reason': 'Semi-structured sparse conversion/mm/addmm/linear '
                                                                'internals are covered by a CUDA direct-dispatch runner '
                                                                'using PyTorch-created 2:4 compressed values and dense '
@@ -53582,7 +53582,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                           'coverage_kind': 'backend_pack',
                                                           'oracle_id': 'fused_dropout_backend_pack',
                                                           'promotion_backend': 'cuda',
-                                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                                          'promotion_evidence': 'backend-evidence:cuda',
                                                           'reason': 'CUDA fused-dropout internals are validated with '
                                                                     'direct dispatcher calls for mask/output '
                                                                     'contracts, out identity, and memory-efficient '
@@ -76185,7 +76185,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_ctc_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN CTC internals are validated by direct CUDA '
                                                             'dispatcher calls against public ctc_loss and use-cudnn '
                                                             'predicate contracts.',
@@ -76250,7 +76250,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_dropout_state_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN dropout-state internals are validated by direct '
                                                             'CUDA dispatcher calls for state allocation device, dtype, '
                                                             'non-empty state, and out identity.',
@@ -76411,7 +76411,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                             'dispatcher calls against public nn.LSTM forward/backward '
                                                             'references and out identity.',
@@ -76623,7 +76623,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                             'dispatcher calls against public nn.LSTM forward/backward '
                                                             'references and out identity.',
@@ -76721,7 +76721,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                             'dispatcher calls against public nn.LSTM forward/backward '
                                                             'references and out identity.',
@@ -78095,7 +78095,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_flash_attention_no_dropout_inplace_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'Flash-attention no-dropout inplace is validated by a CUDA '
                                                             'runner that checks the mutated output and logsumexp '
                                                             'against public scaled_dot_product_attention formulas.',
@@ -82580,7 +82580,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'fused_dropout_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'CUDA fused-dropout internals are validated with direct '
                                                             'dispatcher calls for mask/output contracts, out identity, '
                                                             'and memory-efficient mask-fill identity/determinism.',
@@ -83617,7 +83617,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_shape_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                             'candidate runner that validates dense logical values, '
                                                             'MKLDNN layout, and out identity where PyTorch exposes a '
@@ -83677,7 +83677,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_shape_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                             'candidate runner that validates dense logical values, '
                                                             'MKLDNN layout, and out identity where PyTorch exposes a '
@@ -84886,7 +84886,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'nnpack_convolution_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'NNPACK spatial convolution has a source-derived candidate '
                                                             'runner that compares the direct helper to public dense '
                                                             'conv2d when NNPACK executes.',
@@ -88921,7 +88921,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'CUDA dtype-out matmul overload is validated by a runner '
                                                             'that checks out identity, output dtype, and dense fp32 '
                                                             'matmul/addmm formulas.',
@@ -91410,7 +91410,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'CUDA dtype-out matmul overload is validated by a runner '
                                                             'that checks out identity, output dtype, and dense fp32 '
                                                             'matmul/addmm formulas.',
@@ -93920,7 +93920,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'CUDA dtype-out matmul overload is validated by a runner '
                                                             'that checks out identity, output dtype, and dense fp32 '
                                                             'matmul/addmm formulas.',
@@ -96579,7 +96579,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                             'dispatcher calls against public affine-grid/grid-sample '
                                                             'values and gradients.',
@@ -96650,7 +96650,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                             'dispatcher calls against public affine-grid/grid-sample '
                                                             'values and gradients.',
@@ -96757,7 +96757,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN batch-norm out is validated by a CUDA runner '
                                                             'against public batch_norm output semantics on PyTorch '
                                                             '2.12.1+cu130; older PyTorch 2.11.0+cu128 on Spark GB10 is '
@@ -96880,7 +96880,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_batch_norm_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN batch-norm internals are validated by direct CUDA '
                                                             'dispatcher calls against public batch_norm/autograd '
                                                             'references.',
@@ -96986,7 +96986,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN convolution internals are validated by direct CUDA '
                                                             'dispatcher calls against public convolution formulas, '
                                                             'including out identity.',
@@ -97083,7 +97083,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN convolution internals are validated by direct CUDA '
                                                             'dispatcher calls against public convolution formulas, '
                                                             'including out identity.',
@@ -97168,7 +97168,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN convolution internals are validated by direct CUDA '
                                                             'dispatcher calls against public convolution formulas, '
                                                             'including out identity.',
@@ -97270,7 +97270,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN convolution internals are validated by direct CUDA '
                                                             'dispatcher calls against public convolution formulas, '
                                                             'including out identity.',
@@ -97325,7 +97325,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                             'dispatcher calls against public affine-grid/grid-sample '
                                                             'values and gradients.',
@@ -97390,7 +97390,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_cudnn_grid_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'cuDNN grid internals are validated by direct CUDA '
                                                             'dispatcher calls against public affine-grid/grid-sample '
                                                             'values and gradients.',
@@ -100263,7 +100263,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'fbgemm_linear_backend_pack',
                                                   'promotion_backend': 'fbgemm',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:fbgemm',
                                                   'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                             'candidate runner that uses PyTorch-created packed weights '
                                                             'and compares values to dense/dequantized references.',
@@ -100320,7 +100320,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'fbgemm_linear_backend_pack',
                                                   'promotion_backend': 'fbgemm',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:fbgemm',
                                                   'reason': 'FBGEMM packed-linear helper has a source-derived '
                                                             'candidate runner that uses PyTorch-created packed weights '
                                                             'and compares values to dense/dequantized references.',
@@ -114391,7 +114391,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_pooling_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense pooling/autograd references.',
@@ -114444,7 +114444,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_pooling_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense pooling/autograd references.',
@@ -114527,7 +114527,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_convolution_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN convolution/reorder helper has a source-derived '
                                                             'candidate runner that checks direct convolution values '
                                                             'against public dense conv references.',
@@ -114587,7 +114587,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_linear_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense linear/autograd references.',
@@ -114664,7 +114664,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_linear_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense linear/autograd references.',
@@ -114732,7 +114732,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_linear_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense linear/autograd references.',
@@ -114803,7 +114803,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_linear_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN linear helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense linear/autograd references.',
@@ -114885,7 +114885,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_pooling_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense pooling/autograd references.',
@@ -115054,7 +115054,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_pooling_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN pooling helper has a source-derived candidate '
                                                             'runner that compares forward and backward values to '
                                                             'public dense pooling/autograd references.',
@@ -115459,7 +115459,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_rnn_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN RNN helper has a source-derived candidate runner '
                                                             'that compares one-layer LSTM forward and backward values '
                                                             'to public torch.nn.LSTM references.',
@@ -115690,7 +115690,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_rnn_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN RNN helper has a source-derived candidate runner '
                                                             'that compares one-layer LSTM forward and backward values '
                                                             'to public torch.nn.LSTM references.',
@@ -115781,7 +115781,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'cuda_dtype_out_matmul_backend_pack',
                                                   'promotion_backend': 'cuda',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cuda',
                                                   'reason': 'CUDA dtype-out matmul overload is validated by a runner '
                                                             'that checks out identity, output dtype, and dense fp32 '
                                                             'matmul/addmm formulas.',
@@ -132720,7 +132720,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                   'coverage_kind': 'backend_pack',
                                                   'oracle_id': 'mkldnn_shape_backend_pack',
                                                   'promotion_backend': 'cpu_build',
-                                                  'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                  'promotion_evidence': 'backend-evidence:cpu-build',
                                                   'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                             'candidate runner that validates dense logical values, '
                                                             'MKLDNN layout, and out identity where PyTorch exposes a '
@@ -135684,7 +135684,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'coverage_kind': 'backend_pack',
                                           'oracle_id': 'cuda_cudnn_dropout_state_backend_pack',
                                           'promotion_backend': 'cuda',
-                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz',
+                                          'promotion_evidence': 'backend-evidence:cuda',
                                           'reason': 'cuDNN dropout-state internals are validated by direct CUDA '
                                                     'dispatcher calls for state allocation device, dtype, non-empty '
                                                     'state, and out identity.',
@@ -135734,7 +135734,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                           'coverage_kind': 'backend_pack',
                                           'oracle_id': 'fused_dropout_backend_pack',
                                           'promotion_backend': 'cuda',
-                                          'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz',
+                                          'promotion_evidence': 'backend-evidence:cuda',
                                           'reason': 'CUDA fused-dropout internals are validated with direct dispatcher '
                                                     'calls for mask/output contracts, out identity, and '
                                                     'memory-efficient mask-fill identity/determinism.',
@@ -136512,7 +136512,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'cuda_cudnn_rnn_backend_pack',
                                                     'promotion_backend': 'cuda',
-                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz',
+                                                    'promotion_evidence': 'backend-evidence:cuda',
                                                     'reason': 'cuDNN RNN internals are validated by direct CUDA '
                                                               'dispatcher calls against public nn.LSTM '
                                                               'forward/backward references and out identity.',
@@ -136559,7 +136559,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'mkldnn_shape_backend_pack',
                                                     'promotion_backend': 'cpu_build',
-                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                    'promotion_evidence': 'backend-evidence:cpu-build',
                                                     'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                               'candidate runner that validates dense logical values, '
                                                               'MKLDNN layout, and out identity where PyTorch exposes a '
@@ -136610,7 +136610,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'mkldnn_shape_backend_pack',
                                                     'promotion_backend': 'cpu_build',
-                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz',
+                                                    'promotion_evidence': 'backend-evidence:cpu-build',
                                                     'reason': 'MKLDNN shape/conversion helper has a source-derived '
                                                               'candidate runner that validates dense logical values, '
                                                               'MKLDNN layout, and out identity where PyTorch exposes a '
@@ -137573,7 +137573,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                                     'coverage_kind': 'backend_pack',
                                                     'oracle_id': 'cuda_cudnn_convolution_backend_pack',
                                                     'promotion_backend': 'cuda',
-                                                    'promotion_evidence': 'data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz',
+                                                    'promotion_evidence': 'backend-evidence:cuda',
                                                     'reason': 'cuDNN convolution internals are validated by direct '
                                                               'CUDA dispatcher calls against public convolution '
                                                               'formulas, including out identity.',
@@ -142333,7 +142333,7 @@ GENERATED_CASES = {'cases_by_surface': {'autograd_backward': [{'args': [{'alias'
                                          'surface_kind': 'view_or_alias',
                                          'variant_kind': 'view'}]},
  'metadata': {'case_count': 2183,
-              'generated_at': '2026-07-02T21:57:49.065425Z',
+              'generated_at': '2026-07-10T19:19:11.447717Z',
               'pytorch_version': '2.12.1',
               'semantic_level_counts': {'1': 422, '2': 952, '3': 1051, '4': 384, '5': 380, '6': 19, '7': 6},
               'semantic_level_descriptions': {'1': 'Core primitive behavior that every backend should run '

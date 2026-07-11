@@ -6,16 +6,14 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies or substantial portions of the Software.
 
-"""Build portable backend-promotion evidence archives."""
+"""Collect backend-specific evidence directly into the canonical store."""
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import socket
 import sys
-import tarfile
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,16 +23,18 @@ import torch
 
 from torchcts import __version__ as torchcts_version
 from torchcts.core import coverage
+from torchcts.core.backend_evidence import (
+    add_source_observations,
+    assert_store_extends,
+    canonical_backend,
+    load_backend_evidence_store,
+    load_backend_evidence_store_or_empty,
+    next_source_id,
+    normalize_observation,
+    normalize_source_environment,
+    write_backend_evidence_store,
+)
 from torchcts.core.oracles import OracleSpec, OracleUnavailable, all_oracle_specs, run_oracle_for_surface
-
-
-def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _safe_slug(value: str) -> str:
-    slug = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in value.strip())
-    return "-".join(part for part in slug.split("-") if part) or "unknown"
 
 
 def _json_safe(value: Any) -> Any:
@@ -49,20 +49,6 @@ def _json_safe(value: Any) -> Any:
     return repr(value)
 
 
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(_json_safe(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _unique_pack_path(output_root: Path, base_name: str) -> tuple[str, Path]:
-    for index in range(1000):
-        pack_name = base_name if index == 0 else f"{base_name}-{index}"
-        staging = output_root / pack_name
-        if not staging.exists() and not (output_root / f"{pack_name}.tar.gz").exists():
-            return pack_name, staging
-    raise RuntimeError(f"Could not allocate a unique evidence pack path under {output_root}")
-
-
 def _safe_call(fn, *args, **kwargs) -> dict[str, Any]:
     try:
         return {"ok": True, "value": _json_safe(fn(*args, **kwargs))}
@@ -73,16 +59,6 @@ def _safe_call(fn, *args, **kwargs) -> dict[str, Any]:
             "error_message": str(exc),
             "traceback": traceback.format_exc(),
         }
-
-
-def _torch_config_text() -> str:
-    show = getattr(torch.__config__, "show", None)
-    if show is None:
-        return ""
-    try:
-        return str(show())
-    except Exception as exc:
-        return f"{exc.__class__.__name__}: {exc}"
 
 
 def _cuda_device_records() -> list[dict[str, Any]]:
@@ -99,11 +75,6 @@ def _cuda_device_records() -> list[dict[str, Any]]:
             "minor": props.minor,
             "multi_processor_count": props.multi_processor_count,
         }
-        try:
-            free, total = torch.cuda.mem_get_info(index)
-            record["mem_get_info"] = {"free": free, "total": total}
-        except Exception as exc:
-            record["mem_get_info_error"] = f"{exc.__class__.__name__}: {exc}"
         records.append(record)
     return records
 
@@ -133,13 +104,6 @@ def _device_environment(device: str) -> dict[str, Any]:
 
 
 def _environment_record(device: str) -> dict[str, Any]:
-    selected_env_keys = (
-        "CUDA_VISIBLE_DEVICES",
-        "PYTORCH_CUDA_ALLOC_CONF",
-        "TORCHCTS_DEVICE_NAME",
-        "TORCHCTS_HARDWARE_KEY",
-        "TORCHCTS_RESULTS_DIR",
-    )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "torchcts_version": torchcts_version,
@@ -150,9 +114,7 @@ def _environment_record(device: str) -> dict[str, Any]:
         "processor": platform.processor(),
         "hostname": socket.gethostname(),
         "cwd": os.getcwd(),
-        "selected_environment": {key: os.environ[key] for key in selected_env_keys if key in os.environ},
         "device": _device_environment(device),
-        "torch_config": _torch_config_text(),
     }
 
 
@@ -167,19 +129,15 @@ def _normalize_surfaces(surfaces: list[str] | tuple[str, ...] | None) -> list[st
 
 
 _BACKEND_GATE_ALIASES = {
-    "all": ("all",),
     "cuda": ("cuda",),
-    "cuda+rocm": ("cuda", "rocm"),
     "fbgemm": ("fbgemm",),
     "mps": ("mps",),
     "privateuse1": ("privateuse1",),
     "privateuseone": ("privateuse1",),
-    "cpu": ("cpu",),
-    "cpu+fbgemm+cpu_build": ("cpu", "fbgemm", "cpu_build"),
+    "cpu-build": ("cpu_build",),
     "cpu_build": ("cpu_build",),
     "rocm": ("rocm",),
     "xla": ("xla",),
-    "any": ("any",),
 }
 
 
@@ -204,31 +162,24 @@ def _normalize_backend_gates(gates: list[str] | tuple[str, ...] | None) -> tuple
         if expanded is None:
             valid = ", ".join(sorted(_BACKEND_GATE_ALIASES))
             raise ValueError(f"Unknown backend gate selector {selector!r}; valid selectors: {valid}")
-        if "all" in expanded:
-            return ("all",)
         normalized.update(expanded)
-    normalized.add("any")
     return tuple(sorted(normalized))
-
-
-def _gate_matches_device(gate: str | None, device_type: str) -> bool:
-    if gate == "any":
-        return True
-    if gate == device_type:
-        return True
-    if gate == "privateuse1" and device_type in {"privateuseone", "privateuse1"}:
-        return True
-    return False
 
 
 def _oracle_gate_can_run_on_device(gate: str | None, device: str) -> bool:
     device_type = torch.device(device).type
-    if _gate_matches_device(gate, device_type):
-        return True
+    if gate == "cuda":
+        return device_type == "cuda" and torch.cuda.is_available() and not bool(getattr(torch.version, "hip", None))
+    if gate == "rocm":
+        return device_type == "cuda" and torch.cuda.is_available() and bool(getattr(torch.version, "hip", None))
+    if gate == "mps":
+        return device_type == "mps" and bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
     if gate in {"cpu_build", "fbgemm", "quantized"}:
         return device_type == "cpu"
-    if gate == "rocm":
-        return device_type == "cuda" and bool(getattr(torch.version, "hip", None))
+    if gate == "privateuse1":
+        return device_type in {"privateuseone", "privateuse1"}
+    if gate == "xla":
+        return device_type == "xla"
     return False
 
 
@@ -255,11 +206,9 @@ def _target_from_entry(entry: dict[str, Any], spec: OracleSpec | None) -> dict[s
 
 def _select_targets(
     audit: dict,
-    device: str,
     *,
     surfaces: list[str] | tuple[str, ...] | None = None,
     backend_gates: list[str] | tuple[str, ...] | None = None,
-    include_all_backend_packs: bool = False,
 ) -> list[dict[str, Any]]:
     requested = set(_normalize_surfaces(surfaces))
     selected_gates = _normalize_backend_gates(backend_gates)
@@ -270,23 +219,26 @@ def _select_targets(
         missing = sorted(surface for surface in requested if surface not in by_surface and surface not in audit_by_name)
         if missing:
             raise ValueError(f"No audit entries or oracle specs found for requested surfaces: {', '.join(missing)}")
-        return [
+        targets = [
             _target_from_entry(audit_by_name.get(surface) or {"name": surface}, by_surface.get(surface))
             for surface in sorted(requested)
         ]
-    device_type = torch.device(device).type
+        if selected_gates is not None:
+            mismatched = [target["surface"] for target in targets if target["backend_gate"] not in selected_gates]
+            if mismatched:
+                raise ValueError(
+                    "Requested surfaces do not belong to the selected backend gates: " + ", ".join(mismatched)
+                )
+        return targets
+    if selected_gates is None:
+        raise ValueError("Backend evidence collection requires --backend-gate unless exact surfaces are requested")
     selected = []
     for entry in audit.get("entries", []):
         if entry.get("coverage_kind") != "backend_pack":
             continue
         spec = by_surface.get(entry.get("name"))
         gate = _backend_gate_for_entry(entry, spec)
-        if include_all_backend_packs or selected_gates == ("all",):
-            selected.append(_target_from_entry(entry, spec))
-        elif selected_gates is not None:
-            if gate in selected_gates:
-                selected.append(_target_from_entry(entry, spec))
-        elif _gate_matches_device(gate, device_type):
+        if gate in selected_gates:
             selected.append(_target_from_entry(entry, spec))
     return sorted(selected, key=lambda target: target["surface"])
 
@@ -396,64 +348,42 @@ def _backend_pack_evidence(
     }
 
 
-def _write_readme(path: Path, summary: dict[str, Any]) -> None:
-    path.write_text(
-        "\n".join(
-            [
-                "# TorchCTS Backend Evidence Pack",
-                "",
-                "This archive is generated by `torchcts coverage evidence-pack`.",
-                "It is intended to support backend-pack coverage promotion review.",
-                "",
-                f"- Device: `{summary['device']}`",
-                f"- PyTorch: `{summary['pytorch_version']}`",
-                f"- TorchCTS: `{summary['torchcts_version']}`",
-                f"- Backend gates: `{', '.join(summary['backend_gates']) or 'none'}`",
-                f"- Selected oracle surfaces: `{summary['surface_count']}`",
-                f"- Oracle results run: `{summary['run_oracles']}`",
-                f"- Pending candidates run: `{summary['run_pending_candidates']}`",
-                f"- Oracle failures: `{summary['oracle_failure_count']}`",
-                f"- Oracle successes: `{summary['oracle_success_count']}`",
-                f"- Oracle skipped: `{summary['oracle_skipped_count']}`",
-                "",
-                "Important files:",
-                "",
-                "- `environment.json`: host, torch, CUDA/MPS, and selected environment facts.",
-                "- `coverage/audit.json`: full live coverage audit.",
-                "- `coverage/pending_review.json`: pending and excluded coverage records.",
-                "- `oracles/backend_pack_evidence.json`: schemas, dispatcher tables, specs, and oracle results.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-
-def build_evidence_pack(
+def collect_backend_evidence(
     *,
+    store: str | os.PathLike,
     device: str,
-    output_dir: str | os.PathLike | None = None,
     surfaces: list[str] | tuple[str, ...] | None = None,
     backend_gates: list[str] | tuple[str, ...] | None = None,
     run_oracles: bool = True,
     run_pending_candidates: bool = False,
-    include_all_backend_packs: bool = False,
+    runtime_modifications: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
-    output_root = Path(output_dir) if output_dir is not None else coverage.DEFAULT_OUTPUT_DIR / "evidence-packs"
-    stamp = _utc_stamp()
-    host = _safe_slug(socket.gethostname().split(".", 1)[0])
-    device_slug = _safe_slug(device)
-    pack_name, staging = _unique_pack_path(output_root, f"torchcts-evidence-{host}-{device_slug}-{stamp}")
-    staging.mkdir(parents=True, exist_ok=False)
-
+    destination = Path(store)
+    previous = load_backend_evidence_store_or_empty(destination)
     audit = coverage.build_audit()
     targets = _select_targets(
         audit,
-        device,
         surfaces=surfaces,
         backend_gates=backend_gates,
-        include_all_backend_packs=include_all_backend_packs,
     )
+    if not targets:
+        raise ValueError("Backend evidence selection did not match any surfaces")
+    selected_gates = sorted({target["backend_gate"] for target in targets if target.get("backend_gate")})
+    if any(gate in {None, "any"} for gate in (target.get("backend_gate") for target in targets)):
+        raise ValueError("Every collected backend evidence surface must have an explicit backend gate")
+    if "privateuse1" in selected_gates:
+        raise ValueError(
+            "PrivateUse1 evidence requires the registered backend identity; "
+            "the generic privateuse1 gate is not a canonical evidence backend"
+        )
+    incompatible = [gate for gate in selected_gates if not _oracle_gate_can_run_on_device(gate, device)]
+    if incompatible:
+        raise ValueError(
+            f"Backend gates {', '.join(incompatible)} cannot run on requested device {torch.device(device).type!r}"
+        )
+    for gate in selected_gates:
+        canonical_backend(gate)
+
     backend_evidence = _backend_pack_evidence(
         audit,
         targets,
@@ -461,16 +391,37 @@ def build_evidence_pack(
         run_oracles=run_oracles,
         run_pending_candidates=run_pending_candidates,
     )
+    environment = _environment_record(device)
+    normalized_records = [
+        normalize_observation(record, environment)
+        for record in backend_evidence["records"]
+    ]
+    updated = previous.clone()
+    source_id = next_source_id(updated)
+    source = normalize_source_environment(
+        environment,
+        source_id=source_id,
+        backends={backend for backend, _, _ in normalized_records},
+        runtime_modifications=runtime_modifications or (),
+    )
+    add_source_observations(updated, source=source, records=normalized_records)
+    assert_store_extends(previous, updated)
+    write_backend_evidence_store(updated, destination)
+    reread = load_backend_evidence_store(destination, verify_canonical=True)
+    assert_store_extends(previous, reread)
+
     oracle_failures = [
         record
         for record in backend_evidence["records"]
         if record.get("oracle_result", {}).get("ok") is False
     ]
-    summary = {
+    return {
+        "source_id": source_id,
+        "store": str(destination),
         "device": device,
         "pytorch_version": torch.__version__,
         "torchcts_version": torchcts_version,
-        "backend_gates": sorted({target["backend_gate"] for target in targets if target.get("backend_gate")}),
+        "backend_gates": [canonical_backend(gate) for gate in selected_gates],
         "surface_count": len(targets),
         "run_oracles": run_oracles,
         "run_pending_candidates": run_pending_candidates,
@@ -481,59 +432,32 @@ def build_evidence_pack(
         "oracle_skipped_count": sum(
             1 for record in backend_evidence["records"] if record.get("oracle_result", {}).get("skipped")
         ),
-        "archive_name": f"{pack_name}.tar.gz",
     }
 
-    _write_json(staging / "environment.json", _environment_record(device))
-    _write_json(staging / "summary.json", summary)
-    _write_json(staging / "coverage" / "audit.json", audit)
-    _write_json(staging / "coverage" / "pending_review.json", coverage.build_pending_review_artifact(audit))
-    (staging / "coverage").mkdir(parents=True, exist_ok=True)
-    (staging / "coverage" / "summary.md").write_text(coverage.render_summary_markdown(audit), encoding="utf-8")
-    (staging / "coverage" / "pending_review.md").write_text(
-        coverage.render_pending_review_markdown(audit),
-        encoding="utf-8",
-    )
-    _write_json(staging / "oracles" / "backend_pack_evidence.json", backend_evidence)
-    _write_readme(staging / "README.md", summary)
 
-    archive_path = output_root / f"{pack_name}.tar.gz"
-    with tarfile.open(archive_path, "w:gz") as archive:
-        for path in sorted(staging.rglob("*")):
-            archive.add(path, arcname=str(Path(pack_name) / path.relative_to(staging)))
-
-    summary.update(
-        {
-            "staging_dir": str(staging),
-            "archive": str(archive_path),
-        }
-    )
-    return summary
-
-
-def run_evidence_pack_command(
+def run_backend_evidence_collection_command(
     *,
+    store: str | os.PathLike,
     device: str,
-    output_dir: str | os.PathLike | None,
     surfaces: list[str] | tuple[str, ...] | None,
     backend_gates: list[str] | tuple[str, ...] | None,
     run_oracles: bool,
     run_pending_candidates: bool,
-    include_all_backend_packs: bool,
+    runtime_modifications: list[str] | tuple[str, ...] | None = None,
     require_oracle_results: bool = False,
     fail_on_oracle_failure: bool = False,
 ) -> int:
-    result = build_evidence_pack(
+    result = collect_backend_evidence(
+        store=store,
         device=device,
-        output_dir=output_dir,
         surfaces=surfaces,
         backend_gates=backend_gates,
         run_oracles=run_oracles,
         run_pending_candidates=run_pending_candidates,
-        include_all_backend_packs=include_all_backend_packs,
+        runtime_modifications=runtime_modifications,
     )
-    print(f"Wrote evidence directory: {result['staging_dir']}")
-    print(f"Wrote evidence archive: {result['archive']}")
+    print(f"Updated backend evidence store: {result['store']}")
+    print(f"Added evidence source: {result['source_id']}")
     print(f"Selected backend gates: {', '.join(result['backend_gates']) or 'none'}")
     print(f"Selected oracle surfaces: {result['surface_count']}")
     if run_oracles:

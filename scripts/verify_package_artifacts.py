@@ -18,8 +18,7 @@ REQUIRED_PACKAGE_FILES = (
 )
 FORBIDDEN_FRAGMENTS = (
     "op_dtype_contract_evidence.jsonl",
-    "data/backend-pack-evidence",
-    "evidence/pytorch/dtype-contracts",
+    "evidence/",
 )
 FORBIDDEN_LOGICAL_PATHS = (
     "site_scripts/install_plan.py",

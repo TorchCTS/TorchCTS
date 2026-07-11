@@ -5297,10 +5297,7 @@ _RUNNERS: dict[str, Callable[[OracleSpec, str], None]] = {
 _SPECS: dict[str, OracleSpec] = {}
 
 
-_CPU_BUILD_EVIDENCE = (
-    "data/backend-pack-evidence/"
-    "torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz"
-)
+_CPU_BUILD_EVIDENCE = "backend-evidence:cpu-build"
 
 _CPU_BUILD_PROMOTED = frozenset({
     "aten::_mkldnn_reshape",
@@ -5335,7 +5332,7 @@ _CPU_BUILD_PROMOTED = frozenset({
     "aten::to_mkldnn_backward",
 })
 
-_FBGEMM_EVIDENCE = _CPU_BUILD_EVIDENCE
+_FBGEMM_EVIDENCE = "backend-evidence:fbgemm"
 
 _FBGEMM_PROMOTED = frozenset({
     "aten::fbgemm_linear_fp16_weight",
@@ -5346,10 +5343,8 @@ _FBGEMM_PROMOTED = frozenset({
     "aten::fbgemm_pack_gemm_matrix_fp16",
 })
 
-_CUDA_SEMI_STRUCTURED_THREAD_MASK_EVIDENCE = (
-    "data/backend-pack-evidence/"
-    "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz"
-)
+_CUDA_EVIDENCE = "backend-evidence:cuda"
+_CUDA_SEMI_STRUCTURED_THREAD_MASK_EVIDENCE = _CUDA_EVIDENCE
 
 _CUDA_SEMI_STRUCTURED_THREAD_MASK_PROMOTED = frozenset({
     "aten::_sparse_semi_structured_apply",
@@ -5546,10 +5541,7 @@ for _surface in (
         reason="CUDA fused-dropout internals are validated with direct dispatcher calls for mask/output contracts, out identity, and memory-efficient mask-fill identity/determinism.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-fused-dropout-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260701T195851Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5576,10 +5568,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-semi-structured-sparse-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5633,10 +5622,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cusparselt-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5659,10 +5645,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-attention-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5710,7 +5693,7 @@ for _surface in (
         reason="cuDNN convolution internals are validated by direct CUDA dispatcher calls against public convolution formulas, including out identity.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-convolution-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5735,7 +5718,7 @@ for _surface in (
         reason="cuDNN grid internals are validated by direct CUDA dispatcher calls against public affine-grid/grid-sample values and gradients.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-grid-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5755,7 +5738,7 @@ for _surface in (
         reason="cuDNN batch-norm internals are validated by direct CUDA dispatcher calls against public batch_norm/autograd references.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5774,10 +5757,7 @@ _register(OracleSpec(
     ),
     contract_status="accepted",
     contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-batch-norm-backend-pack",
-    promotion_evidence=(
-        "data/backend-pack-evidence/"
-        "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz"
-    ),
+    promotion_evidence=_CUDA_EVIDENCE,
     promotion_backend="cuda",
 ))
 
@@ -5799,7 +5779,7 @@ for _surface in (
         reason="cuDNN CTC internals are validated by direct CUDA dispatcher calls against public ctc_loss and use-cudnn predicate contracts.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-ctc-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5818,7 +5798,7 @@ for _surface in (
         reason="cuDNN dropout-state internals are validated by direct CUDA dispatcher calls for state allocation device, dtype, non-empty state, and out identity.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-dropout-state-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5833,7 +5813,7 @@ _register(OracleSpec(
     reason="cuDNN acceptability predicate is validated by comparing direct dispatcher output to torch.backends.cudnn.is_acceptable.",
     contract_status="accepted",
     contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-acceptability-backend-pack",
-    promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz",
+    promotion_evidence=_CUDA_EVIDENCE,
     promotion_backend="cuda",
 ))
 
@@ -5856,7 +5836,7 @@ for _surface in (
         reason="cuDNN RNN internals are validated by direct CUDA dispatcher calls against public nn.LSTM forward/backward references and out identity.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-cudnn-rnn-backend-pack",
-        promotion_evidence="data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz",
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5898,10 +5878,7 @@ _register(OracleSpec(
     ),
     contract_status="accepted",
     contract_ref="docs/coverage/contract-evidence.md#cuda-flash-attention-no-dropout-inplace-backend-pack",
-    promotion_evidence=(
-        "data/backend-pack-evidence/"
-        "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz"
-    ),
+    promotion_evidence=_CUDA_EVIDENCE,
     promotion_backend="cuda",
 ))
 
@@ -5919,10 +5896,7 @@ _register(OracleSpec(
     ),
     contract_status="accepted",
     contract_ref="docs/coverage/contract-evidence.md#cuda-fused-rmsnorm-backward-backend-pack",
-    promotion_evidence=(
-        "data/backend-pack-evidence/"
-        "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz"
-    ),
+    promotion_evidence=_CUDA_EVIDENCE,
     promotion_backend="cuda",
 ))
 
@@ -5946,10 +5920,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-dtype-out-matmul-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5973,10 +5944,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-batch-norm-internal-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 
@@ -5998,10 +5966,7 @@ for _surface in (
         ),
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cuda-thnn-cell-backward-backend-pack",
-        promotion_evidence=(
-            "data/backend-pack-evidence/"
-            "torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz"
-        ),
+        promotion_evidence=_CUDA_EVIDENCE,
         promotion_backend="cuda",
     ))
 

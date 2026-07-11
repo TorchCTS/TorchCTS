@@ -117,30 +117,40 @@ MKLDNN and NNPACK family:
 .venv/bin/python -m pytest -q torchcts/generated/test_oracle_surfaces.py --device cpu --level 8 -k 'mkldnn or nnpack'
 ```
 
-## Accepted Result Records
+## Backend Evidence Collection
 
-Use the packaged evidence command when collecting data from hardware that is not
-available to the maintainer doing the promotion:
-
-```bash
-python -m torchcts coverage evidence-pack --device cuda
-```
-
-Use `--backend-gate` when the evidence target is a build family rather than a
-plain `torch.device(...).type`, or when a backend reports as another device type:
+Collect evidence directly into the canonical tracked store from a checkout on
+the target backend:
 
 ```bash
-python -m torchcts coverage evidence-pack \
+python -m torchcts coverage collect-backend-evidence \
+  --store evidence/backends \
   --device cuda \
-  --backend-gate cuda+rocm
-
-python -m torchcts coverage evidence-pack \
-  --device cpu \
-  --backend-gate cpu+fbgemm+cpu_build
+  --backend-gate cuda
 ```
 
-Use `--backend-gate all` or `--include-all-backend-packs` only when the archive
-should include every backend-pack row regardless of the current machine.
+Backend selection is explicit and independent of PyTorch's device spelling.
+ROCm uses a CUDA-namespaced device but records evidence under `rocm`. CPU-build
+and FBGEMM evidence can be collected together because both gates execute on
+CPU:
+
+```bash
+python -m torchcts coverage collect-backend-evidence \
+  --store evidence/backends \
+  --device cuda \
+  --backend-gate rocm
+
+python -m torchcts coverage collect-backend-evidence \
+  --store evidence/backends \
+  --device cpu \
+  --backend-gate cpu-build \
+  --backend-gate fbgemm
+```
+
+The collector rejects incompatible backend/device selections before writing.
+It does not have an all-backends mode: diagnostic skips for unavailable
+backends belong in the live coverage audit, not in canonical evidence for that
+backend.
 
 Use `--run-pending-candidates` only for promotion work. It executes pending
 backend-pack specs that already have real runners, while generated conformance
@@ -149,7 +159,8 @@ tests continue to skip `pending_backend_pack` rows. Combine it with
 promotion evidence:
 
 ```bash
-python -m torchcts coverage evidence-pack \
+python -m torchcts coverage collect-backend-evidence \
+  --store evidence/backends \
   --device cuda \
   --backend-gate cuda \
   --run-pending-candidates \
@@ -157,36 +168,40 @@ python -m torchcts coverage evidence-pack \
   --fail-on-oracle-failure
 ```
 
-For a focused bundle, repeat `--surface` with exact dispatcher names:
+For a focused collection, repeat `--surface` with exact dispatcher names:
 
 ```bash
-python -m torchcts coverage evidence-pack \
+python -m torchcts coverage collect-backend-evidence \
+  --store evidence/backends \
   --device cuda \
+  --backend-gate cuda \
   --surface aten::_fused_dropout \
   --surface aten::_fused_dropout.out
 ```
 
-The command writes both an unpacked directory and a `.tar.gz` archive under
-`results/coverage/evidence-packs/` by default. The archive includes host and
-PyTorch environment facts, CUDA/MPS device state, the live coverage audit,
-pending-review records, oracle metadata, dispatcher schemas, dispatcher tables,
-and current oracle results. Pending backend-pack rows that do not yet have an
-`OracleSpec` are still included from the coverage audit with schema, dispatch,
-exclusion, and pending-review evidence; their oracle result is recorded as
-skipped because no runner exists yet. Registered oracle specs are also skipped
-when the selected evidence device cannot run that backend gate, so an all-gates
-archive from a CUDA machine does not report MPS or CPU-only oracles as failures.
+Use `--runtime-modification` to record a path-free semantic label for a required
+runtime modification, such as `sm89-guard-bypass`. Never record a shim path,
+hostname, checkout path, environment path, or executable path.
+
+The command validates the existing store, adds one anonymous collection source,
+deduplicates identical observations within each backend, and replaces the store
+transactionally. It stores backend-specific schema, dispatch, oracle, and
+result evidence. It does not store a full repository audit or produce an
+archive, README, report, or secondary export.
 
 Accepted backend-pack evidence records must include:
 
 - backend family;
 - device;
 - PyTorch version;
-- host/build description;
-- command;
+- path-free build and device capabilities;
 - direct dispatcher surfaces exercised;
 - reference or property used;
 - result.
+
+Collection does not promote a surface automatically. A promotion change must
+explicitly mark a passing source in the backend record, update the corresponding
+`OracleSpec`, and pass `scripts/verify_backend_evidence.py`.
 
 ## Feasibility Ledger
 

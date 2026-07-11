@@ -1,0 +1,29 @@
+{
+  "backends": [
+    {
+      "backend": "cpu-build",
+      "path": "cpu-build.jsonl",
+      "record_count": 84,
+      "source_count": 4,
+      "surface_count": 40
+    },
+    {
+      "backend": "cuda",
+      "path": "cuda.jsonl",
+      "record_count": 311,
+      "source_count": 14,
+      "surface_count": 70
+    },
+    {
+      "backend": "fbgemm",
+      "path": "fbgemm.jsonl",
+      "record_count": 54,
+      "source_count": 4,
+      "surface_count": 16
+    }
+  ],
+  "format": "backend_scoped_evidence",
+  "format_version": 1,
+  "source_count": 18,
+  "sources_path": "sources.jsonl"
+}

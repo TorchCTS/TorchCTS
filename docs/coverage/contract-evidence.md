@@ -224,7 +224,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records the covered surfaces passing on a CPU build with PyTorch
   `2.12.1+cu130`.
 
@@ -260,7 +260,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records all eight surfaces passing.
 
 ## CPU-Build MKLDNN Convolution Backend Pack
@@ -303,7 +303,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records both convolution surfaces passing.
 
 ## CPU-Build MKLDNN Pooling Backend Pack
@@ -350,7 +350,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records the covered pooling surfaces passing.
 
 ## CPU-Build MKLDNN RNN Backend Pack
@@ -390,7 +390,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records the covered RNN surfaces passing.
 
 ## CPU-Build NNPACK Convolution Backend Pack
@@ -417,7 +417,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:cpu-build`
   records both surfaces passing.
 
 ## FBGEMM Linear Backend Pack
@@ -467,7 +467,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cpu-20260702T205910Z.tar.gz`
+- `backend-evidence:fbgemm`
   records the covered FBGEMM linear surfaces passing.
 
 ## FBGEMM Wrapped Quantized Linear Backend Pack
@@ -617,8 +617,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- Evidence archive
-  `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T165916Z.tar.gz`
+- Backend evidence `backend-evidence:cuda`
   records all four surfaces passing on Spark GB10 with the SM 8.9 guard-bypass
   shim loaded.
 - Keep the guard-bypass caveat attached to this promotion evidence. If a future
@@ -670,7 +669,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T205947Z.tar.gz`
+- `backend-evidence:cuda`
   records `_sparse_semi_structured_apply` and `_sparse_semi_structured_tile`
   passing on Spark GB10 with the SM 8.9 guard-bypass shim loaded.
 - Keep the guard-bypass caveat attached to this promotion evidence. If a future
@@ -710,7 +709,7 @@ Known unsupported case:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+- `backend-evidence:cuda`
   records all three surfaces passing on Spark GB10 with PyTorch
   `2.12.1+cu130`.
 
@@ -746,7 +745,7 @@ Known unsupported cases:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+- `backend-evidence:cuda`
   records both forward surfaces passing on Spark GB10 with PyTorch
   `2.12.1+cu130`.
 
@@ -776,7 +775,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191535Z.tar.gz`
+- `backend-evidence:cuda`
   records all eight surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA cuDNN Grid Backend Pack
@@ -805,7 +804,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191546Z.tar.gz`
+- `backend-evidence:cuda`
   records all eight surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA cuDNN Batch-Norm Backend Pack
@@ -833,10 +832,10 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191752Z.tar.gz`
+- `backend-evidence:cuda`
   records the non-out forward and both backward surfaces passing on Spark GB10
   with PyTorch `2.11.0+cu128`.
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T195008Z.tar.gz`
+- `backend-evidence:cuda`
   records `aten::cudnn_batch_norm.out` passing on Spark GB10 with PyTorch
   `2.12.1+cu130`. The runner is version-gated because PyTorch `2.11.0+cu128`
   hits a `pyobject_preservation` internal assert when this direct overload is
@@ -865,7 +864,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191837Z.tar.gz`
+- `backend-evidence:cuda`
   records all five surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA cuDNN Dropout-State Backend Pack
@@ -885,7 +884,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz`
+- `backend-evidence:cuda`
   records both surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA cuDNN Acceptability Backend Pack
@@ -903,7 +902,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T191937Z.tar.gz`
+- `backend-evidence:cuda`
   records the surface passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA cuDNN RNN Backend Pack
@@ -933,7 +932,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T192456Z.tar.gz`
+- `backend-evidence:cuda`
   records all six surfaces passing on Spark GB10 with PyTorch `2.11.0+cu128`.
 
 ## CUDA Flash Attention No-Dropout Inplace Backend Pack
@@ -956,7 +955,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+- `backend-evidence:cuda`
   records the surface passing on Spark GB10 with PyTorch `2.12.1+cu130`.
 
 ## CUDA Fused RMSNorm Backward Backend Pack
@@ -977,7 +976,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+- `backend-evidence:cuda`
   records the surface passing on Spark GB10 with PyTorch `2.12.1+cu130`.
 
 ## CUDA Dtype-Out Matmul Backend Pack
@@ -1002,7 +1001,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+- `backend-evidence:cuda`
   records all four surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
 
 ## CUDA Batch-Norm Internal Backend Pack
@@ -1028,7 +1027,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+- `backend-evidence:cuda`
   records all four surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
 
 ## CUDA THNN Cell Backward Backend Pack
@@ -1050,7 +1049,7 @@ Accepted contract:
 
 Promotion evidence:
 
-- `data/backend-pack-evidence/torchcts-evidence-thinkstationpgx-0f66-cuda-20260702T200741Z.tar.gz`
+- `backend-evidence:cuda`
   records both surfaces passing on Spark GB10 with PyTorch `2.12.1+cu130`.
 
 ## CUDA Mixed-Dtypes Linear Backend Pack

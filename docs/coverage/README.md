@@ -16,8 +16,7 @@ torchcts coverage materialize
 torchcts coverage check
 torchcts coverage check --fail-on-unknown
 torchcts coverage report
-torchcts coverage evidence-pack --device cuda
-torchcts coverage evidence-pack --device cuda --backend-gate cuda+rocm
+torchcts coverage collect-backend-evidence --store evidence/backends --device cuda --backend-gate cuda
 torchcts path-shapes validate
 python scripts/generate_path_shape_corpus.py --check --strict-budget --enforce-targets
 torchcts path-shapes list --family matmul
@@ -34,10 +33,11 @@ Default artifacts are written under `results/coverage/`:
 - `summary.md`: human-readable coverage summary.
 - `pending_review.md`: human-readable pending and exclusion review.
 
-Backend promotion evidence archives are written under
-`results/coverage/evidence-packs/` by `torchcts coverage evidence-pack`. Use
-that command when a backend-specific CUDA, MPS, ROCm, or PrivateUse1 machine can
-collect data that needs maintainer review elsewhere.
+Canonical backend evidence is tracked under `evidence/backends/`. The
+`collect-backend-evidence` command updates that store directly from a checkout
+on the target backend. It records path-free capability context and
+backend-specific observations without retaining host identity, full audit
+snapshots, or transport archives.
 
 ## Coverage Kinds
 

@@ -314,17 +314,17 @@ def run_coverage_command(command, strict_unknowns=False):
         from torchcts.core.non_unique_output_compare import run_ambiguous_output_audit_command
 
         return run_ambiguous_output_audit_command(json_output=getattr(coverage_args, "json", False))
-    if command == "evidence-pack":
-        from torchcts.core.evidence_pack import run_evidence_pack_command
+    if command == "collect-backend-evidence":
+        from torchcts.core.backend_evidence_collection import run_backend_evidence_collection_command
 
-        return run_evidence_pack_command(
+        return run_backend_evidence_collection_command(
+            store=getattr(coverage_args, "store"),
             device=getattr(coverage_args, "device", "cuda"),
-            output_dir=getattr(coverage_args, "output_dir", None),
             surfaces=getattr(coverage_args, "surface", None),
             backend_gates=getattr(coverage_args, "backend_gate", None),
             run_oracles=not getattr(coverage_args, "no_run_oracles", False),
             run_pending_candidates=getattr(coverage_args, "run_pending_candidates", False),
-            include_all_backend_packs=getattr(coverage_args, "include_all_backend_packs", False),
+            runtime_modifications=getattr(coverage_args, "runtime_modification", None),
             require_oracle_results=getattr(coverage_args, "require_oracle_results", False),
             fail_on_oracle_failure=getattr(coverage_args, "fail_on_oracle_failure", False),
         )
@@ -906,42 +906,46 @@ def main():
         help="Audit non-unique output contract registry coverage",
     )
     non_unique_audit.add_argument("--json", action="store_true", help="Emit JSON audit output")
-    evidence_pack = coverage_subparsers.add_parser(
-        "evidence-pack",
-        help="Build a portable backend-pack promotion evidence archive",
+    backend_evidence = coverage_subparsers.add_parser(
+        "collect-backend-evidence",
+        help="Collect backend evidence directly into the canonical tracked store",
     )
-    evidence_pack.add_argument("--device", default="cuda", help="Target device for backend evidence")
-    evidence_pack.add_argument(
+    backend_evidence.add_argument("--store", required=True, help="Canonical backend evidence store directory")
+    backend_evidence.add_argument("--device", default="cuda", help="Target device for backend evidence")
+    backend_evidence.add_argument(
         "--backend-gate",
         action="append",
         help=(
-            "Backend-pack gate selector to include; may be repeated or use comma/plus syntax "
-            "(for example cuda+rocm or cpu+fbgemm+cpu_build)"
+            "Explicit backend selector to include; may be repeated or use comma/plus syntax "
+            "for compatible gates (for example cpu-build+fbgemm)"
         ),
     )
-    evidence_pack.add_argument("--surface", action="append", help="Exact oracle surface to include; may be repeated")
-    evidence_pack.add_argument("--output-dir", help="Directory for the evidence directory and .tar.gz archive")
-    evidence_pack.add_argument(
+    backend_evidence.add_argument(
+        "--surface",
+        action="append",
+        help="Exact oracle surface to include; may be repeated",
+    )
+    backend_evidence.add_argument(
         "--no-run-oracles",
         action="store_true",
         help="Collect environment, audit, schema, and dispatcher evidence without executing oracle runners",
     )
-    evidence_pack.add_argument(
-        "--include-all-backend-packs",
-        action="store_true",
-        help="Include backend-pack oracle specs for every backend gate instead of only the target device",
+    backend_evidence.add_argument(
+        "--runtime-modification",
+        action="append",
+        help="Path-free semantic label for a runtime modification used during collection; may be repeated",
     )
-    evidence_pack.add_argument(
+    backend_evidence.add_argument(
         "--run-pending-candidates",
         action="store_true",
         help="Execute pending backend-pack specs that have real oracle runners",
     )
-    evidence_pack.add_argument(
+    backend_evidence.add_argument(
         "--require-oracle-results",
         action="store_true",
         help="Return nonzero unless every selected surface produces a passing oracle result",
     )
-    evidence_pack.add_argument(
+    backend_evidence.add_argument(
         "--fail-on-oracle-failure",
         action="store_true",
         help="Return nonzero when any executed oracle fails",

@@ -75,7 +75,7 @@ manifest.py
   -> declared dtypes, capabilities, resources, tolerances
   -> OpInfo tests, generated dispatcher tests, hand-authored suites
   -> backend execution
-  -> JSON results, scorecards, coverage audits, evidence packs
+  -> JSON results, scorecards, coverage audits, backend evidence
 ```
 
 A `manifest.py` describes what the backend claims to support. Positive
@@ -298,7 +298,8 @@ TorchCTS provides these subcommands:
 - `coverage report`: Render the default coverage audit summary.
 - `coverage materialize`: Write deterministic generated coverage cases.
 - `coverage non-unique-audit`: Audit non-unique coverage identifiers.
-- `coverage evidence-pack`: Build backend evidence artifacts.
+- `coverage collect-backend-evidence`: Collect backend-specific observations
+  directly into the canonical tracked evidence store.
 - `coverage check`: Validate the default coverage audit. Unknowns warn by
   default; `--fail-on-unknown` or `--strict-unknowns` makes them nonzero.
 - `path-shapes validate`: Validate the curated path-shape corpus.
