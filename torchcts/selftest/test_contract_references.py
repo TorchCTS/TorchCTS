@@ -40,6 +40,7 @@ from torchcts.core.reference_oracles import (
     complex_tensor_integer_power_reference,
     complex_unit_alpha_add_sub_reference,
     conv_transpose3d_f32_reference,
+    embedding_bag_scale_grad_by_freq_reference,
     grid_sampler_3d_backward_f32_reference,
 )
 from torchcts.core.opinfo_adapter import InputCondition, get_op_sample_inputs, prepare_sample
@@ -716,3 +717,19 @@ def test_matched_grid_backward_reference_failure_cannot_become_a_skip(monkeypatc
             _compare,
             {"ieee754_seed": 67},
         )
+
+
+def test_embedding_bag_frequency_reference_uses_each_rows_count():
+    grad = torch.tensor([[1.0, -0.5], [-0.25, 2.0]])
+    indices = torch.tensor([1, 1, 2, 1, 2, 4])
+    offset2bag = torch.tensor([0, 0, 0, 1, 1, 1])
+    result = embedding_bag_scale_grad_by_freq_reference(grad, indices, offset2bag, 5)
+    expected = torch.tensor([
+        [0.0, 0.0],
+        [1.75 / 3.0, 1.0 / 3.0],
+        [0.375, 0.75],
+        [0.0, 0.0],
+        [-0.25, 2.0],
+    ])
+    torch.testing.assert_close(result, expected)
+    assert torch.equal(result[[0, 3]], torch.zeros((2, 2), dtype=result.dtype))

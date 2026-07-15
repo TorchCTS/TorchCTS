@@ -21,6 +21,7 @@
 import pytest
 import torch
 from torchcts.core.device import synchronize
+from torchcts.core.reference_oracles import embedding_bag_scale_grad_by_freq_reference
 
 BACKWARD_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
 ACTIVATIONS = ["relu", "gelu", "sigmoid", "tanh", "silu"]
@@ -89,6 +90,99 @@ def _compare_sparse_or_dense(actual, expected, compare, dtype=torch.float32):
         actual = actual.to_dense()
         expected = expected.to_dense()
     _compare_backward_tensor(actual, expected, compare, dtype)
+
+
+@pytest.mark.medium
+@pytest.mark.requires("training")
+@pytest.mark.covers("aten::embedding_bag")
+@pytest.mark.covers("aten::_embedding_bag_backward")
+@pytest.mark.covers("aten::_embedding_bag_dense_backward")
+@pytest.mark.covers("aten::_embedding_bag_dense_backward.out", surface="out_variant")
+def test_embedding_bag_scale_grad_by_frequency_contract(device, compare):
+    dtype = torch.float32
+    indices_cpu = torch.tensor([1, 1, 2, 1, 2, 4], dtype=torch.int64)
+    offsets_cpu = torch.tensor([0, 3], dtype=torch.int64)
+    offset2bag_cpu = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.int64)
+    bag_size_cpu = torch.tensor([3, 3], dtype=torch.int64)
+    maximum_indices_cpu = torch.zeros(2, dtype=torch.int64)
+    grad_cpu = torch.tensor([[1.0, -0.5], [-0.25, 2.0]], dtype=dtype)
+    expected = embedding_bag_scale_grad_by_freq_reference(
+        grad_cpu,
+        indices_cpu,
+        offset2bag_cpu,
+        5,
+    )
+
+    indices = indices_cpu.to(device)
+    offsets = offsets_cpu.to(device)
+    offset2bag = offset2bag_cpu.to(device)
+    bag_size = bag_size_cpu.to(device)
+    maximum_indices = maximum_indices_cpu.to(device)
+    grad = grad_cpu.to(device)
+
+    weight = torch.zeros((5, 2), dtype=dtype, device=device, requires_grad=True)
+    high_level = torch.embedding_bag(
+        weight,
+        indices,
+        offsets,
+        True,
+        0,
+        False,
+        None,
+        False,
+    )[0]
+    high_level.backward(grad)
+
+    direct = torch.ops.aten._embedding_bag_backward.default(
+        grad,
+        indices,
+        offsets,
+        offset2bag,
+        bag_size,
+        maximum_indices,
+        5,
+        True,
+        0,
+        False,
+        None,
+        -1,
+    )
+    dense = torch.ops.aten._embedding_bag_dense_backward.default(
+        grad,
+        indices,
+        offset2bag,
+        bag_size,
+        maximum_indices,
+        5,
+        True,
+        0,
+        None,
+        -1,
+    )
+    out = torch.empty((5, 2), dtype=dtype, device=device)
+    returned = torch.ops.aten._embedding_bag_dense_backward.out(
+        grad,
+        indices,
+        offset2bag,
+        bag_size,
+        maximum_indices,
+        5,
+        True,
+        0,
+        None,
+        -1,
+        out=out,
+    )
+    synchronize(device)
+    assert returned is out
+    for result in (weight.grad, direct, dense, out):
+        assert tuple(result.shape) == (5, 2)
+        assert result.dtype == dtype
+        assert result.device.type == torch.device(device).type
+
+    if torch.device(device).type != "cpu":
+        for result in (weight.grad, direct, dense, out):
+            compare(result, expected, category="backward", dtype=dtype)
 
 
 @pytest.mark.medium

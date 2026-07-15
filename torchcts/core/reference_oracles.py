@@ -558,3 +558,34 @@ def conv_transpose3d_f32_reference(
         **kwargs,
     )
     return result.to(input_tensor.dtype)
+
+
+def embedding_bag_scale_grad_by_freq_reference(
+    grad: torch.Tensor,
+    indices: torch.Tensor,
+    offset2bag: torch.Tensor,
+    num_weights: int,
+    *,
+    padding_idx: int = -1,
+) -> torch.Tensor:
+    """Dense sum-mode EmbeddingBag backward with each row's global frequency."""
+
+    grad_cpu = grad.detach().cpu()
+    indices_cpu = indices.detach().cpu().to(torch.long).reshape(-1)
+    bags_cpu = offset2bag.detach().cpu().to(torch.long).reshape(-1)
+    if indices_cpu.numel() != bags_cpu.numel():
+        raise ValueError("indices and offset2bag must have the same number of elements")
+    if grad_cpu.dim() != 2:
+        raise ValueError(f"embedding-bag grad must be 2-D, got {tuple(grad_cpu.shape)}")
+    result = torch.zeros((num_weights, grad_cpu.shape[1]), dtype=grad_cpu.dtype)
+    counts = torch.bincount(indices_cpu[indices_cpu != padding_idx], minlength=num_weights)
+    for position, row_tensor in enumerate(indices_cpu):
+        row = int(row_tensor.item())
+        if row == padding_idx:
+            continue
+        if row < 0 or row >= num_weights:
+            raise ValueError(f"embedding index {row} is outside [0, {num_weights})")
+        frequency = int(counts[row].item())
+        bag = int(bags_cpu[position].item())
+        result[row] += grad_cpu[bag] / frequency
+    return result
