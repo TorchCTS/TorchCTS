@@ -41,7 +41,10 @@ from torchcts.core.dtype_contracts import (
     disposition_from_cpu_probe,
     is_deterministic_cpu_unsupported,
 )
-from torchcts.core.reference_oracles import matmul_family_reference
+from torchcts.core.reference_oracles import (
+    grid_sampler_3d_backward_f32_reference,
+    matmul_family_reference,
+)
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 from torchcts.sample_generation import (
     bitwise_args_and_template as sample_bitwise_args_and_template,
@@ -4111,14 +4114,16 @@ def _run_grid_backward_once(
     manifest: dict,
     *,
     expected_items: tuple[torch.Tensor, ...] | None = None,
+    sample=None,
 ) -> tuple[torch.Tensor, ...]:
-    sample = sample_grid_backward(
-        entry,
-        dtype,
-        device=device,
-        input_condition=InputCondition.CLEAN,
-        seed=manifest.get("ieee754_seed", 67),
-    )
+    if sample is None:
+        sample = sample_grid_backward(
+            entry,
+            dtype,
+            device=device,
+            input_condition=InputCondition.CLEAN,
+            seed=manifest.get("ieee754_seed", 67),
+        )
     args = sample.call_args()
     kwargs = dict(sample.kwargs)
     out_kwargs = {}
@@ -4145,10 +4150,40 @@ def _run_manual_grid_backward_case(
     manifest: dict,
 ) -> bool:
     schema = entry.get("schema", "")
-    try:
-        expected_items = _run_grid_backward_once(entry, callable_op, dtype, "cpu", manifest)
-    except Exception:
-        return False
+    use_f32_reference = _uses_f32_grid_backward_reference(entry, dtype)
+    reference_sample = None
+    if use_f32_reference:
+        reference_id = "grid_sampler_3d_backward_f32"
+        try:
+            reference_sample = sample_grid_backward(
+                entry,
+                dtype,
+                device="cpu",
+                input_condition=InputCondition.CLEAN,
+                seed=manifest.get("ieee754_seed", 67),
+            )
+            reference_args = reference_sample.call_args()
+            expected_items = grid_sampler_3d_backward_f32_reference(
+                reference_args[0],
+                reference_args[1],
+                reference_args[2],
+                int(reference_args[3]),
+                int(reference_args[4]),
+                bool(reference_args[5]),
+                [True, True],
+            )
+        except ContractReferenceError:
+            raise
+        except Exception as exc:
+            raise ContractReferenceError(
+                f"Permanent contract reference {reference_id} failed: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+    else:
+        try:
+            expected_items = _run_grid_backward_once(entry, callable_op, dtype, "cpu", manifest)
+        except Exception:
+            return False
 
     try:
         actual_items = _run_grid_backward_once(
@@ -4158,6 +4193,7 @@ def _run_manual_grid_backward_case(
             device,
             manifest,
             expected_items=expected_items,
+            sample=reference_sample.to(device) if reference_sample is not None else None,
         )
         synchronize(device)
     except Exception as exc:
@@ -4175,8 +4211,24 @@ def _run_manual_grid_backward_case(
             raise AssertionError(f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}")
         if tuple(actual.shape) != tuple(expected.shape):
             raise AssertionError(f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}")
-        compare(actual, expected, category="elementwise", dtype=dtype)
+        if not (use_f32_reference and torch.device(device).type == "cpu"):
+            compare(
+                actual,
+                expected,
+                category="backward" if use_f32_reference else "elementwise",
+                dtype=dtype,
+            )
     return True
+
+
+def _uses_f32_grid_backward_reference(entry: dict, dtype: torch.dtype) -> bool:
+    return (
+        entry.get("name") in {
+            "aten::grid_sampler_3d_backward",
+            "aten::grid_sampler_3d_backward.out",
+        }
+        and dtype in {torch.float16, torch.bfloat16}
+    )
 
 
 def run_manual_grid_backward_strategy(entry: dict | None, device: str, compare, manifest: dict) -> None:

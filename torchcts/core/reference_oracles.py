@@ -520,3 +520,41 @@ def complex_log2_reference(input_tensor: torch.Tensor) -> torch.Tensor:
     natural = torch.log(input_cpu)
     scale = 1.0 / math.log(2.0)
     return torch.complex(natural.real * scale, natural.imag * scale).to(input_cpu.dtype)
+
+
+def grid_sampler_3d_backward_f32_reference(
+    grad_output: torch.Tensor,
+    input_tensor: torch.Tensor,
+    grid: torch.Tensor,
+    interpolation_mode: int,
+    padding_mode: int,
+    align_corners: bool,
+    output_mask=(True, True),
+) -> tuple[torch.Tensor, torch.Tensor]:
+    dtype = input_tensor.dtype
+    result = torch.ops.aten.grid_sampler_3d_backward.default(
+        grad_output.detach().cpu().to(torch.float32),
+        input_tensor.detach().cpu().to(torch.float32),
+        grid.detach().cpu().to(torch.float32),
+        interpolation_mode,
+        padding_mode,
+        align_corners,
+        list(output_mask),
+    )
+    return tuple(item.to(dtype) for item in result)
+
+
+def conv_transpose3d_f32_reference(
+    input_tensor: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+    **kwargs,
+) -> torch.Tensor:
+    bias_f32 = None if bias is None else bias.detach().cpu().to(torch.float32)
+    result = F.conv_transpose3d(
+        input_tensor.detach().cpu().to(torch.float32),
+        weight.detach().cpu().to(torch.float32),
+        bias_f32,
+        **kwargs,
+    )
+    return result.to(input_tensor.dtype)

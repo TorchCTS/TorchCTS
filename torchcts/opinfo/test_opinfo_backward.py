@@ -177,13 +177,18 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
             return {k: clone_to_device(v, target_device, detach) for k, v in obj.items()}
         return obj
 
-    def compare_gradients(dev_obj, cpu_obj, name):
+    def compare_gradients(dev_obj, cpu_obj, name, *, category_override=None):
         __tracebackhide__ = True
         nonlocal tested_any
         if isinstance(dev_obj, torch.Tensor):
             if dev_obj.requires_grad:
                 if dev_obj.grad is not None and cpu_obj.grad is not None:
-                    compare(dev_obj.grad, cpu_obj.grad, category=category, dtype=dtype)
+                    compare(
+                        dev_obj.grad,
+                        cpu_obj.grad,
+                        category=category_override or category,
+                        dtype=dtype,
+                    )
                     tested_any = True
                 elif dev_obj.grad is None and cpu_obj.grad is None:
                     pass
@@ -191,10 +196,20 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
                     raise AssertionError(f"Gradient mismatch for {name}: device grad is {type(dev_obj.grad)}, CPU grad is {type(cpu_obj.grad)}")
         elif isinstance(dev_obj, (list, tuple)):
             for idx, (d_item, c_item) in enumerate(zip(dev_obj, cpu_obj)):
-                compare_gradients(d_item, c_item, f"{name}[{idx}]")
+                compare_gradients(
+                    d_item,
+                    c_item,
+                    f"{name}[{idx}]",
+                    category_override=category_override,
+                )
         elif isinstance(dev_obj, dict):
             for k in dev_obj:
-                compare_gradients(dev_obj[k], cpu_obj[k], f"{name}['{k}']")
+                compare_gradients(
+                    dev_obj[k],
+                    cpu_obj[k],
+                    f"{name}['{k}']",
+                    category_override=category_override,
+                )
 
     for sample in samples:
         # Check if sample contains any differentiable tensors
@@ -249,29 +264,54 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
         cpu_args = clone_to_device(sample.args, "cpu", detach=True)
         cpu_kwargs = clone_to_device(sample.kwargs, "cpu", detach=True)
 
-        # Run CPU forward
-        try:
-            expected_out = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
-        except Exception as e:
-            if is_cpu_reference_failure(e):
-                record_opinfo_oracle_failure(
-                    "backward",
-                    op_name,
-                    dtype_str,
-                    "cpu_forward",
-                    e,
-                    input_condition=InputCondition.CLEAN,
-                    nodeid=request.node.nodeid,
+        use_grid_f32_reference = (
+            op_name == "grid_sampler_3d"
+            and dtype in {torch.float16, torch.bfloat16}
+            and isinstance(cpu_input, torch.Tensor)
+            and len(cpu_args) >= 4
+            and isinstance(cpu_args[0], torch.Tensor)
+        )
+        expected_out = None
+        if use_grid_f32_reference:
+            try:
+                ref_input = cpu_input.detach().to(torch.float32).requires_grad_(True)
+                ref_grid = cpu_args[0].detach().to(torch.float32).requires_grad_(True)
+                ref_output = op_fn(ref_input, ref_grid, *cpu_args[1:], **cpu_kwargs)
+                grad_output = torch.ones_like(ref_output)
+                input_grad_f32, grid_grad_f32 = torch.autograd.grad(
+                    ref_output,
+                    (ref_input, ref_grid),
+                    grad_outputs=grad_output,
                 )
-            cpu_failures.append(f"cpu forward: {type(e).__name__}: {e}")
-            continue
+                cpu_input.grad = input_grad_f32.to(dtype)
+                cpu_args[0].grad = grid_grad_f32.to(dtype)
+            except Exception as e:
+                cpu_failures.append(f"f32 grid reference: {type(e).__name__}: {e}")
+                continue
+        else:
+            # Run CPU forward
+            try:
+                expected_out = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
+            except Exception as e:
+                if is_cpu_reference_failure(e):
+                    record_opinfo_oracle_failure(
+                        "backward",
+                        op_name,
+                        dtype_str,
+                        "cpu_forward",
+                        e,
+                        input_condition=InputCondition.CLEAN,
+                        nodeid=request.node.nodeid,
+                    )
+                cpu_failures.append(f"cpu forward: {type(e).__name__}: {e}")
+                continue
 
-        # Backward test only applies if forward output is a single tensor or list of tensors
-        if not isinstance(expected_out, (torch.Tensor, list, tuple)):
-            continue
+            # Backward test only applies if forward output is a single tensor or list of tensors
+            if not isinstance(expected_out, (torch.Tensor, list, tuple)):
+                continue
 
-        if not check_requires_grad(expected_out):
-            continue
+            if not check_requires_grad(expected_out):
+                continue
 
         # Run Device forward
         try:
@@ -284,22 +324,23 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
         except Exception as e:
             raise RuntimeError(f"Device forward execution failed: {e}") from e
 
-        # CPU backward
-        try:
-            run_backward(expected_out)
-        except Exception as e:
-            if is_cpu_reference_failure(e):
-                record_opinfo_oracle_failure(
-                    "backward",
-                    op_name,
-                    dtype_str,
-                    "cpu_backward",
-                    e,
-                    input_condition=InputCondition.CLEAN,
-                    nodeid=request.node.nodeid,
-                )
-            cpu_failures.append(f"cpu backward: {type(e).__name__}: {e}")
-            continue
+        # CPU backward, unless the f32 direct-backward reference already populated gradients.
+        if not use_grid_f32_reference:
+            try:
+                run_backward(expected_out)
+            except Exception as e:
+                if is_cpu_reference_failure(e):
+                    record_opinfo_oracle_failure(
+                        "backward",
+                        op_name,
+                        dtype_str,
+                        "cpu_backward",
+                        e,
+                        input_condition=InputCondition.CLEAN,
+                        nodeid=request.node.nodeid,
+                    )
+                cpu_failures.append(f"cpu backward: {type(e).__name__}: {e}")
+                continue
 
         # Device backward
         try:
@@ -310,9 +351,10 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
 
         # Compare gradients of all inputs
         # Match CPU inputs with device inputs recursively
-        compare_gradients(dev_input, cpu_input, "input")
-        compare_gradients(dev_args, cpu_args, "args")
-        compare_gradients(dev_kwargs, cpu_kwargs, "kwargs")
+        gradient_category = "backward" if use_grid_f32_reference else None
+        compare_gradients(dev_input, cpu_input, "input", category_override=gradient_category)
+        compare_gradients(dev_args, cpu_args, "args", category_override=gradient_category)
+        compare_gradients(dev_kwargs, cpu_kwargs, "kwargs", category_override=gradient_category)
 
     if not tested_any:
         pytest.fail(

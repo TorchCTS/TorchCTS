@@ -31,6 +31,7 @@ from torchcts.core.reference_oracles import (
     complex_log2_reference,
     complex_tensor_integer_power_reference,
     complex_unit_alpha_add_sub_reference,
+    conv_transpose3d_f32_reference,
     has_nonnegative_integral_complex_exponent,
 )
 
@@ -83,6 +84,28 @@ _GENERATED_LOG2 = frozenset({
     "aten::_foreach_log2.out",
 })
 
+_TRANSPOSED_COMPLEX_CONV_OPS = frozenset({
+    "nn.functional.conv_transpose1d",
+    "nn.functional.conv_transpose2d",
+    "nn.functional.conv_transpose3d",
+})
+_ORDINARY_CONV_PARAMETERS = (
+    ("weight", None),
+    ("bias", None),
+    ("stride", 1),
+    ("padding", 0),
+    ("dilation", 1),
+    ("groups", 1),
+)
+_TRANSPOSED_CONV_PARAMETERS = (
+    ("weight", None),
+    ("bias", None),
+    ("stride", 1),
+    ("padding", 0),
+    ("output_padding", 0),
+    ("groups", 1),
+    ("dilation", 1),
+)
 
 
 def _condition(value) -> str:
@@ -177,6 +200,43 @@ def _l1_operand_dtypes_match(input_tensor, target, dtype) -> bool:
     )
 
 
+def _normalize_conv_arguments(op_name, sample):
+    if not isinstance(sample.input, torch.Tensor):
+        return None
+    parameters = (
+        _TRANSPOSED_CONV_PARAMETERS
+        if op_name in _TRANSPOSED_COMPLEX_CONV_OPS
+        else _ORDINARY_CONV_PARAMETERS
+    )
+    if len(sample.args) > len(parameters):
+        return None
+
+    parameter_names = {name for name, _default in parameters}
+    if not set(sample.kwargs).issubset(parameter_names):
+        return None
+
+    values = {}
+    for index, value in enumerate(sample.args):
+        name = parameters[index][0]
+        if name in sample.kwargs:
+            return None
+        values[name] = value
+    for name, default in parameters[len(sample.args):]:
+        values[name] = sample.kwargs.get(name, default)
+
+    weight = values["weight"]
+    bias = values["bias"]
+    if not isinstance(weight, torch.Tensor):
+        return None
+    if bias is not None and not isinstance(bias, torch.Tensor):
+        return None
+    kwargs = {
+        name: values[name]
+        for name, _default in parameters
+        if name not in {"weight", "bias"}
+    }
+    return weight, bias, kwargs
+
 
 def resolve_opinfo_forward_reference(
     op_name,
@@ -214,6 +274,20 @@ def resolve_opinfo_forward_reference(
             lambda: complex_log2_reference(sample.input),
         )
 
+    if op_name == "nn.functional.conv_transpose3d" and dtype == torch.bfloat16 and condition == "clean":
+        normalized = _normalize_conv_arguments(op_name, sample)
+        if normalized is None:
+            return None
+        weight, bias, conv_kwargs = normalized
+        if sample.input.dtype != dtype or weight.dtype != dtype:
+            return None
+        if bias is not None and bias.dtype != dtype:
+            return None
+        return _build(
+            "bf16_conv_transpose3d_f32",
+            "conv",
+            lambda: conv_transpose3d_f32_reference(sample.input, weight, bias, **conv_kwargs),
+        )
     return None
 
 

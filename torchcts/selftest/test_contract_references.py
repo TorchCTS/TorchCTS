@@ -22,6 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+import torch.nn.functional as F
 
 import torchcts.conftest as conftest
 import torchcts.core.contract_references as contract_references
@@ -38,6 +39,8 @@ from torchcts.core.reference_oracles import (
     complex_log2_reference,
     complex_tensor_integer_power_reference,
     complex_unit_alpha_add_sub_reference,
+    conv_transpose3d_f32_reference,
+    grid_sampler_3d_backward_f32_reference,
 )
 from torchcts.core.opinfo_adapter import InputCondition, get_op_sample_inputs, prepare_sample
 from torchcts.sample_generation import (
@@ -542,3 +545,174 @@ def test_matched_reference_failure_never_falls_back(monkeypatch):
     monkeypatch.setattr(contract_references, "complex_log2_reference", fail)
     with pytest.raises(ContractReferenceError, match="complex_log2"):
         resolve_opinfo_forward_reference("log2", _sample(value), torch.complex64, "has_inf")
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("padding_mode", [0, 1, 2])
+@pytest.mark.parametrize("align_corners", [False, True])
+def test_grid_sampler_f32_reference_matches_f32_autograd_matrix(
+    dtype,
+    padding_mode,
+    align_corners,
+):
+    input_tensor = torch.linspace(-1.0, 1.0, 24, dtype=torch.float32).reshape(1, 1, 2, 3, 4).to(dtype)
+    grid = torch.tensor(
+        [[[[[-1.25, -0.5, 0.25], [0.75, 1.2, -0.8]]]]],
+        dtype=dtype,
+    )
+    grad_output = torch.tensor([[[[[0.75, -1.25]]]]], dtype=dtype)
+    actual = grid_sampler_3d_backward_f32_reference(
+        grad_output,
+        input_tensor,
+        grid,
+        0,
+        padding_mode,
+        align_corners,
+    )
+
+    input_f32 = input_tensor.float().requires_grad_(True)
+    grid_f32 = grid.float().requires_grad_(True)
+    output_f32 = torch.ops.aten.grid_sampler_3d.default(
+        input_f32,
+        grid_f32,
+        0,
+        padding_mode,
+        align_corners,
+    )
+    expected_f32 = torch.autograd.grad(
+        output_f32,
+        (input_f32, grid_f32),
+        grad_outputs=grad_output.float(),
+    )
+    expected = tuple(item.to(dtype) for item in expected_f32)
+    for actual_item, expected_item in zip(actual, expected):
+        torch.testing.assert_close(actual_item, expected_item, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    "input_shape,weight_shape,use_bias,kwargs",
+    [
+        (
+            (1, 2, 2, 2, 2),
+            (2, 3, 2, 2, 2),
+            True,
+            {"stride": 2, "padding": 1, "output_padding": 1},
+        ),
+        (
+            (2, 2, 2, 2),
+            (2, 1, 2, 2, 2),
+            False,
+            {"groups": 2},
+        ),
+        (
+            (1, 4, 2, 2, 2),
+            (4, 2, 2, 2, 2),
+            True,
+            {
+                "stride": (2, 2, 2),
+                "padding": (1, 1, 1),
+                "output_padding": (1, 1, 1),
+                "groups": 2,
+                "dilation": (2, 2, 2),
+            },
+        ),
+    ],
+)
+def test_bf16_conv_transpose3d_reference_matrix(input_shape, weight_shape, use_bias, kwargs):
+    input_tensor = torch.linspace(-1, 1, torch.tensor(input_shape).prod().item()).reshape(input_shape).to(torch.bfloat16)
+    weight = torch.linspace(-0.5, 0.75, torch.tensor(weight_shape).prod().item()).reshape(weight_shape).to(torch.bfloat16)
+    out_channels = weight_shape[1] * kwargs.get("groups", 1)
+    bias = torch.linspace(-0.25, 0.25, out_channels).to(torch.bfloat16) if use_bias else None
+    actual = conv_transpose3d_f32_reference(input_tensor, weight, bias, **kwargs)
+    expected = F.conv_transpose3d(
+        input_tensor.float(),
+        weight.float(),
+        None if bias is None else bias.float(),
+        **kwargs,
+    ).to(torch.bfloat16)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_low_precision_reference_routing_is_exact_and_closed():
+    input_tensor = torch.zeros((1, 1, 2, 2, 2), dtype=torch.bfloat16)
+    weight = torch.zeros((1, 1, 2, 2, 2), dtype=torch.bfloat16)
+    sample = _sample(input_tensor, weight, None)
+    assert resolve_opinfo_forward_reference(
+        "nn.functional.conv_transpose3d",
+        sample,
+        torch.bfloat16,
+        "clean",
+    ) is not None
+    assert resolve_opinfo_forward_reference(
+        "nn.functional.conv_transpose3d",
+        _sample(input_tensor.float(), weight.float(), None),
+        torch.float32,
+        "clean",
+    ) is None
+    assert resolve_opinfo_forward_reference(
+        "nn.functional.conv3d",
+        sample,
+        torch.bfloat16,
+        "clean",
+    ) is None
+
+    for name in (
+        "aten::grid_sampler_3d_backward",
+        "aten::grid_sampler_3d_backward.out",
+    ):
+        assert coverage_helpers._uses_f32_grid_backward_reference(
+            {"name": name},
+            torch.float16,
+        )
+        assert coverage_helpers._uses_f32_grid_backward_reference(
+            {"name": name},
+            torch.bfloat16,
+        )
+    assert not coverage_helpers._uses_f32_grid_backward_reference(
+        {"name": "aten::grid_sampler_2d_backward"},
+        torch.float16,
+    )
+    assert not coverage_helpers._uses_f32_grid_backward_reference(
+        {"name": "aten::grid_sampler_3d_backward"},
+        torch.float32,
+    )
+
+
+def test_matched_grid_backward_reference_failure_cannot_become_a_skip(monkeypatch):
+    sample = SimpleNamespace(
+        call_args=lambda: (
+            torch.empty((1, 1, 1, 1, 1), dtype=torch.float16),
+            torch.empty((1, 1, 2, 2, 2), dtype=torch.float16),
+            torch.empty((1, 1, 1, 1, 3), dtype=torch.float16),
+            0,
+            0,
+            False,
+        )
+    )
+    monkeypatch.setattr(coverage_helpers, "sample_grid_backward", lambda *_a, **_k: sample)
+
+    def fail_reference(*_args, **_kwargs):
+        raise RuntimeError("intentional f32 oracle failure")
+
+    monkeypatch.setattr(
+        coverage_helpers,
+        "grid_sampler_3d_backward_f32_reference",
+        fail_reference,
+    )
+
+    def reject_target_execution(*_args, **_kwargs):
+        raise AssertionError("target execution must not replace a failed reference")
+
+    with pytest.raises(ContractReferenceError, match="grid_sampler_3d_backward_f32"):
+        coverage_helpers._run_manual_grid_backward_case(
+            {
+                "name": "aten::grid_sampler_3d_backward",
+                "surface_kind": "functional_data",
+                "schema": "grid_sampler_3d_backward",
+            },
+            reject_target_execution,
+            torch.float16,
+            "cpu",
+            _compare,
+            {"ieee754_seed": 67},
+        )
