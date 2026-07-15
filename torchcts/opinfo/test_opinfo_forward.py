@@ -31,6 +31,7 @@ from torchcts.core.opinfo_adapter import (
     prepare_sample,
 )
 from torchcts.core.comparer import compare_nan_propagation, compare_inf_propagation
+from torchcts.core.contract_references import resolve_opinfo_forward_reference
 from torchcts.core.device import synchronize
 from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
@@ -224,6 +225,58 @@ def _compare_special_tier(actual, expected, condition):
     _compare_item(actual, expected)
 
 
+def _assert_reference_metadata(actual, expected, path="output", *, expected_device=None):
+    if isinstance(expected, torch.Tensor):
+        assert isinstance(actual, torch.Tensor), (
+            f"{path} type mismatch: {type(actual).__name__} vs Tensor"
+        )
+        if expected_device is not None:
+            expected_device_type = torch.device(expected_device).type
+            assert actual.device.type == expected_device_type, (
+                f"{path} device mismatch: {actual.device.type} vs {expected_device_type}"
+            )
+        assert actual.dtype == expected.dtype, (
+            f"{path} dtype mismatch: {actual.dtype} vs {expected.dtype}"
+        )
+        assert tuple(actual.shape) == tuple(expected.shape), (
+            f"{path} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}"
+        )
+        return
+    if isinstance(expected, (list, tuple)):
+        assert isinstance(actual, type(expected)), (
+            f"{path} type mismatch: {type(actual).__name__} vs {type(expected).__name__}"
+        )
+        assert len(actual) == len(expected), (
+            f"{path} length mismatch: {len(actual)} vs {len(expected)}"
+        )
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
+            _assert_reference_metadata(
+                actual_item,
+                expected_item,
+                f"{path}[{index}]",
+                expected_device=expected_device,
+            )
+        return
+    if isinstance(expected, dict):
+        assert isinstance(actual, dict), (
+            f"{path} type mismatch: {type(actual).__name__} vs dict"
+        )
+        assert set(actual) == set(expected), (
+            f"{path} keys mismatch: {set(actual)} vs {set(expected)}"
+        )
+        for key in expected:
+            _assert_reference_metadata(
+                actual[key],
+                expected[key],
+                f"{path}[{key!r}]",
+                expected_device=expected_device,
+            )
+        return
+    assert type(actual) is type(expected), (
+        f"{path} type mismatch: {type(actual).__name__} vs {type(expected).__name__}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main test
 # ---------------------------------------------------------------------------
@@ -280,6 +333,12 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
 
         if device == "cpu":
             # CPU validation mode: execute target op once, skip comparison
+            contract_reference = resolve_opinfo_forward_reference(
+                op_name,
+                sample,
+                dtype,
+                input_condition,
+            )
             try:
                 dev_input = _move_sample_obj(sample.input, device)
                 dev_args = _move_sample_obj(sample.args, device)
@@ -288,46 +347,73 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
                 actual = op_fn(dev_input, *dev_args, **dev_kwargs)
                 synchronize(device)
             except Exception as exc:
-                cpu_failures.append(f"sample {i}: {type(exc).__name__}: {exc}")
+                reference_detail = (
+                    f"; reference_id={contract_reference.reference_id}"
+                    if contract_reference is not None
+                    else ""
+                )
+                cpu_failures.append(
+                    f"sample {i}: {type(exc).__name__}: {exc}{reference_detail}"
+                )
                 continue
+            if contract_reference is not None:
+                try:
+                    _assert_reference_metadata(
+                        actual,
+                        contract_reference.value,
+                        expected_device=device,
+                    )
+                except AssertionError as exc:
+                    raise AssertionError(
+                        f"Permanent contract reference {contract_reference.reference_id} "
+                        f"metadata failed for {op_name} sample {i}: {exc}"
+                    ) from exc
             tested_any = True
             passed_count += 1
             continue
 
-        # Run reference CPU op
+        contract_reference = resolve_opinfo_forward_reference(
+            op_name,
+            sample,
+            dtype,
+            input_condition,
+        )
+
+        # Run the native CPU op only when no permanent contract reference applies.
         cpu_error = None
-        expected = None
-        try:
-            expected = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
-        except Exception as e:
-            if is_cpu_reference_failure(e):
-                record_opinfo_oracle_failure(
-                    "forward",
-                    op_name,
-                    dtype_str,
-                    "cpu_reference",
-                    e,
-                    input_condition=input_condition,
-                    sample_index=i,
-                    nodeid=request.node.nodeid,
-                )
-                cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
-                continue
-            if input_condition != InputCondition.CLEAN:
-                cpu_error = e  # For NaN/Inf tiers, capture error for comparison
-            else:
-                record_opinfo_oracle_failure(
-                    "forward",
-                    op_name,
-                    dtype_str,
-                    "cpu_clean_reference",
-                    e,
-                    input_condition=input_condition,
-                    sample_index=i,
-                    nodeid=request.node.nodeid,
-                )
-                cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
-                continue
+        expected = contract_reference.value if contract_reference is not None else None
+        if contract_reference is None:
+            try:
+                expected = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
+            except Exception as e:
+                if is_cpu_reference_failure(e):
+                    record_opinfo_oracle_failure(
+                        "forward",
+                        op_name,
+                        dtype_str,
+                        "cpu_reference",
+                        e,
+                        input_condition=input_condition,
+                        sample_index=i,
+                        nodeid=request.node.nodeid,
+                    )
+                    cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
+                    continue
+                if input_condition != InputCondition.CLEAN:
+                    cpu_error = e  # For NaN/Inf tiers, capture error for comparison
+                else:
+                    record_opinfo_oracle_failure(
+                        "forward",
+                        op_name,
+                        dtype_str,
+                        "cpu_clean_reference",
+                        e,
+                        input_condition=input_condition,
+                        sample_index=i,
+                        nodeid=request.node.nodeid,
+                    )
+                    cpu_failures.append(f"sample {i}: {type(e).__name__}: {e}")
+                    continue
 
         # Run target device op
         dev_error = None
@@ -343,7 +429,14 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
             if input_condition != InputCondition.CLEAN:
                 dev_error = e  # For NaN/Inf tiers, capture error for comparison
             else:
-                raise RuntimeError(f"Execution failed on device {device}: {e}") from e
+                reference_detail = (
+                    f"; reference_id={contract_reference.reference_id}"
+                    if contract_reference is not None
+                    else ""
+                )
+                raise RuntimeError(
+                    f"Execution failed on device {device}: {e}{reference_detail}"
+                ) from e
 
         # --- Error matching for NaN/Inf tiers ---
         if input_condition != InputCondition.CLEAN and (cpu_error is not None or dev_error is not None):
@@ -358,13 +451,31 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
                     f"for {op_name} ({input_condition}): {cpu_error}"
                 )
             else:
+                reference_detail = (
+                    f"; reference_id={contract_reference.reference_id}"
+                    if contract_reference is not None
+                    else ""
+                )
                 raise AssertionError(
                     f"Device raised {type(dev_error).__name__} but CPU succeeded "
-                    f"for {op_name} ({input_condition}): {dev_error}"
+                    f"for {op_name} ({input_condition}): {dev_error}{reference_detail}"
                 )
 
         # --- Comparison logic ---
-        if compare_non_unique_output_if_applicable(
+        if contract_reference is not None:
+            try:
+                _assert_reference_metadata(
+                    actual,
+                    expected,
+                    expected_device=device,
+                )
+                _compare_recursive(actual, expected, contract_reference.category, dtype, compare)
+            except AssertionError as exc:
+                raise AssertionError(
+                    f"Permanent contract reference {contract_reference.reference_id} failed for "
+                    f"{op_name} sample {i}: {exc}"
+                ) from exc
+        elif compare_non_unique_output_if_applicable(
             op_name,
             actual,
             expected,
@@ -414,21 +525,36 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
 def _compare_recursive(act, exp, category, dtype, compare):
     """Value comparison for deterministic ops."""
     __tracebackhide__ = True
-    if isinstance(act, torch.Tensor) and isinstance(exp, torch.Tensor):
+    if isinstance(exp, torch.Tensor):
+        assert isinstance(act, torch.Tensor), (
+            f"Output type mismatch: got {type(act).__name__}, expected Tensor"
+        )
         compare(act, exp, category=category, dtype=dtype)
-    elif isinstance(act, (list, tuple)) and isinstance(exp, (list, tuple)):
+    elif isinstance(exp, (list, tuple)):
+        assert type(act) is type(exp), (
+            f"Output sequence type mismatch: got {type(act).__name__}, "
+            f"expected {type(exp).__name__}"
+        )
         assert len(act) == len(exp), (
             f"Output sequence lengths differ: got {len(act)}, expected {len(exp)}"
         )
         for a, e in zip(act, exp):
             _compare_recursive(a, e, category, dtype, compare)
-    elif isinstance(act, dict) and isinstance(exp, dict):
-        assert len(act) == len(exp), (
-            f"Output dict sizes differ: got {len(act)}, expected {len(exp)}"
+    elif isinstance(exp, dict):
+        assert isinstance(act, dict), (
+            f"Output mapping type mismatch: got {type(act).__name__}, expected dict"
         )
-        for k in act:
-            assert k in exp, f"Key {k} not in CPU reference output keys"
+        assert set(act) == set(exp), (
+            f"Output dict keys differ: got {set(act)}, expected {set(exp)}"
+        )
+        for k in exp:
             _compare_recursive(act[k], exp[k], category, dtype, compare)
+    else:
+        assert type(act) is type(exp), (
+            f"Output leaf type mismatch: got {type(act).__name__}, "
+            f"expected {type(exp).__name__}"
+        )
+        assert act == exp, f"Output leaf mismatch: got {act!r}, expected {exp!r}"
 
 
 def _run_stable_sort_tests(samples, op_fn, device, category, dtype, compare):

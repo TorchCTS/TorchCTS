@@ -8,7 +8,11 @@
 
 from __future__ import annotations
 
+import itertools
+import math
+
 import torch
+import torch.nn.functional as F
 
 
 def _complex32_dtype() -> torch.dtype | None:
@@ -383,3 +387,136 @@ def dynamic_int4_matmul_reference(
             raise ValueError(f"dynamic int4 bias must have shape ({out_features},), got {tuple(bias_cpu.shape)}")
         result = result + bias_cpu
     return result.to(input_tensor.dtype)
+
+
+def complex_unit_alpha_add_sub_reference(
+    operation: str,
+    left: torch.Tensor,
+    right: torch.Tensor,
+) -> torch.Tensor:
+    """Compute complex add/sub/rsub without multiplying by ``1+0j``."""
+
+    left_cpu, right_cpu = torch.broadcast_tensors(left.detach().cpu(), right.detach().cpu())
+    if not left_cpu.is_complex() or not right_cpu.is_complex():
+        raise ValueError("unit-alpha complex reference requires two complex tensors")
+    if operation == "add":
+        real = left_cpu.real + right_cpu.real
+        imag = left_cpu.imag + right_cpu.imag
+    elif operation == "sub":
+        real = left_cpu.real - right_cpu.real
+        imag = left_cpu.imag - right_cpu.imag
+    elif operation == "rsub":
+        real = right_cpu.real - left_cpu.real
+        imag = right_cpu.imag - left_cpu.imag
+    else:
+        raise ValueError(f"unsupported unit-alpha operation {operation!r}")
+    return torch.complex(real, imag).to(left_cpu.dtype)
+
+
+def _nonnegative_integral_exponent_mask(exponent: torch.Tensor) -> torch.Tensor:
+    exponent_cpu = exponent.detach().cpu()
+    if not exponent_cpu.is_complex():
+        return torch.zeros(exponent_cpu.shape, dtype=torch.bool)
+    real = exponent_cpu.real
+    return (
+        torch.isfinite(real)
+        & torch.isfinite(exponent_cpu.imag)
+        & (exponent_cpu.imag == 0)
+        & (real >= 0)
+        & (real == torch.trunc(real))
+    )
+
+
+def has_nonnegative_integral_complex_exponent(exponent: torch.Tensor) -> bool:
+    return bool(_nonnegative_integral_exponent_mask(exponent).any())
+
+
+def _complex_integer_power_scalar(base: torch.Tensor, exponent: int) -> torch.Tensor:
+    if exponent < 0:
+        raise ValueError("integer-power reference accepts non-negative exponents only")
+    if exponent == 0:
+        return torch.ones((), dtype=base.dtype)
+    if exponent == 1:
+        return base.clone()
+
+    result = None
+    factor = base
+    remaining = exponent
+    while remaining:
+        if remaining & 1:
+            result = factor.clone() if result is None else torch.mul(result, factor)
+        remaining >>= 1
+        if remaining:
+            factor = torch.mul(factor, factor)
+    return result
+
+
+def complex_tensor_integer_power_reference(
+    base: torch.Tensor,
+    exponent: torch.Tensor,
+    native_result: torch.Tensor,
+) -> torch.Tensor:
+    """Patch exact non-negative integer exponent lanes in a native power result."""
+
+    base_cpu, exponent_cpu = torch.broadcast_tensors(base.detach().cpu(), exponent.detach().cpu())
+    if not base_cpu.is_complex() or not exponent_cpu.is_complex():
+        raise ValueError("complex tensor-power reference requires complex base and exponent tensors")
+    result = native_result.detach().cpu().clone()
+    if tuple(result.shape) != tuple(base_cpu.shape):
+        raise ValueError(
+            f"native power result shape {tuple(result.shape)} does not match broadcast shape {tuple(base_cpu.shape)}"
+        )
+    mask = _nonnegative_integral_exponent_mask(exponent_cpu).reshape(-1)
+    base_flat = base_cpu.reshape(-1)
+    exponent_flat = exponent_cpu.reshape(-1)
+    result_flat = result.reshape(-1)
+    for index in mask.nonzero(as_tuple=False).reshape(-1).tolist():
+        exponent_value = int(exponent_flat[index].real.item())
+        corrected = _complex_integer_power_scalar(
+            base_flat[index].to(result.dtype),
+            exponent_value,
+        )
+        result_flat[index] = corrected
+    return result
+
+
+def complex_l1_loss_reference(
+    input_tensor: torch.Tensor,
+    target: torch.Tensor,
+    reduction,
+) -> torch.Tensor:
+    """Compute L1 loss using independent real and imaginary subtraction lanes."""
+
+    input_cpu, target_cpu = torch.broadcast_tensors(input_tensor.detach().cpu(), target.detach().cpu())
+    if not (input_cpu.is_complex() or target_cpu.is_complex()):
+        raise ValueError("complex L1 reference requires at least one complex operand")
+    real_dtype = (
+        torch.float64
+        if any(dtype in {torch.float64, torch.complex128} for dtype in (input_cpu.dtype, target_cpu.dtype))
+        else torch.float32
+    )
+
+    def lanes(value):
+        if value.is_complex():
+            return value.real.to(real_dtype), value.imag.to(real_dtype)
+        return value.to(real_dtype), torch.zeros_like(value, dtype=real_dtype)
+
+    input_real, input_imag = lanes(input_cpu)
+    target_real, target_imag = lanes(target_cpu)
+    magnitude = torch.hypot(input_real - target_real, input_imag - target_imag)
+    if reduction in ("none", 0):
+        return magnitude
+    if reduction in ("mean", 1, None):
+        return magnitude.mean()
+    if reduction in ("sum", 2):
+        return magnitude.sum()
+    raise ValueError(f"unsupported L1 reduction {reduction!r}")
+
+
+def complex_log2_reference(input_tensor: torch.Tensor) -> torch.Tensor:
+    input_cpu = input_tensor.detach().cpu()
+    if not input_cpu.is_complex():
+        raise ValueError("complex log2 reference requires a complex tensor")
+    natural = torch.log(input_cpu)
+    scale = 1.0 / math.log(2.0)
+    return torch.complex(natural.real * scale, natural.imag * scale).to(input_cpu.dtype)

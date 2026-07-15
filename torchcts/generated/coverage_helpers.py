@@ -21,6 +21,7 @@ import torch
 
 from torchcts.core.coverage import generated_entries_for
 from torchcts.core.comparer import compare_inf_propagation, compare_nan_propagation
+from torchcts.core.contract_references import ContractReferenceError, resolve_generated_forward_reference
 from torchcts.core.device import synchronize
 from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 from torchcts.core.oracles import OracleUnavailable, oracle_collection_skip_for_surface, run_oracle_for_surface
@@ -782,6 +783,90 @@ def _compare_special_tier(actual, expected, input_condition: str) -> None:
             _compare_special_tier(actual[key], expected[key], input_condition)
 
 
+def _compare_contract_tensor(actual, contract_reference, dtype, compare, *, expected_device) -> None:
+    try:
+        _assert_contract_metadata(
+            actual,
+            contract_reference.value,
+            expected_device=expected_device,
+        )
+        compare(
+            actual,
+            contract_reference.value,
+            category=contract_reference.category,
+            dtype=dtype,
+        )
+    except AssertionError as exc:
+        raise AssertionError(
+            f"Permanent contract reference {contract_reference.reference_id} failed: {exc}"
+        ) from exc
+
+
+def _contract_reference_detail(contract_reference) -> str:
+    if contract_reference is None:
+        return ""
+    return f"; reference_id={contract_reference.reference_id}"
+
+
+def _assert_contract_reference_metadata(actual, contract_reference, *, expected_device) -> None:
+    try:
+        _assert_contract_metadata(
+            actual,
+            contract_reference.value,
+            expected_device=expected_device,
+        )
+    except AssertionError as exc:
+        raise AssertionError(
+            f"Permanent contract reference {contract_reference.reference_id} metadata failed: {exc}"
+        ) from exc
+
+
+def _assert_contract_metadata(actual, expected, path="output", *, expected_device) -> None:
+    if isinstance(expected, torch.Tensor):
+        if not isinstance(actual, torch.Tensor):
+            raise AssertionError(f"{path} type mismatch: {type(actual).__name__} vs Tensor")
+        expected_device_type = torch.device(expected_device).type
+        if actual.device.type != expected_device_type:
+            raise AssertionError(
+                f"{path} device mismatch: {actual.device.type} vs {expected_device_type}"
+            )
+        if actual.dtype != expected.dtype:
+            raise AssertionError(f"{path} dtype mismatch: {actual.dtype} vs {expected.dtype}")
+        if tuple(actual.shape) != tuple(expected.shape):
+            raise AssertionError(
+                f"{path} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}"
+            )
+        return
+    if isinstance(expected, (list, tuple)):
+        if not isinstance(actual, type(expected)) or len(actual) != len(expected):
+            raise AssertionError(
+                f"{path} structure mismatch: {type(actual).__name__} vs {type(expected).__name__}"
+            )
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected)):
+            _assert_contract_metadata(
+                actual_item,
+                expected_item,
+                f"{path}[{index}]",
+                expected_device=expected_device,
+            )
+        return
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict) or set(actual) != set(expected):
+            raise AssertionError(f"{path} mapping structure mismatch")
+        for key in expected:
+            _assert_contract_metadata(
+                actual[key],
+                expected[key],
+                f"{path}[{key!r}]",
+                expected_device=expected_device,
+            )
+        return
+    if type(actual) is not type(expected):
+        raise AssertionError(
+            f"{path} type mismatch: {type(actual).__name__} vs {type(expected).__name__}"
+        )
+
+
 def _run_opinfo_out_sample(
     *,
     entry: dict,
@@ -799,21 +884,30 @@ def _run_opinfo_out_sample(
     cpu_args = _move_to_device(sample.args, "cpu")
     cpu_kwargs = _move_to_device(sample.kwargs, "cpu")
 
-    try:
-        expected = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
-    except Exception as exc:
-        if is_cpu_reference_failure(exc):
-            opinfo_name = entry["generated"]["strategy"]["opinfo_name"]
-            record_opinfo_oracle_failure(
-                "generated_out",
-                opinfo_name,
-                dtype_str,
-                "cpu_reference",
-                exc,
-                input_condition=input_condition,
-                sample_index=sample_index,
-            )
-        return False
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        sample,
+        dtype,
+        input_condition,
+    )
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            expected = op_fn(cpu_input, *cpu_args, **cpu_kwargs)
+        except Exception as exc:
+            if is_cpu_reference_failure(exc):
+                opinfo_name = entry["generated"]["strategy"]["opinfo_name"]
+                record_opinfo_oracle_failure(
+                    "generated_out",
+                    opinfo_name,
+                    dtype_str,
+                    "cpu_reference",
+                    exc,
+                    input_condition=input_condition,
+                    sample_index=sample_index,
+                )
+            return False
 
     if not isinstance(expected, torch.Tensor):
         pytest.skip(f"coverage_strategy_pending: {entry['name']} produced non-tensor output")
@@ -836,11 +930,36 @@ def _run_opinfo_out_sample(
             raise AssertionError(
                 f"{entry['name']} device raised {type(exc).__name__} for {input_condition} "
                 "after CPU functional reference succeeded"
+                f"{_contract_reference_detail(contract_reference)}"
             ) from exc
-        raise RuntimeError(f"{entry['name']} out= execution failed on {device}: {exc}") from exc
+        raise RuntimeError(
+            f"{entry['name']} out= execution failed on {device}: {exc}"
+            f"{_contract_reference_detail(contract_reference)}"
+        ) from exc
 
-    _assert_out_identity(actual, out, entry["name"])
-    if input_condition != InputCondition.CLEAN:
+    try:
+        _assert_out_identity(actual, out, entry["name"])
+    except AssertionError as exc:
+        if contract_reference is not None:
+            raise AssertionError(
+                f"Permanent contract reference {contract_reference.reference_id} identity failed: {exc}"
+            ) from exc
+        raise
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(
+            actual,
+            contract_reference,
+            expected_device=device,
+        )
+    elif contract_reference is not None:
+        _compare_contract_tensor(
+            actual,
+            contract_reference,
+            dtype,
+            compare,
+            expected_device=device,
+        )
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category=category, dtype=dtype)
@@ -930,12 +1049,21 @@ def _run_opinfo_inplace_unary_sample(
     cpu_args = _move_to_device(sample.args, "cpu")
     cpu_kwargs = _move_to_device(sample.kwargs, "cpu")
 
-    try:
-        cpu_actual = inplace_fn(cpu_input, *cpu_args, **cpu_kwargs)
-    except Exception:
-        return False
-
-    _assert_inplace_identity(cpu_actual, cpu_input, entry["name"])
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        sample,
+        dtype,
+        input_condition,
+    )
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            cpu_actual = inplace_fn(cpu_input, *cpu_args, **cpu_kwargs)
+        except Exception:
+            return False
+        _assert_inplace_identity(cpu_actual, cpu_input, entry["name"])
+        expected = cpu_input
 
     dev_input = _move_to_device(sample.input, device)
     if not isinstance(dev_input, torch.Tensor):
@@ -952,14 +1080,39 @@ def _run_opinfo_inplace_unary_sample(
             raise AssertionError(
                 f"{entry['name']} device raised {type(exc).__name__} for {input_condition} "
                 "after CPU in-place reference succeeded"
+                f"{_contract_reference_detail(contract_reference)}"
             ) from exc
-        raise RuntimeError(f"{entry['name']} in-place execution failed on {device}: {exc}") from exc
+        raise RuntimeError(
+            f"{entry['name']} in-place execution failed on {device}: {exc}"
+            f"{_contract_reference_detail(contract_reference)}"
+        ) from exc
 
-    _assert_inplace_identity(actual, dev_input, entry["name"])
-    if input_condition != InputCondition.CLEAN:
-        _compare_special_tier(dev_input, cpu_input, input_condition)
+    try:
+        _assert_inplace_identity(actual, dev_input, entry["name"])
+    except AssertionError as exc:
+        if contract_reference is not None:
+            raise AssertionError(
+                f"Permanent contract reference {contract_reference.reference_id} identity failed: {exc}"
+            ) from exc
+        raise
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(
+            dev_input,
+            contract_reference,
+            expected_device=device,
+        )
+    elif contract_reference is not None:
+        _compare_contract_tensor(
+            dev_input,
+            contract_reference,
+            dtype,
+            compare,
+            expected_device=device,
+        )
+    elif input_condition != InputCondition.CLEAN:
+        _compare_special_tier(dev_input, expected, input_condition)
     else:
-        compare(dev_input, cpu_input, category=category, dtype=dtype)
+        compare(dev_input, expected, category=category, dtype=dtype)
     return True
 
 
@@ -2412,31 +2565,40 @@ def _run_manual_special_math_case(
     cpu_kwargs = sample.kwargs
     surface_kind = entry.get("surface_kind")
     schema = entry.get("schema", "")
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        sample,
+        dtype,
+        input_condition,
+    )
 
-    try:
-        if surface_kind == "out_variant":
-            functional_op = _functional_dispatcher_callable(entry)
-            functional_expected = functional_op(cpu_input, *cpu_args, **cpu_kwargs)
-            if not isinstance(functional_expected, torch.Tensor):
-                return False
-            expected = torch.empty_strided(
-                tuple(functional_expected.shape),
-                tuple(functional_expected.stride()),
-                dtype=functional_expected.dtype,
-                device="cpu",
-            )
-            returned = callable_op(cpu_input, *cpu_args, **cpu_kwargs, out=expected)
-            _assert_out_identity(returned, expected, entry["name"])
-        elif surface_kind == "mutating_or_inplace":
-            if not isinstance(cpu_input, torch.Tensor):
-                return False
-            expected = _clone_writable_input(cpu_input)
-            returned = callable_op(expected, *cpu_args, **cpu_kwargs)
-            _assert_inplace_identity(returned, expected, entry["name"])
-        else:
-            expected = callable_op(cpu_input, *cpu_args, **cpu_kwargs)
-    except Exception:
-        return False
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            if surface_kind == "out_variant":
+                functional_op = _functional_dispatcher_callable(entry)
+                functional_expected = functional_op(cpu_input, *cpu_args, **cpu_kwargs)
+                if not isinstance(functional_expected, torch.Tensor):
+                    return False
+                expected = torch.empty_strided(
+                    tuple(functional_expected.shape),
+                    tuple(functional_expected.stride()),
+                    dtype=functional_expected.dtype,
+                    device="cpu",
+                )
+                returned = callable_op(cpu_input, *cpu_args, **cpu_kwargs, out=expected)
+                _assert_out_identity(returned, expected, entry["name"])
+            elif surface_kind == "mutating_or_inplace":
+                if not isinstance(cpu_input, torch.Tensor):
+                    return False
+                expected = _clone_writable_input(cpu_input)
+                returned = callable_op(expected, *cpu_args, **cpu_kwargs)
+                _assert_inplace_identity(returned, expected, entry["name"])
+            else:
+                expected = callable_op(cpu_input, *cpu_args, **cpu_kwargs)
+        except Exception:
+            return False
 
     if not isinstance(expected, torch.Tensor):
         return False
@@ -2470,11 +2632,29 @@ def _run_manual_special_math_case(
         raise RuntimeError(
             f"{entry['name']} special-math execution failed on {device}: "
             f"{type(exc).__name__}: {exc}; schema={schema}; input_condition={input_condition}"
+            f"{_contract_reference_detail(contract_reference)}"
         ) from exc
 
     if not isinstance(actual, torch.Tensor):
-        raise AssertionError(f"{entry['name']} returned {type(actual).__name__}, expected Tensor; schema={schema}")
-    if input_condition != InputCondition.CLEAN:
+        raise AssertionError(
+            f"{entry['name']} returned {type(actual).__name__}, expected Tensor; schema={schema}"
+            f"{_contract_reference_detail(contract_reference)}"
+        )
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(
+            actual,
+            contract_reference,
+            expected_device=device,
+        )
+    elif contract_reference is not None:
+        _compare_contract_tensor(
+            actual,
+            contract_reference,
+            dtype,
+            compare,
+            expected_device=device,
+        )
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="elementwise", dtype=dtype)
@@ -2601,31 +2781,40 @@ def _run_manual_elementwise_case(
     cpu_kwargs = sample.kwargs
     surface_kind = entry.get("surface_kind")
     schema = entry.get("schema", "")
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        sample,
+        dtype,
+        input_condition,
+    )
 
-    try:
-        if surface_kind == "out_variant":
-            functional_op = _functional_dispatcher_callable(entry)
-            functional_expected = functional_op(cpu_input, *cpu_args, **cpu_kwargs)
-            if not isinstance(functional_expected, torch.Tensor):
-                return False
-            expected = torch.empty_strided(
-                tuple(functional_expected.shape),
-                tuple(functional_expected.stride()),
-                dtype=functional_expected.dtype,
-                device="cpu",
-            )
-            returned = callable_op(cpu_input, *cpu_args, **cpu_kwargs, out=expected)
-            _assert_out_identity(returned, expected, entry["name"])
-        elif surface_kind == "mutating_or_inplace":
-            if not isinstance(cpu_input, torch.Tensor):
-                return False
-            expected = _clone_writable_input(cpu_input)
-            returned = callable_op(expected, *cpu_args, **cpu_kwargs)
-            _assert_inplace_identity(returned, expected, entry["name"])
-        else:
-            expected = callable_op(cpu_input, *cpu_args, **cpu_kwargs)
-    except Exception:
-        return False
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            if surface_kind == "out_variant":
+                functional_op = _functional_dispatcher_callable(entry)
+                functional_expected = functional_op(cpu_input, *cpu_args, **cpu_kwargs)
+                if not isinstance(functional_expected, torch.Tensor):
+                    return False
+                expected = torch.empty_strided(
+                    tuple(functional_expected.shape),
+                    tuple(functional_expected.stride()),
+                    dtype=functional_expected.dtype,
+                    device="cpu",
+                )
+                returned = callable_op(cpu_input, *cpu_args, **cpu_kwargs, out=expected)
+                _assert_out_identity(returned, expected, entry["name"])
+            elif surface_kind == "mutating_or_inplace":
+                if not isinstance(cpu_input, torch.Tensor):
+                    return False
+                expected = _clone_writable_input(cpu_input)
+                returned = callable_op(expected, *cpu_args, **cpu_kwargs)
+                _assert_inplace_identity(returned, expected, entry["name"])
+            else:
+                expected = callable_op(cpu_input, *cpu_args, **cpu_kwargs)
+        except Exception:
+            return False
 
     if not isinstance(expected, torch.Tensor):
         return False
@@ -2658,11 +2847,29 @@ def _run_manual_elementwise_case(
         raise RuntimeError(
             f"{entry['name']} elementwise execution failed on {device}: "
             f"{type(exc).__name__}: {exc}; schema={schema}; input_condition={input_condition}"
+            f"{_contract_reference_detail(contract_reference)}"
         ) from exc
 
     if not isinstance(actual, torch.Tensor):
-        raise AssertionError(f"{entry['name']} returned {type(actual).__name__}, expected Tensor; schema={schema}")
-    if input_condition != InputCondition.CLEAN:
+        raise AssertionError(
+            f"{entry['name']} returned {type(actual).__name__}, expected Tensor; schema={schema}"
+            f"{_contract_reference_detail(contract_reference)}"
+        )
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(
+            actual,
+            contract_reference,
+            expected_device=device,
+        )
+    elif contract_reference is not None:
+        _compare_contract_tensor(
+            actual,
+            contract_reference,
+            dtype,
+            compare,
+            expected_device=device,
+        )
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="elementwise", dtype=dtype)
@@ -4100,7 +4307,7 @@ def _run_loss_once(
     _assert_multi_output_identity(returned, out_kwargs, entry["name"])
     if not isinstance(returned, torch.Tensor):
         raise AssertionError(f"{entry['name']} returned {type(returned).__name__}, expected Tensor")
-    return returned
+    return returned, sample
 
 
 def _run_manual_loss_case(
@@ -4113,18 +4320,49 @@ def _run_manual_loss_case(
     manifest: dict,
 ) -> bool:
     schema = entry.get("schema", "")
-    try:
-        expected = _run_loss_once(entry, callable_op, dtype, input_condition, "cpu", manifest)
-    except Exception:
-        return False
+    cpu_sample = sample_loss(
+        entry,
+        dtype,
+        device="cpu",
+        input_condition=input_condition,
+        seed=manifest.get("ieee754_seed", 67),
+    )
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        cpu_sample,
+        dtype,
+        input_condition,
+    )
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            expected, _cpu_sample = _run_loss_once(
+                entry,
+                callable_op,
+                dtype,
+                input_condition,
+                "cpu",
+                manifest,
+            )
+        except Exception:
+            return False
 
     try:
-        actual = _run_loss_once(entry, callable_op, dtype, input_condition, device, manifest)
+        actual, _device_sample = _run_loss_once(
+            entry,
+            callable_op,
+            dtype,
+            input_condition,
+            device,
+            manifest,
+        )
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
             f"{entry['name']} loss execution failed on {device}: "
             f"{type(exc).__name__}: {exc}; schema={schema}; input_condition={input_condition}; dtype={dtype}"
+            f"{_contract_reference_detail(contract_reference)}"
         ) from exc
 
     if actual.device.type != torch.device(device).type:
@@ -4133,7 +4371,21 @@ def _run_manual_loss_case(
         raise AssertionError(f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}")
     if tuple(actual.shape) != tuple(expected.shape):
         raise AssertionError(f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}")
-    if input_condition != InputCondition.CLEAN:
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(
+            actual,
+            contract_reference,
+            expected_device=device,
+        )
+    elif contract_reference is not None:
+        _compare_contract_tensor(
+            actual,
+            contract_reference,
+            dtype,
+            compare,
+            expected_device=device,
+        )
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="reduction", dtype=dtype)
@@ -4614,7 +4866,16 @@ def _empty_like_tensor_list(tensors, device: str):
     ]
 
 
-def _compare_tensor_list(actual, expected, input_condition: str, dtype, compare, category: str) -> None:
+def _compare_tensor_list(
+    actual,
+    expected,
+    input_condition: str,
+    dtype,
+    compare,
+    category: str,
+    *,
+    full_special: bool = False,
+) -> None:
     if not isinstance(actual, (list, tuple)) or not isinstance(expected, (list, tuple)):
         raise AssertionError(f"Expected Tensor list outputs, got {type(actual).__name__} and {type(expected).__name__}")
     if len(actual) != len(expected):
@@ -4622,7 +4883,7 @@ def _compare_tensor_list(actual, expected, input_condition: str, dtype, compare,
     for actual_item, expected_item in zip(actual, expected):
         if not isinstance(actual_item, torch.Tensor) or not isinstance(expected_item, torch.Tensor):
             raise AssertionError("Foreach output list contains a non-Tensor value")
-        if input_condition != InputCondition.CLEAN:
+        if input_condition != InputCondition.CLEAN and not full_special:
             _compare_special_tier(actual_item, expected_item, input_condition)
         else:
             compare(actual_item, expected_item, category=category, dtype=dtype)
@@ -4658,28 +4919,38 @@ def run_manual_foreach_strategy(
             cpu_self = sample.input
             cpu_args = sample.args
             cpu_kwargs = sample.kwargs
-            try:
-                if surface_kind == "out_variant":
-                    expected_out = _empty_like_tensor_list(cpu_self, "cpu")
-                    returned = callable_op(cpu_self, *cpu_args, **cpu_kwargs, out=expected_out)
-                    if returned is not None:
-                        raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for out variant")
-                    expected = expected_out
-                elif surface_kind == "mutating_or_inplace":
-                    expected = [_clone_writable_input(item) for item in cpu_self]
-                    expected_before = [item.detach().clone(memory_format=torch.preserve_format) for item in expected]
-                    returned = callable_op(expected, *cpu_args, **cpu_kwargs)
-                    if returned is not None:
-                        raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for in-place variant")
-                    expected_changed = any(
-                        not _tensor_content_equal(after, before_item)
-                        for after, before_item in zip(expected, expected_before)
-                    )
-                else:
-                    expected = callable_op(cpu_self, *cpu_args, **cpu_kwargs)
-                    expected_changed = False
-            except Exception:
-                continue
+            contract_reference = resolve_generated_forward_reference(
+                entry["name"],
+                sample,
+                case_dtype,
+                input_condition,
+            )
+            if contract_reference is not None:
+                expected = contract_reference.value
+                expected_changed = surface_kind == "mutating_or_inplace"
+            else:
+                try:
+                    if surface_kind == "out_variant":
+                        expected_out = _empty_like_tensor_list(cpu_self, "cpu")
+                        returned = callable_op(cpu_self, *cpu_args, **cpu_kwargs, out=expected_out)
+                        if returned is not None:
+                            raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for out variant")
+                        expected = expected_out
+                    elif surface_kind == "mutating_or_inplace":
+                        expected = [_clone_writable_input(item) for item in cpu_self]
+                        expected_before = [item.detach().clone(memory_format=torch.preserve_format) for item in expected]
+                        returned = callable_op(expected, *cpu_args, **cpu_kwargs)
+                        if returned is not None:
+                            raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for in-place variant")
+                        expected_changed = any(
+                            not _tensor_content_equal(after, before_item)
+                            for after, before_item in zip(expected, expected_before)
+                        )
+                    else:
+                        expected = callable_op(cpu_self, *cpu_args, **cpu_kwargs)
+                        expected_changed = False
+                except Exception:
+                    continue
 
             dev_self = _move_to_device(cpu_self, device)
             dev_args = _move_foreach_args_to_device(entry, cpu_args, device)
@@ -4707,18 +4978,49 @@ def run_manual_foreach_strategy(
                     actual = callable_op(dev_self, *dev_args, **dev_kwargs)
                 synchronize(device)
             except Exception as exc:
-                raise RuntimeError(f"{entry['name']} foreach execution failed on {device}: {exc}") from exc
+                raise RuntimeError(
+                    f"{entry['name']} foreach execution failed on {device}: {exc}"
+                    f"{_contract_reference_detail(contract_reference)}"
+                ) from exc
 
-            _compare_tensor_list(actual, expected, input_condition, case_dtype, compare, "elementwise")
+            try:
+                if contract_reference is not None:
+                    _assert_contract_reference_metadata(
+                        actual,
+                        contract_reference,
+                        expected_device=device,
+                    )
+                if contract_reference is None or torch.device(device).type != "cpu":
+                    _compare_tensor_list(
+                        actual,
+                        expected,
+                        input_condition,
+                        case_dtype,
+                        compare,
+                        contract_reference.category if contract_reference is not None else "elementwise",
+                        full_special=contract_reference is not None,
+                    )
+            except AssertionError as exc:
+                if contract_reference is not None:
+                    raise AssertionError(
+                        f"Permanent contract reference {contract_reference.reference_id} failed: {exc}"
+                    ) from exc
+                raise
             if surface_kind == "functional_data":
                 if isinstance(dev_self, (list, tuple)):
                     for actual_item, input_item in zip(actual, dev_self):
                         if _shares_storage_alias(actual_item, input_item):
-                            raise AssertionError(f"{entry['name']} returned an alias from a functional foreach overload")
+                            raise AssertionError(
+                                f"{entry['name']} returned an alias from a functional foreach overload"
+                                f"{_contract_reference_detail(contract_reference)}"
+                            )
             elif surface_kind == "out_variant":
                 for actual_item, out_item in zip(actual, actual_out):
                     if not _shares_storage_alias(actual_item, out_item):
-                        raise AssertionError(f"{entry['name']} did not write through the provided out tensor")
+                        raise AssertionError(
+                            f"{entry['name']} did not write through the provided out tensor"
+                            f"{_contract_reference_detail(contract_reference)}"
+                        )
             tested_any = True
 
     if not tested_any:
