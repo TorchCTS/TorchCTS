@@ -589,3 +589,162 @@ def embedding_bag_scale_grad_by_freq_reference(
         bag = int(bags_cpu[position].item())
         result[row] += grad_cpu[bag] / frequency
     return result
+
+
+_COMPLEX_CONV_FUNCTIONS = {
+    "nn.functional.conv1d": (F.conv1d, False),
+    "nn.functional.conv2d": (F.conv2d, False),
+    "nn.functional.conv3d": (F.conv3d, False),
+    "nn.functional.conv_transpose1d": (F.conv_transpose1d, True),
+    "nn.functional.conv_transpose2d": (F.conv_transpose2d, True),
+    "nn.functional.conv_transpose3d": (F.conv_transpose3d, True),
+}
+
+
+def complex_convolution_reference(
+    op_name: str,
+    input_tensor: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+    kwargs: dict,
+) -> torch.Tensor:
+    """Fast direct four-real-convolution reference for complex convolution."""
+
+    if op_name not in _COMPLEX_CONV_FUNCTIONS:
+        raise ValueError(f"unsupported complex convolution operation {op_name!r}")
+    if not input_tensor.is_complex() or not weight.is_complex():
+        raise ValueError("complex convolution reference requires complex input and weight")
+    fn, _transposed = _COMPLEX_CONV_FUNCTIONS[op_name]
+    x = input_tensor.detach().cpu()
+    w = weight.detach().cpu()
+    call_kwargs = dict(kwargs)
+    rr = fn(x.real, w.real, None, **call_kwargs)
+    ii = fn(x.imag, w.imag, None, **call_kwargs)
+    ri = fn(x.real, w.imag, None, **call_kwargs)
+    ir = fn(x.imag, w.real, None, **call_kwargs)
+    real = rr - ii
+    imag = ri + ir
+    if bias is not None:
+        bias_cpu = bias.detach().cpu()
+        unbatched = x.dim() + 1 == w.dim()
+        shape = (bias_cpu.numel(),) + (1,) * (real.dim() - 1) if unbatched else (
+            1,
+            bias_cpu.numel(),
+            *((1,) * (real.dim() - 2)),
+        )
+        real = real + bias_cpu.real.reshape(shape)
+        imag = imag + bias_cpu.imag.reshape(shape)
+    return torch.complex(real, imag).to(x.dtype)
+
+
+def _expand_conv_arg(value, dims: int, default: int) -> tuple[int, ...]:
+    if value is None:
+        return (default,) * dims
+    if isinstance(value, int):
+        return (value,) * dims
+    values = tuple(int(item) for item in value)
+    if len(values) == 1:
+        return values * dims
+    if len(values) != dims:
+        raise ValueError(f"expected {dims} convolution values, got {values}")
+    return values
+
+
+def slow_complex_convolution_reference(
+    op_name: str,
+    input_tensor: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+    kwargs: dict,
+) -> torch.Tensor:
+    """Small-shape term-wise proof oracle for ``complex_convolution_reference``."""
+
+    if op_name not in _COMPLEX_CONV_FUNCTIONS:
+        raise ValueError(f"unsupported complex convolution operation {op_name!r}")
+    _fn, transposed = _COMPLEX_CONV_FUNCTIONS[op_name]
+    x = input_tensor.detach().cpu()
+    w = weight.detach().cpu()
+    unbatched = x.dim() + 1 == w.dim()
+    if unbatched:
+        x = x.unsqueeze(0)
+    dims = w.dim() - 2
+    stride = _expand_conv_arg(kwargs.get("stride"), dims, 1)
+    dilation = _expand_conv_arg(kwargs.get("dilation"), dims, 1)
+    output_padding = _expand_conv_arg(kwargs.get("output_padding"), dims, 0)
+    groups = int(kwargs.get("groups", 1))
+    padding_arg = kwargs.get("padding", 0)
+    same_padding = False
+    if isinstance(padding_arg, str):
+        if padding_arg == "valid":
+            padding = (0,) * dims
+        elif padding_arg == "same":
+            if transposed:
+                raise ValueError("transposed convolution does not accept padding='same'")
+            same_padding = True
+            padding = tuple(
+                dilation[i] * (w.shape[i + 2] - 1) // 2
+                for i in range(dims)
+            )
+        else:
+            raise ValueError(f"unsupported padding string {padding_arg!r}")
+    else:
+        padding = _expand_conv_arg(padding_arg, dims, 0)
+
+    in_spatial = tuple(x.shape[2:])
+    kernel = tuple(w.shape[2:])
+    if transposed:
+        out_spatial = tuple(
+            (in_spatial[i] - 1) * stride[i] - 2 * padding[i]
+            + dilation[i] * (kernel[i] - 1) + output_padding[i] + 1
+            for i in range(dims)
+        )
+        out_channels = w.shape[1] * groups
+    else:
+        if same_padding:
+            out_spatial = in_spatial
+        else:
+            out_spatial = tuple(
+                (in_spatial[i] + 2 * padding[i] - dilation[i] * (kernel[i] - 1) - 1)
+                // stride[i] + 1
+                for i in range(dims)
+            )
+        out_channels = w.shape[0]
+    result = torch.empty((x.shape[0], out_channels, *out_spatial), dtype=x.dtype)
+    in_channels_per_group = x.shape[1] // groups
+    out_channels_per_group = out_channels // groups
+    for batch in range(x.shape[0]):
+        for out_channel in range(out_channels):
+            group = out_channel // out_channels_per_group
+            out_channel_in_group = out_channel % out_channels_per_group
+            for out_coord in itertools.product(*(range(size) for size in out_spatial)):
+                accumulator = complex(bias[out_channel].item()) if bias is not None else 0j
+                for in_channel_in_group in range(in_channels_per_group):
+                    in_channel = group * in_channels_per_group + in_channel_in_group
+                    for kernel_coord in itertools.product(*(range(size) for size in kernel)):
+                        input_coord = []
+                        valid = True
+                        for axis in range(dims):
+                            if transposed:
+                                coord = out_coord[axis] + padding[axis] - kernel_coord[axis] * dilation[axis]
+                                if coord < 0 or coord % stride[axis]:
+                                    valid = False
+                                    break
+                                coord //= stride[axis]
+                            else:
+                                coord = out_coord[axis] * stride[axis] - padding[axis] + kernel_coord[axis] * dilation[axis]
+                            if coord < 0 or coord >= in_spatial[axis]:
+                                valid = False
+                            input_coord.append(coord)
+                        if transposed and not valid:
+                            continue
+                        input_value = x[(batch, in_channel, *input_coord)] if valid else torch.zeros((), dtype=x.dtype)
+                        weight_value = w[
+                            (in_channel, out_channel_in_group, *kernel_coord)
+                            if transposed
+                            else (out_channel, in_channel_in_group, *kernel_coord)
+                        ]
+                        accumulator += complex(torch.mul(input_value, weight_value).item())
+                        if x.dtype == torch.complex64:
+                            accumulator = complex(torch.tensor(accumulator, dtype=torch.complex64).item())
+                result[(batch, out_channel, *out_coord)] = accumulator
+    return result.squeeze(0) if unbatched else result

@@ -125,3 +125,26 @@ results/<hardware-key>_opinfo_oracle_failures_<pid>.jsonl
 These records help explain CPU-reference invalidity or sample construction
 failures. They do not change collection, skipping, xfail behavior, pass
 semantics, or failure semantics.
+
+## Permanent Contract References
+
+Some PyTorch CPU implementations are executable but are not valid semantic
+oracles for a backend. TorchCTS uses narrowly routed, permanent references for
+those cases. Routing is based on the exact operation, dtype, input condition,
+and argument contract; it is not gated by the installed PyTorch version.
+
+The current permanent references cover real-unit-alpha complex add/subtract,
+exact non-negative complex tensor integer powers, complex L1 loss, complex
+`log2`, complex convolution special values, low-precision 3-D grid-sampler
+backward, bf16 transposed 3-D convolution, and dense EmbeddingBag frequency
+scaling. A matched reference never silently falls back to the CPU operation if
+reference construction fails.
+
+Contract-backed NaN/Inf cases use normal value comparison, including finite
+lanes, infinity signs, and complex phase. They are not reduced to propagation
+mask checks.
+
+When CPU is the selected target, TorchCTS preserves validation-mode behavior:
+the operation is executed as a smoke check, but known-bad CPU numerical output
+is not compared against the permanent contract reference. The reference
+mathematics is validated independently by `torchcts/selftest`.

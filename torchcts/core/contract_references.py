@@ -27,6 +27,7 @@ from numbers import Number
 import torch
 
 from torchcts.core.reference_oracles import (
+    complex_convolution_reference,
     complex_l1_loss_reference,
     complex_log2_reference,
     complex_tensor_integer_power_reference,
@@ -84,6 +85,14 @@ _GENERATED_LOG2 = frozenset({
     "aten::_foreach_log2.out",
 })
 
+_COMPLEX_CONV_OPS = frozenset({
+    "nn.functional.conv1d",
+    "nn.functional.conv2d",
+    "nn.functional.conv3d",
+    "nn.functional.conv_transpose1d",
+    "nn.functional.conv_transpose2d",
+    "nn.functional.conv_transpose3d",
+})
 _TRANSPOSED_COMPLEX_CONV_OPS = frozenset({
     "nn.functional.conv_transpose1d",
     "nn.functional.conv_transpose2d",
@@ -288,6 +297,28 @@ def resolve_opinfo_forward_reference(
             "conv",
             lambda: conv_transpose3d_f32_reference(sample.input, weight, bias, **conv_kwargs),
         )
+
+    if op_name in _COMPLEX_CONV_OPS and dtype in _COMPLEX_DTYPES and condition in _SPECIAL_CONDITIONS:
+        normalized = _normalize_conv_arguments(op_name, sample)
+        if normalized is None:
+            return None
+        weight, bias, conv_kwargs = normalized
+        if weight.dtype != dtype or sample.input.dtype != dtype:
+            return None
+        if bias is not None and (not isinstance(bias, torch.Tensor) or bias.dtype != dtype):
+            return None
+        return _build(
+            "complex_convolution_four_real",
+            "conv",
+            lambda: complex_convolution_reference(
+                op_name,
+                sample.input,
+                weight,
+                bias,
+                conv_kwargs,
+            ),
+        )
+
     return None
 
 

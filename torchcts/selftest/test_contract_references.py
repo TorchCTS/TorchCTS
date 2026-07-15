@@ -35,6 +35,7 @@ from torchcts.core.contract_references import (
     resolve_opinfo_forward_reference,
 )
 from torchcts.core.reference_oracles import (
+    complex_convolution_reference,
     complex_l1_loss_reference,
     complex_log2_reference,
     complex_tensor_integer_power_reference,
@@ -42,6 +43,7 @@ from torchcts.core.reference_oracles import (
     conv_transpose3d_f32_reference,
     embedding_bag_scale_grad_by_freq_reference,
     grid_sampler_3d_backward_f32_reference,
+    slow_complex_convolution_reference,
 )
 from torchcts.core.opinfo_adapter import InputCondition, get_op_sample_inputs, prepare_sample
 from torchcts.sample_generation import (
@@ -733,3 +735,243 @@ def test_embedding_bag_frequency_reference_uses_each_rows_count():
     ])
     torch.testing.assert_close(result, expected)
     assert torch.equal(result[[0, 3]], torch.zeros((2, 2), dtype=result.dtype))
+
+
+@pytest.mark.parametrize(
+    "op_name,positional_options,keyword_options",
+    [
+        (
+            "nn.functional.conv1d",
+            ((1,), (1,), (1,), 1),
+            {"stride": (1,), "padding": (1,), "dilation": (1,), "groups": 1},
+        ),
+        (
+            "nn.functional.conv_transpose1d",
+            ((2,), (1,), (1,), 1, (1,)),
+            {
+                "stride": (2,),
+                "padding": (1,),
+                "output_padding": (1,),
+                "groups": 1,
+                "dilation": (1,),
+            },
+        ),
+    ],
+)
+def test_complex_convolution_router_normalizes_public_argument_forms(
+    op_name,
+    positional_options,
+    keyword_options,
+):
+    dtype = torch.complex64
+    input_tensor = torch.tensor(
+        [[[complex(float("inf"), 0.5), 1 + 2j, 3 + 4j]]],
+        dtype=dtype,
+    )
+    weight = torch.tensor([[[1 - 0.5j, 2 + 0.25j]]], dtype=dtype)
+    bias = torch.tensor([0.5 - 0.25j], dtype=dtype)
+    positional = _sample(input_tensor, weight, bias, *positional_options)
+    keyword = _sample(
+        input_tensor,
+        weight=weight,
+        bias=bias,
+        **keyword_options,
+    )
+    positional_reference = resolve_opinfo_forward_reference(
+        op_name,
+        positional,
+        dtype,
+        "has_inf",
+    )
+    keyword_reference = resolve_opinfo_forward_reference(
+        op_name,
+        keyword,
+        dtype,
+        "has_inf",
+    )
+    assert positional_reference is not None
+    assert keyword_reference is not None
+    _assert_complex_special_equal(positional_reference.value, keyword_reference.value)
+
+    assert resolve_opinfo_forward_reference(
+        op_name,
+        _sample(input_tensor, weight, weight=weight),
+        dtype,
+        "has_inf",
+    ) is None
+    assert resolve_opinfo_forward_reference(
+        op_name,
+        _sample(input_tensor, weight=weight, unsupported=True),
+        dtype,
+        "has_inf",
+    ) is None
+
+
+@pytest.mark.parametrize("dtype", [torch.complex64, torch.complex128])
+@pytest.mark.parametrize("case_name", ["batched_bias_int", "unbatched_no_bias_tuple"])
+@pytest.mark.parametrize(
+    "op_name,rank,transposed",
+    [
+        ("nn.functional.conv1d", 1, False),
+        ("nn.functional.conv2d", 2, False),
+        ("nn.functional.conv3d", 3, False),
+        ("nn.functional.conv_transpose1d", 1, True),
+        ("nn.functional.conv_transpose2d", 2, True),
+        ("nn.functional.conv_transpose3d", 3, True),
+    ],
+)
+def test_complex_convolution_fast_reference_is_proved_by_termwise_oracle(
+    dtype,
+    case_name,
+    op_name,
+    rank,
+    transposed,
+):
+    generator = torch.Generator().manual_seed(0)
+    real_dtype = torch.float32 if dtype == torch.complex64 else torch.float64
+    kernel = (2,) * rank
+    if case_name == "batched_bias_int":
+        input_shape = (1, 2, *((3,) * rank))
+        weight_shape = (2, 2, *kernel)
+        kwargs = {"groups": 1, "padding": 1, "stride": 1, "dilation": 1}
+        if transposed:
+            kwargs.update(stride=2, output_padding=1)
+        use_bias = True
+    else:
+        spatial = (2,) * rank if transposed else (4,) * rank
+        input_shape = (2, *spatial)
+        weight_shape = (2, 1, *kernel)
+        kwargs = {
+            "groups": 2,
+            "padding": (1,) * rank,
+            "stride": ((2,) * rank if transposed else (1,) * rank),
+            "dilation": (2,) * rank,
+        }
+        if transposed:
+            kwargs["output_padding"] = (1,) * rank
+        use_bias = False
+
+    input_tensor = torch.complex(
+        torch.randn(input_shape, generator=generator, dtype=real_dtype),
+        torch.randn(input_shape, generator=generator, dtype=real_dtype),
+    ).to(dtype)
+    weight = torch.complex(
+        torch.randn(weight_shape, generator=generator, dtype=real_dtype),
+        torch.randn(weight_shape, generator=generator, dtype=real_dtype),
+    ).to(dtype)
+    bias = None
+    if use_bias:
+        bias = torch.complex(
+            torch.randn(2, generator=generator, dtype=real_dtype),
+            torch.randn(2, generator=generator, dtype=real_dtype),
+        ).to(dtype)
+
+    function = getattr(F, op_name.rsplit(".", 1)[-1])
+    finite_fast = complex_convolution_reference(op_name, input_tensor, weight, bias, kwargs)
+    finite_native = function(input_tensor, weight, bias, **kwargs)
+    torch.testing.assert_close(finite_fast, finite_native, rtol=2e-4, atol=2e-4)
+
+    for special_value in (complex(float("inf"), 0.25), complex(float("nan"), -0.5)):
+        special_input = input_tensor.clone()
+        special_input.reshape(-1)[0] = special_value
+        fast = complex_convolution_reference(op_name, special_input, weight, bias, kwargs)
+        slow = slow_complex_convolution_reference(op_name, special_input, weight, bias, kwargs)
+        _assert_complex_special_equal(fast, slow)
+
+
+@pytest.mark.parametrize("dtype", [torch.complex64, torch.complex128])
+@pytest.mark.parametrize(
+    "op_name",
+    [
+        "nn.functional.conv1d",
+        "nn.functional.conv2d",
+        "nn.functional.conv3d",
+        "nn.functional.conv_transpose1d",
+        "nn.functional.conv_transpose2d",
+        "nn.functional.conv_transpose3d",
+    ],
+)
+def test_complex_convolution_first_three_live_opinfo_samples_prove_runner_reference(dtype, op_name):
+    function = getattr(F, op_name.rsplit(".", 1)[-1])
+    samples = list(get_op_sample_inputs(op_name, "cpu", dtype))[:3]
+    assert len(samples) == 3
+    for sample_index, raw_sample in enumerate(samples):
+        weight = raw_sample.args[0]
+        bias = raw_sample.args[1] if len(raw_sample.args) > 1 else None
+        finite_reference = complex_convolution_reference(
+            op_name,
+            raw_sample.input,
+            weight,
+            bias,
+            dict(raw_sample.kwargs),
+        )
+        finite_native = function(raw_sample.input, *raw_sample.args, **raw_sample.kwargs)
+        torch.testing.assert_close(finite_reference, finite_native, rtol=2e-4, atol=2e-4)
+
+        for condition in (InputCondition.HAS_INF, InputCondition.HAS_NAN):
+            sample = prepare_sample(
+                raw_sample,
+                condition,
+                ieee754_seed=67,
+                sample_index=sample_index,
+                op_name=op_name,
+            )
+            resolved = resolve_opinfo_forward_reference(
+                op_name,
+                sample,
+                dtype,
+                condition,
+            )
+            assert resolved is not None
+            assert resolved.reference_id == "complex_convolution_four_real"
+            fast = resolved.value
+            slow = slow_complex_convolution_reference(
+                op_name,
+                sample.input,
+                sample.args[0],
+                sample.args[1] if len(sample.args) > 1 else None,
+                dict(sample.kwargs),
+            )
+            _assert_complex_special_equal(fast, slow)
+
+
+@pytest.mark.parametrize("dtype", [torch.complex64, torch.complex128])
+@pytest.mark.parametrize(
+    "op_name,rank",
+    [
+        ("nn.functional.conv1d", 1),
+        ("nn.functional.conv2d", 2),
+        ("nn.functional.conv3d", 3),
+    ],
+)
+@pytest.mark.parametrize("padding", ["same", "valid"])
+def test_complex_convolution_string_padding_is_proved_by_termwise_oracle(
+    dtype,
+    op_name,
+    rank,
+    padding,
+):
+    generator = torch.Generator().manual_seed(1)
+    real_dtype = torch.float32 if dtype == torch.complex64 else torch.float64
+    input_shape = (1, *((4,) * rank))
+    weight_shape = (1, 1, *((2,) * rank))
+    input_tensor = torch.complex(
+        torch.randn(input_shape, generator=generator, dtype=real_dtype),
+        torch.randn(input_shape, generator=generator, dtype=real_dtype),
+    ).to(dtype)
+    weight = torch.complex(
+        torch.randn(weight_shape, generator=generator, dtype=real_dtype),
+        torch.randn(weight_shape, generator=generator, dtype=real_dtype),
+    ).to(dtype)
+    kwargs = {"padding": padding}
+    function = getattr(F, op_name.rsplit(".", 1)[-1])
+    finite = complex_convolution_reference(op_name, input_tensor, weight, None, kwargs)
+    native = function(input_tensor, weight, None, **kwargs)
+    torch.testing.assert_close(finite, native, rtol=2e-4, atol=2e-4)
+
+    for special_value in (complex(float("inf"), 0.25), complex(float("nan"), -0.5)):
+        special_input = input_tensor.clone()
+        special_input.reshape(-1)[0] = special_value
+        fast = complex_convolution_reference(op_name, special_input, weight, None, kwargs)
+        slow = slow_complex_convolution_reference(op_name, special_input, weight, None, kwargs)
+        _assert_complex_special_equal(fast, slow)
