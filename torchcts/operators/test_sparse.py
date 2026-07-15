@@ -196,20 +196,73 @@ def test_sparse_coo_reductions_and_softmax(device, coo_data):
 @pytest.mark.covers("aten::_sparse_addmm")
 def test_sparse_addmm(device, coo_data):
     i, v, size = coo_data
-    dense_a = torch.randn(3, 2, dtype=torch.float32)
-    dense_b = torch.randn(2, 3, dtype=torch.float32)
+    additive = torch.randn(3, 2, dtype=torch.float32)
+    dense_rhs = torch.randn(3, 2, dtype=torch.float32)
     check_sparse_op(
-        lambda i_t, v_t, a, b: torch.sparse.addmm(
+        lambda i_t, v_t, add_t, rhs_t: torch.sparse.addmm(
+            add_t,
             torch.sparse_coo_tensor(i_t, v_t, size),
-            a,
-            b,
+            rhs_t,
         ),
         device,
         i,
         v,
-        dense_a,
-        dense_b,
+        additive,
+        dense_rhs,
     )
+
+
+def _is_sparse_addmm_additive_layout_rejection(exc: Exception) -> bool:
+    message = str(exc).lower()
+    missing_coverage = (
+        "not implemented",
+        "no kernel",
+        "could not run",
+        "requires compiling",
+        "without mkl",
+        "unsupported backend",
+    )
+    if any(term in message for term in missing_coverage):
+        return False
+    explicit_contract = (
+        "expected strided result",
+        "result tensor must be strided",
+        "additive input must be dense",
+        "additive tensor must be dense",
+        "input tensor must be strided",
+        "first argument must be dense",
+        "first argument must be strided",
+    )
+    return any(term in message for term in explicit_contract)
+
+
+@pytest.mark.smoke
+@pytest.mark.requires("sparse")
+@pytest.mark.covers("aten::_sparse_addmm")
+def test_sparse_addmm_rejects_sparse_additive_input(device, coo_data):
+    i, v, size = coo_data
+    additive_indices = torch.tensor([[0, 1], [0, 1]], dtype=torch.int64, device=device)
+    additive_values = torch.tensor([1.0, 2.0], dtype=torch.float32, device=device)
+    sparse_additive = torch.sparse_coo_tensor(
+        additive_indices,
+        additive_values,
+        (3, 2),
+        device=device,
+    ).coalesce()
+    sparse_mat1 = torch.sparse_coo_tensor(i.to(device), v.to(device), size, device=device)
+    dense_mat2 = torch.randn(3, 2, dtype=torch.float32, device=device)
+
+    try:
+        torch.sparse.addmm(sparse_additive, sparse_mat1, dense_mat2)
+        synchronize(device)
+    except (RuntimeError, ValueError, TypeError) as exc:
+        if _is_sparse_addmm_additive_layout_rejection(exc):
+            return
+        pytest.fail(
+            "Backend did not report an additive-layout contract rejection for sparse addmm: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    pytest.fail("torch.sparse.addmm accepted a sparse additive input for a strided result")
 
 @pytest.mark.smoke
 @pytest.mark.requires("sparse")
@@ -419,16 +472,21 @@ def _empty_sparse_coo(size, device):
     return torch.sparse_coo_tensor(indices, values, size)
 
 
-def _assert_sparse_tensor_equal(actual, expected, compare):
+def _assert_sparse_tensor_equal(actual, expected, compare, *, value_category="exact"):
     assert actual.layout == expected.layout
     assert tuple(actual.shape) == tuple(expected.shape)
-    compare(actual.to_dense(), expected.to_dense(), category="exact", dtype=expected.dtype)
+    compare(actual.to_dense(), expected.to_dense(), category=value_category, dtype=expected.dtype)
     if actual.layout == torch.sparse_coo:
         assert actual.is_coalesced() == expected.is_coalesced()
         actual_coalesced = actual.coalesce()
         expected_coalesced = expected.coalesce()
         compare(actual_coalesced.indices(), expected_coalesced.indices(), category="exact", dtype=torch.int64)
-        compare(actual_coalesced.values(), expected_coalesced.values(), category="exact", dtype=expected_coalesced.values().dtype)
+        compare(
+            actual_coalesced.values(),
+            expected_coalesced.values(),
+            category=value_category,
+            dtype=expected_coalesced.values().dtype,
+        )
 
 
 def _assert_sparse_out(op_call, out_cpu, out_dev, device, compare):
@@ -1145,7 +1203,7 @@ def test_sparse_low_level_reduction_and_softmax_variants(device, compare):
         expected = functional(coo_cpu, 1, False)
         actual = _backend_sparse_call(lambda: functional(coo_dev, 1, False), opname)
         synchronize(device)
-        _assert_sparse_tensor_equal(actual, expected, compare)
+        _assert_sparse_tensor_equal(actual, expected, compare, value_category="reduction")
 
         expected_out = expected.clone()
         actual_out = actual.clone()
@@ -1157,7 +1215,7 @@ def test_sparse_low_level_reduction_and_softmax_variants(device, compare):
         synchronize(device)
         assert expected_return is expected_out
         assert actual_return is actual_out
-        _assert_sparse_tensor_equal(actual_out, expected_out, compare)
+        _assert_sparse_tensor_equal(actual_out, expected_out, compare, value_category="reduction")
 
 
 @pytest.mark.smoke

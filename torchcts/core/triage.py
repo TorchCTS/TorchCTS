@@ -295,6 +295,11 @@ def classify_record(record: dict | None, subprocess_result: dict | None = None) 
     text = message.lower()
     combined = f"{nodeid}\n{text}"
 
+    if "opinfo_oracle_metadata_unusable" in text:
+        return _classification(
+            "No OpInfo error candidate had CPU behavior consistent with its declared error metadata",
+            "torchcts_bad_oracle",
+        )
     if _is_grid_cpu_fallback_backward_wrong_value(nodeid, text):
         return _classification(
             "MPS grid-sampler CPU-fallback backward returned values that disagree with the CPU oracle; subprocess isolation is still required because the child exits with SIGSEGV after reporting the mismatch",

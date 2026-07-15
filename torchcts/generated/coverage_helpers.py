@@ -2279,11 +2279,17 @@ def _run_manual_fft_case(
         ) from exc
 
     if actual.device.type != torch.device(device).type:
-        raise AssertionError(f"{entry['name']} returned tensor on {actual.device}, expected {device}")
+        raise AssertionError(
+            f"{entry['name']} returned tensor on {actual.device}, expected {device}"
+        )
     if actual.dtype != expected.dtype:
-        raise AssertionError(f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}")
+        raise AssertionError(
+            f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}"
+        )
     if tuple(actual.shape) != tuple(expected.shape):
-        raise AssertionError(f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}")
+        raise AssertionError(
+            f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}"
+        )
     compare(actual, expected, category="fft", dtype=dtype)
     return True
 
@@ -3627,7 +3633,7 @@ def _run_pooling_once(
     kwargs.update(out_kwargs)
     returned = callable_op(*args, **kwargs)
     _assert_multi_output_identity(returned, out_kwargs, entry["name"])
-    return _multi_output_return_tuple(returned)
+    return _multi_output_return_tuple(returned), sample
 
 
 def _run_manual_pooling_case(
@@ -3641,12 +3647,26 @@ def _run_manual_pooling_case(
 ) -> bool:
     schema = entry.get("schema", "")
     try:
-        expected = _run_pooling_once(entry, callable_op, dtype, input_condition, "cpu", manifest)
+        expected, _cpu_sample = _run_pooling_once(
+            entry,
+            callable_op,
+            dtype,
+            input_condition,
+            "cpu",
+            manifest,
+        )
     except Exception:
         return False
 
     try:
-        actual = _run_pooling_once(entry, callable_op, dtype, input_condition, device, manifest)
+        actual, device_sample = _run_pooling_once(
+            entry,
+            callable_op,
+            dtype,
+            input_condition,
+            device,
+            manifest,
+        )
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
@@ -3654,7 +3674,16 @@ def _run_manual_pooling_case(
             f"{type(exc).__name__}: {exc}; schema={schema}; input_condition={input_condition}; dtype={dtype}"
         ) from exc
 
-    _compare_multi_output_results(entry, actual, expected, input_condition, dtype, device, compare)
+    _compare_multi_output_results(
+        entry,
+        actual,
+        expected,
+        input_condition,
+        dtype,
+        device,
+        compare,
+        sample=device_sample,
+    )
     return True
 
 

@@ -4205,19 +4205,14 @@ def indexing_sample(
     )
 
 
-CPU_GENERATOR_RNG_BASES = frozenset({"_sample_dirichlet", "binomial", "poisson"})
-
-
 def rng_uses_target_device_generator(entry: dict) -> bool:
     """Return whether this RNG surface expects a generator for the output device."""
 
-    return entry["base_name"].rstrip("_") not in CPU_GENERATOR_RNG_BASES
+    return any(arg.get("name") == "generator" for arg in entry.get("args", ()))
 
 
 def rng_generator_device(entry: dict, device: str) -> str:
-    if rng_uses_target_device_generator(entry):
-        return device
-    return "cpu"
+    return device
 
 
 def rng_generator(device: str, seed: int) -> torch.Generator:

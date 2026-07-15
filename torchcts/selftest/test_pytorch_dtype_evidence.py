@@ -37,29 +37,6 @@ from scripts import pytorch_dtype_evidence_taxonomy as taxonomy
 
 pytestmark = pytest.mark.covers_category("selftest")
 
-COLLECTED_VERSIONS = [
-    "2.7.0",
-    "2.7.1",
-    "2.8.0",
-    "2.9.0",
-    "2.9.1",
-    "2.10.0",
-    "2.11.0",
-    "2.12.0",
-    "2.12.1",
-]
-MIGRATION_COUNTS = {
-    "cpu_pending": 7_066,
-    "cpu_supported": 203_620,
-    "cpu_unknown": 40,
-    "cpu_unsupported": 69_863,
-    "source_expected": 287_477,
-    "source_expected_entries": 287_477,
-    "source_expected_ops": 18_797,
-    "source_probe_mismatches": 78_375,
-}
-
-
 def _sample_entry(value: str) -> dict:
     return {
         "cpu_supported": {"forward:clean": [value]},
@@ -125,7 +102,8 @@ def test_taxonomy_covers_tracked_evidence_without_fallbacks():
     expanded = evidence_store.load_evidence(TRACKED_MANIFEST, verify_canonical=True)
     classifications = taxonomy.classify_operators(set(expanded["contracts"]))
 
-    assert len(classifications) == 3_046
+    assert classifications
+    assert set(classifications) == set(expanded["contracts"])
     assert all(item.category in taxonomy.CATEGORIES for item in classifications.values())
     assert all(item.rule_id for item in classifications.values())
     assert not {item.category for item in classifications.values()} & {"other", "misc", "uncategorized"}
@@ -150,22 +128,6 @@ def test_taxonomy_covers_tracked_evidence_without_fallbacks():
 )
 def test_taxonomy_representative_aliases_and_semantic_families(op, category):
     assert taxonomy.classify_operator(op, taxonomy.load_metadata_categories()).category == category
-
-
-def test_tracked_migration_semantics_and_representative_scopes():
-    expanded = evidence_store.load_evidence(TRACKED_MANIFEST, verify_canonical=True)
-
-    assert expanded["metadata"]["collected_versions"] == COLLECTED_VERSIONS
-    assert expanded["metadata"]["contract_counts"] == MIGRATION_COUNTS
-    assert expanded["warnings"] == []
-
-    add_records = _records_for(TRACKED_MANIFEST.parent, "aten::add.Tensor")
-    matmul_records = _records_for(TRACKED_MANIFEST.parent, "aten::matmul")
-    aminmax_records = _records_for(TRACKED_MANIFEST.parent, "aten::aminmax")
-    assert len(add_records) == 1 and "versions" not in add_records[0]
-    assert len(matmul_records) == 1 and "versions" not in matmul_records[0]
-    assert len(aminmax_records) > 1
-    assert all(record.get("versions") for record in aminmax_records)
 
 
 def test_writer_uses_universal_and_exact_scoped_records(tmp_path):

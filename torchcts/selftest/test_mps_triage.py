@@ -39,6 +39,18 @@ from torchcts.generated import coverage_helpers
 pytestmark = pytest.mark.covers_category("selftest")
 
 
+def test_opinfo_all_candidates_unusable_has_explicit_bad_oracle_triage():
+    unusable = triage.classify_record({
+        "error_message": "OPINFO_ORACLE_METADATA_UNUSABLE for bernoulli",
+    })
+    assert unusable["classification"] == "torchcts_bad_oracle"
+
+    transport = triage.classify_record({
+        "error_message": "OPINFO_TARGET_SAMPLE_TRANSPORT_FAILURE for bernoulli",
+    })
+    assert transport["classification"] != "torchcts_bad_oracle"
+
+
 def _adaptive_result_payload(results, *, device="mps", hardware="hw", version="2.12.1", completed=False):
     return {
         "metadata": {

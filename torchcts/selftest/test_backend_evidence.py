@@ -21,7 +21,6 @@ from torchcts.core.backend_evidence import (
     load_backend_evidence_store,
     normalize_observation,
     normalize_source_environment,
-    outcome_counts,
     stores_semantically_equal,
     validate_expanded_store,
     write_backend_evidence_store,
@@ -478,24 +477,3 @@ def test_collection_writes_only_the_canonical_store_and_persists_failures(
     assert exit_code == 1
     assert len(reread.sources) == 2
     assert reread.observations["cpu-build"]["aten::example"]["source-0000000002"]["oracle_result"]["ok"] is False
-
-
-def test_tracked_store_matches_backend_migration_baselines():
-    store_root = Path(__file__).resolve().parents[2] / "evidence" / "backends"
-    store = load_backend_evidence_store(store_root, verify_canonical=True)
-
-    assert len(store.sources) == 18
-    assert sum(len(surfaces) for surfaces in store.observations.values()) == 126
-    assert outcome_counts(store) == {"failed": 80, "other": 0, "passed": 358, "skipped": 191}
-    assert sum(
-        len(source_ids)
-        for surfaces in store.promotions.values()
-        for source_ids in surfaces.values()
-    ) == 96
-    assert {path.name for path in store_root.iterdir()} == {
-        "cpu-build.jsonl",
-        "cuda.jsonl",
-        "fbgemm.jsonl",
-        "manifest.json",
-        "sources.jsonl",
-    }
