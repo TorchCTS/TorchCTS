@@ -94,8 +94,6 @@ Accepted evidence:
   `dynamic_int4_matmul_reference`.
 - `torchcts/core/reference_oracles.py` defines the nibble-unpack,
   dequantization, grouped-scale, bias, and matmul reference logic.
-- `torchcts/selftest/test_harness_reporting.py` asserts both that the audit marks
-  the matmul surface `covered_oracle` and that `pending_oracle` is zero.
 
 Accepted contract:
 
@@ -161,6 +159,7 @@ Surfaces:
 
 Accepted evidence:
 
+- `backend-evidence:cpu-build`
 - `torchcts/core/oracles.py` registers both surfaces with oracle id
   `cpu_flash_attention_public_sdpa`.
 - The runner executes the exact CPU dispatcher helpers and compares forward

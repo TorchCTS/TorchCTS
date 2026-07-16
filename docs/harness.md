@@ -146,5 +146,6 @@ mask checks.
 
 When CPU is the selected target, TorchCTS preserves validation-mode behavior:
 the operation is executed as a smoke check, but known-bad CPU numerical output
-is not compared against the permanent contract reference. The reference
-mathematics is validated independently by `torchcts/selftest`.
+is not compared against the permanent contract reference. Reference
+mathematics is established with review-time development proofs; only the most
+critical, nonredundant invariants remain in the fixed-budget selftest suite.

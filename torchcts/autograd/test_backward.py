@@ -94,7 +94,6 @@ def _compare_sparse_or_dense(actual, expected, compare, dtype=torch.float32):
 
 @pytest.mark.medium
 @pytest.mark.requires("training")
-@pytest.mark.covers("aten::embedding_bag")
 @pytest.mark.covers("aten::_embedding_bag_backward")
 @pytest.mark.covers("aten::_embedding_bag_dense_backward")
 @pytest.mark.covers("aten::_embedding_bag_dense_backward.out", surface="out_variant")

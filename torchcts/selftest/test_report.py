@@ -4,106 +4,24 @@
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-import json
-import os
+# copies of the Software.
 
 import pytest
 
-from torchcts.core.report import build_report, generate_report_cli
+from torchcts.core.report import build_report
 
 
 pytestmark = pytest.mark.covers_category("selftest")
 
 
-def _result(nodeid, *, status="PASS", op="add", dtype="torch.float32"):
-    return {
-        "status": status,
-        "phase": "call",
-        "suite": "opinfo",
-        "test_kind": "opinfo",
-        "capability": "inference",
-        "is_plumbing": False,
-        "op": op,
-        "dtype": dtype,
-        "semantic_level": 1,
-        "requested_level": 8,
-        "semantic_level_selection": {
-            "mode": "cumulative",
-            "min_level": 1,
-            "max_level": 8,
-            "label": "requested <= 8",
-        },
-        "error_message": "" if status == "PASS" else "backend mismatch",
-        "duration_ms": 1.0,
-        "nodeid": nodeid,
-    }
-
-
-def _manifest_decline(nodeid, *, op="unsupported", dtype="torch.float64"):
-    return {
-        "status": "SKIP",
-        "phase": "collection",
-        "suite": "opinfo",
-        "test_kind": "opinfo",
-        "capability": "inference",
-        "op": op,
-        "dtype": dtype,
-        "semantic_level": 1,
-        "requested_level": 8,
-        "semantic_level_selection": {
-            "mode": "cumulative",
-            "min_level": 1,
-            "max_level": 8,
-            "label": "requested <= 8",
-        },
-        "skip_reason": "dtype_not_supported",
-        "detail": "dtype not declared by manifest",
-    }
-
-
-def _payload(
-    *,
-    session_completed=True,
-    total_runnable=19000,
-    result_status="PASS",
-    timestamp="2026-07-09T12:00:00Z",
-):
-    results = {
-        "torchcts/operators/test_opinfo.py::test_op[add]": _result(
-            "torchcts/operators/test_opinfo.py::test_op[add]",
-            status=result_status,
-        )
-    }
-    skips = {
-        f"torchcts/operators/test_opinfo.py::test_op[declined_{i}]": _manifest_decline(
-            f"torchcts/operators/test_opinfo.py::test_op[declined_{i}]",
-            op=f"declined_{i}",
-        )
-        for i in range(max(total_runnable - len(results), 0))
-    }
-    asserted = len(results)
-    declined = len(skips)
-    total = asserted + declined
-    return {
+def test_report_suppresses_manifest_scorecard_for_incomplete_full_run():
+    nodeid = "torchcts/operators/test_opinfo.py::test_op[add]"
+    payload = {
         "metadata": {
             "device_name": "mps",
-            "hardware_key": "Apple_Test_64gb",
+            "hardware_key": "test-hardware",
             "pytorch_version": "2.12.1",
-            "timestamp": timestamp,
+            "timestamp": "2026-07-09T12:00:00Z",
             "elapsed_sec": 1.0,
             "collect_only": False,
             "semantic_level": 8,
@@ -113,178 +31,50 @@ def _payload(
                 "max_level": 8,
                 "label": "requested <= 8",
             },
-            "skip_count": len(skips),
-            "session_completed": session_completed,
+            "skip_count": 0,
+            "session_completed": False,
             "backend_manifest_assertion": {
                 "schema_version": 1,
                 "basis": "collection_selected_tests_plus_backend_manifest_declines",
-                "asserted_test_count": asserted,
-                "declined_test_count": declined,
-                "total_runnable_test_count": total,
-                "asserted_fraction": asserted / total if total else 0.0,
-                "asserted_percent": (asserted / total * 100.0) if total else 0.0,
+                "asserted_test_count": 1,
+                "declined_test_count": 0,
+                "total_runnable_test_count": 1,
+                "asserted_fraction": 1.0,
+                "asserted_percent": 100.0,
                 "progress_bar_width": 37,
-                "declined_skip_reasons": {"dtype_not_supported": declined},
+                "declined_skip_reasons": {},
             },
         },
-        "results": results,
-        "skips": skips,
+        "results": {
+            nodeid: {
+                "status": "PASS",
+                "phase": "call",
+                "suite": "opinfo",
+                "test_kind": "opinfo",
+                "capability": "inference",
+                "is_plumbing": False,
+                "op": "add",
+                "dtype": "torch.float32",
+                "semantic_level": 1,
+                "requested_level": 8,
+                "semantic_level_selection": {
+                    "mode": "cumulative",
+                    "min_level": 1,
+                    "max_level": 8,
+                    "label": "requested <= 8",
+                },
+                "error_message": "",
+                "duration_ms": 1.0,
+                "nodeid": nodeid,
+            }
+        },
+        "skips": {},
     }
 
-
-def test_report_suppresses_manifest_scorecard_for_incomplete_full_run():
-    scorecard, markdown = build_report(_payload(session_completed=False, total_runnable=19000))
+    scorecard, markdown = build_report(payload)
 
     assert "Backend manifest support scorecard unavailable for this run." in scorecard
     assert "This run did not complete" in scorecard
     assert "No backend support percentage is shown." in scorecard
     assert "Backend asserts via manifest.py" not in scorecard
     assert "Backend manifest support scorecard unavailable for this run." in markdown
-
-
-def test_report_preserves_error_text_verbatim():
-    payload = _payload(total_runnable=1, result_status="FAIL")
-    message = (
-        '  File "/Users/alice/project/backend.py", line 42\n'
-        "RuntimeError: backend exploded at C:\\work\\backend.cpp:17"
-    )
-    next(iter(payload["results"].values()))["error_message"] = message
-
-    _, markdown = build_report(payload, include_failure_details=True)
-
-    assert message in markdown
-
-
-def test_default_report_does_not_duplicate_failure_diagnostics():
-    payload = _payload(total_runnable=1, result_status="FAIL")
-    message = "diagnostic remains canonical"
-    next(iter(payload["results"].values()))["error_message"] = message
-
-    scorecard, markdown = build_report(payload)
-
-    assert message in scorecard
-    assert "Per-Test Failure Details" not in markdown
-    assert "Full per-test records and verbatim diagnostics" in markdown
-
-
-def test_report_from_file_writes_next_to_source_json(tmp_path, monkeypatch):
-    source_dir = tmp_path / "custom-results"
-    source_dir.mkdir()
-    source_json = source_dir / "Apple_Test_64gb_latest.json"
-    source_json.write_text(json.dumps(_payload(total_runnable=2)), encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-
-    assert generate_report_cli(str(source_json)) == 0
-
-    report_path = source_dir / "Apple_Test_64gb_report.md"
-    assert report_path.exists()
-    assert not (tmp_path / "results" / "Apple_Test_64gb_report.md").exists()
-
-
-def test_report_from_file_skips_current_history_copy_for_baseline(tmp_path, monkeypatch):
-    source_dir = tmp_path / "custom-results"
-    history_dir = source_dir / "Apple_Test_64gb_history"
-    history_dir.mkdir(parents=True)
-    source_json = source_dir / "Apple_Test_64gb_latest.json"
-    current = _payload(
-        total_runnable=2,
-        result_status="FAIL",
-        timestamp="2026-07-09T12:00:00Z",
-    )
-    source_json.write_text(json.dumps(current), encoding="utf-8")
-    previous_history = history_dir / "previous.json"
-    previous_history.write_text(
-        json.dumps(
-            _payload(
-                total_runnable=2,
-                result_status="PASS",
-                timestamp="2026-07-08T12:00:00Z",
-            )
-        ),
-        encoding="utf-8",
-    )
-    current_history = history_dir / "current-copy.json"
-    current_history.write_text(json.dumps(current), encoding="utf-8")
-    os.utime(previous_history, (1, 1))
-    os.utime(current_history, (2, 2))
-    monkeypatch.chdir(tmp_path)
-
-    assert generate_report_cli(str(source_json)) == 0
-
-    report_text = (source_dir / "Apple_Test_64gb_report.md").read_text(encoding="utf-8")
-    assert "REGRESSIONS SINCE LAST RUN (2026-07-08T12:00:00Z)" in report_text
-    assert "1 new failures" in report_text
-
-
-def test_not_run_audit_labels_structured_non_runtime_reasons():
-    payload = _payload(total_runnable=1)
-    payload["skips"] = {
-        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]": {
-            **_manifest_decline(
-                "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]",
-                op="aten::blocked",
-                dtype="torch.float32",
-            ),
-            "skip_reason": "cpu_contract_unsupported",
-            "detail": "cpu_contract_unsupported: no selected dtype is executable",
-        },
-        "torchcts/generated/test_out_variants.py::test_generated_out_variant[pending]": {
-            **_manifest_decline(
-                "torchcts/generated/test_out_variants.py::test_generated_out_variant[pending]",
-                op="aten::pending",
-                dtype="torch.float32",
-            ),
-            "skip_reason": "coverage_strategy_pending",
-            "detail": "coverage_strategy_pending: out_variant strategy is not implemented",
-        },
-        "torchcts/generated/test_oracle_surfaces.py::test_oracle_surface[pack]": {
-            **_manifest_decline(
-                "torchcts/generated/test_oracle_surfaces.py::test_oracle_surface[pack]",
-                op="aten::pack",
-                dtype="torch.float32",
-            ),
-            "skip_reason": "pending_backend_pack",
-            "detail": "pending_backend_pack",
-        },
-        "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[index_reduce]": {
-            **_manifest_decline(
-                "torchcts/opinfo/test_opinfo_forward.py::test_op_forward[index_reduce]",
-                op="index_reduce",
-                dtype="torch.float32",
-            ),
-            "skip_reason": "framework_bug",
-            "detail": "index_reduce hangs infinitely on MPS",
-        },
-    }
-
-    scorecard, markdown = build_report(payload, include_skips=True)
-
-    assert "**cpu_contract_unsupported**: 1 contract-blocked" in markdown
-    assert "**coverage_strategy_pending**: 1 coverage debt" in markdown
-    assert "**pending_backend_pack**: 1 backend-pack debt" in markdown
-    assert "**framework_bug**: 1 known unsafe" in markdown
-    assert "**float32**: 1 contract-blocked" in markdown
-    assert "Ops with not-run cases (CPU contract): 1" in scorecard
-    assert "Ops with not-run cases (coverage): 1" in scorecard
-    assert "Ops with not-run cases (backend pack): 1" in scorecard
-    assert "Ops with not-run cases (known unsafe): 1" in scorecard
-
-
-def test_not_run_audit_normalizes_legacy_runtime_skip_details():
-    payload = _payload(total_runnable=1)
-    payload["skips"] = {
-        "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]": {
-            **_manifest_decline(
-                "torchcts/generated/test_functional_variants.py::test_generated_functional_variant[blocked]",
-                op="aten::blocked",
-                dtype="torch.float32",
-            ),
-            "skip_reason": "runtime_skip",
-            "detail": "cpu_contract_unsupported: no selected dtype is executable",
-        }
-    }
-
-    _scorecard, markdown = build_report(payload, include_skips=True)
-
-    assert "**cpu_contract_unsupported**: 1 contract-blocked" in markdown
-    assert "**runtime_skip**" not in markdown

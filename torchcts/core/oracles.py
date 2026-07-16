@@ -6353,12 +6353,12 @@ for _surface in (
         coverage_status="covered_backend_pack",
         coverage_kind="backend_pack",
         runner="cpu_flash_attention",
-        backend_gate="cpu",
+        backend_gate="cpu_build",
         semantic_level=5,
         reason="CPU flash-attention helper is validated against public CPU scaled_dot_product_attention forward/backward.",
         contract_status="accepted",
         contract_ref="docs/coverage/contract-evidence.md#cpu-flash-attention-backend-pack",
-        promotion_evidence="torchcts/selftest/test_harness_reporting.py::test_oracle_runner_executes_cpu_oracle_surfaces",
+        promotion_evidence="backend-evidence:cpu-build",
         promotion_backend="cpu_build",
     ))
 

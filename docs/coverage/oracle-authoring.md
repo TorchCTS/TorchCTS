@@ -49,8 +49,8 @@ versions until a later version explicitly removes it.
 
 Do not broaden generated special-value coverage when the CPU reference can
 hang, crash, or return undefined behavior for that input family. Add or remove
-the version-scoped restriction first, then refresh coverage artifacts and
-selftests.
+the version-scoped restriction first, then refresh coverage artifacts and run
+the relevant development checks.
 
 ## Backend Availability
 
@@ -80,17 +80,22 @@ Black-box probes can confirm an accepted contract. They must not invent one.
 
 ## Selftests
 
-Every new oracle family needs focused selftests. Use targeted tests during
-development.
+`torchcts/selftest` protects only the small set of failures that could make the
+harness broadly report false conformance, mishandle unsafe execution, corrupt
+public artifacts, or miscompute a permanent reference that cannot be validated
+by an ordinary suite.
 
-Required selftest coverage:
+The permanent suite is capped at 24 collected tests. Adding, expanding, or
+parameterizing a selftest requires explicit maintainer approval even when
+another test is removed. The cap is a complexity budget, not an invitation to
+combine unrelated assertions or hide matrices in loops.
 
-- a positive reference case;
-- a case that catches an incorrect reference result where practical;
-- backend-unavailable skip classification;
-- `out=` identity when relevant;
-- aliasing and mutation checks when relevant;
-- invalid-shape or invalid-contract guards when relevant.
+During development, use focused tests, temporary scripts, and exhaustive proof
+matrices as needed. Keep them out of the permanent selftest suite unless the
+specific invariant wins a place in the fixed budget. Backend conformance cases
+belong in the ordinary TorchCTS suites, and current generated inventories,
+current OpInfo sample order, and upstream bug demonstrations are not permanent
+selftest contracts.
 
 ## Promotion Standard
 
@@ -99,5 +104,5 @@ A surface can move out of pending only when the exact dispatcher overload has:
 - a safe invocation strategy;
 - meaningful value or property assertions;
 - backend/build gating for unavailable paths;
-- focused selftests for the strategy or reference;
+- reviewable validation evidence for the strategy or reference;
 - refreshed coverage audit and materialized generated artifacts.
