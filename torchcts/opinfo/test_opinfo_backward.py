@@ -18,9 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import math
+
 import pytest
 import torch
 import torchcts.conftest as conftest
+from torchcts.core.backward_references import resolve_opinfo_backward_reference
 from torchcts.core.opinfo_adapter import (
     get_backward_op_tests,
     get_live_opinfo,
@@ -29,6 +32,7 @@ from torchcts.core.opinfo_adapter import (
     is_cpu_reference_failure,
     classify_sample,
     InputCondition,
+    stabilize_sample_randomness,
 )
 from torchcts.core.device import synchronize
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
@@ -39,6 +43,235 @@ _DROPOUT_OVERRIDE_OPS = frozenset({
     "nn.functional.scaled_dot_product_attention",
     "nn.functional.multi_head_attention_forward",
 })
+
+_F32_OPMATH_BACKWARD_OPS = frozenset({
+    "addbmm",
+    "grid_sampler_2d",
+    "grid_sampler_3d",
+    "nn.functional.conv_transpose1d",
+    "nn.functional.conv_transpose2d",
+    "nn.functional.conv_transpose3d",
+    "nn.functional.soft_margin_loss",
+})
+
+_RANDOMIZED_LINALG_BACKWARD_OPS = frozenset({"pca_lowrank", "svd_lowrank"})
+
+
+def _gradient_comparison_dtype(gradient: torch.Tensor, op_dtype: torch.dtype) -> torch.dtype:
+    """Select tolerances from the tensor actually being compared."""
+
+    return gradient.dtype if isinstance(gradient, torch.Tensor) else op_dtype
+
+
+def _project_output_for_backward(sample, output):
+    """Apply the OpInfo's representation-invariant backward projection."""
+
+    projection = getattr(sample, "output_process_fn_grad", None)
+    if callable(projection):
+        projected = projection(output)
+        if projected is None:
+            raise AssertionError("OpInfo output_process_fn_grad returned None")
+        return projected
+    return output
+
+
+def _compare_rrelu_saved_noise_gradient(
+    input_tensor: torch.Tensor,
+    output: torch.Tensor,
+    kwargs: dict,
+    compare,
+) -> None:
+    if input_tensor.grad is None:
+        raise AssertionError("RReLU input gradient was not populated")
+    lower = float(kwargs.get("lower", 1.0 / 8.0))
+    upper = float(kwargs.get("upper", 1.0 / 3.0))
+    training = bool(kwargs.get("training", False))
+    positive = input_tensor > 0
+    if bool(positive.any()):
+        compare(
+            input_tensor.grad[positive],
+            torch.ones_like(input_tensor.grad[positive]),
+            category="exact",
+            dtype=input_tensor.grad.dtype,
+        )
+    negative = input_tensor < 0
+    finite_negative = negative & torch.isfinite(input_tensor)
+    if bool(finite_negative.any()):
+        if training:
+            expected_gradient = (
+                output[finite_negative] / input_tensor[finite_negative]
+            ).detach()
+        else:
+            expected_gradient = torch.full_like(
+                input_tensor.grad[finite_negative], (lower + upper) / 2
+            )
+        compare(
+            input_tensor.grad[finite_negative],
+            expected_gradient,
+            category="backward",
+            dtype=input_tensor.grad.dtype,
+        )
+    negative_infinite = negative & torch.isneginf(input_tensor)
+    if bool(negative_infinite.any()):
+        gradients = input_tensor.grad[negative_infinite].detach().cpu()
+        outputs = output[negative_infinite].detach().cpu()
+        if training:
+            epsilon = 32 * torch.finfo(gradients.dtype).eps
+            if not bool(
+                torch.isfinite(gradients).all()
+                and ((gradients >= lower - epsilon) & (gradients <= upper + epsilon)).all()
+            ):
+                raise AssertionError(
+                    f"RReLU -inf-input gradients must use saved slopes in [{lower}, {upper}]"
+                )
+        else:
+            torch.testing.assert_close(
+                gradients,
+                torch.full_like(gradients, (lower + upper) / 2),
+            )
+        valid_output = (
+            ((gradients > 0) & torch.isneginf(outputs))
+            | ((gradients < 0) & torch.isposinf(outputs))
+            | ((gradients == 0) & torch.isnan(outputs))
+        )
+        if not bool(valid_output.all()):
+            raise AssertionError("RReLU -inf output class does not match its saved slope")
+    zero = input_tensor == 0
+    if bool(zero.any()):
+        zero_gradient = input_tensor.grad[zero].detach().cpu()
+        if training:
+            epsilon = 32 * torch.finfo(zero_gradient.dtype).eps
+            if not bool(
+                ((zero_gradient >= lower - epsilon) & (zero_gradient <= upper + epsilon)).all()
+            ):
+                raise AssertionError(
+                    f"RReLU zero-input gradients must use saved slopes in [{lower}, {upper}]"
+                )
+        else:
+            torch.testing.assert_close(
+                zero_gradient,
+                torch.full_like(zero_gradient, (lower + upper) / 2),
+            )
+
+
+def _randomized_linalg_direction(tensor: torch.Tensor, salt: int) -> torch.Tensor:
+    phase = torch.arange(tensor.numel(), dtype=torch.float64).reshape(tensor.shape)
+    real = torch.sin((phase + salt) * 0.731)
+    if tensor.is_complex():
+        imaginary = torch.cos((phase + salt) * 1.127)
+        direction = torch.complex(real, imaginary).to(tensor.dtype)
+    else:
+        direction = real.to(tensor.dtype)
+    norm = torch.linalg.vector_norm(direction)
+    if float(norm) == 0:
+        raise AssertionError("randomized-linalg finite-difference direction is zero")
+    return (direction / norm).to(tensor.device)
+
+
+def _randomized_linalg_backward_contract(
+    op_name,
+    op_fn,
+    sample,
+    dev_input,
+    dev_args,
+    dev_kwargs,
+    dtype,
+    device,
+) -> None:
+    """Check randomized-linalg gradients against same-device finite differences."""
+
+    directions: dict[int, torch.Tensor] = {}
+    differentiable: list[torch.Tensor] = []
+
+    def collect(value):
+        if isinstance(value, torch.Tensor):
+            if value.requires_grad:
+                differentiable.append(value)
+                directions[id(value)] = _randomized_linalg_direction(
+                    value, len(differentiable) * 17
+                )
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                collect(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+
+    collect(dev_input)
+    collect(dev_args)
+    collect(dev_kwargs)
+    if not differentiable:
+        raise AssertionError(f"{op_name} randomized backward has no differentiable operands")
+
+    predicted = 0.0
+    for tensor in differentiable:
+        if tensor.grad is None:
+            raise AssertionError(f"{op_name} did not populate a randomized-linalg gradient")
+        if not bool(torch.isfinite(torch.view_as_real(tensor.grad) if tensor.grad.is_complex() else tensor.grad).all()):
+            raise AssertionError(f"{op_name} produced a nonfinite randomized-linalg gradient")
+        direction = directions[id(tensor)]
+        predicted += float(torch.real((tensor.grad.conj() * direction).sum()).detach().cpu())
+
+    def perturb(value, sign, epsilon):
+        if isinstance(value, torch.Tensor):
+            base = value.detach()
+            direction = directions.get(id(value))
+            return base if direction is None else base + sign * epsilon * direction
+        if isinstance(value, list):
+            return [perturb(item, sign, epsilon) for item in value]
+        if isinstance(value, tuple):
+            return tuple(perturb(item, sign, epsilon) for item in value)
+        if isinstance(value, dict):
+            return {key: perturb(item, sign, epsilon) for key, item in value.items()}
+        return value
+
+    def projected_real_loss(output) -> torch.Tensor:
+        projected = _project_output_for_backward(sample, output)
+        terms = []
+
+        def collect_terms(value):
+            if isinstance(value, torch.Tensor):
+                terms.append(value.real.sum() if value.is_complex() else value.sum())
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    collect_terms(item)
+
+        collect_terms(projected)
+        if not terms:
+            raise AssertionError(f"{op_name} randomized projection has no tensor outputs")
+        return sum(terms[1:], terms[0])
+
+    epsilon = 1e-5 if dtype in {torch.float64, torch.complex128} else 2e-3
+    losses = []
+    for sign in (1.0, -1.0):
+        output = op_fn(
+            perturb(dev_input, sign, epsilon),
+            *perturb(dev_args, sign, epsilon),
+            **perturb(dev_kwargs, sign, epsilon),
+        )
+        synchronize(device)
+        losses.append(float(projected_real_loss(output).detach().cpu()))
+    measured = (losses[0] - losses[1]) / (2 * epsilon)
+    if not math.isfinite(predicted) or not math.isfinite(measured):
+        raise AssertionError(
+            f"{op_name} randomized finite difference is nonfinite: "
+            f"backward={predicted}, finite_difference={measured}"
+        )
+    if dtype in {torch.float64, torch.complex128}:
+        rtol, atol = 5e-4, 5e-5
+    else:
+        rtol, atol = 5e-2, 2e-2
+    torch.testing.assert_close(
+        torch.tensor(predicted, dtype=torch.float64),
+        torch.tensor(measured, dtype=torch.float64),
+        rtol=rtol,
+        atol=atol,
+        msg=(
+            f"{op_name} randomized backward disagrees with a same-device "
+            "fixed-seed directional derivative"
+        ),
+    )
 
 
 def _override_dropout(sample, op_name):
@@ -81,7 +314,10 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
     # Generate sample inputs on the reference device, then move exact clones to
     # the backend under test. Backend failures during sample construction are
     # not the same thing as failures of the op being tested.
-    all_samples = list(get_op_sample_inputs(op_name, device, dtype, requires_grad=True))
+    all_samples = [
+        stabilize_sample_randomness(sample, op_name)
+        for sample in get_op_sample_inputs(op_name, device, dtype, requires_grad=True)
+    ]
     assert all_samples, f"No trainable sample inputs generated for {op_name} with {dtype_str}"
 
     # Filter to clean samples only — backward through NaN/Inf is not well-specified
@@ -177,18 +413,67 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
             return {k: clone_to_device(v, target_device, detach) for k, v in obj.items()}
         return obj
 
+    def clone_to_reference_dtype(obj, reference_dtype):
+        if isinstance(obj, torch.Tensor):
+            target_dtype = reference_dtype if (obj.is_floating_point() or obj.is_complex()) else obj.dtype
+            result = obj.detach().to(device="cpu", dtype=target_dtype)
+            if obj.requires_grad and (result.is_floating_point() or result.is_complex()):
+                result.requires_grad_(True)
+            return result
+        if isinstance(obj, list):
+            return [clone_to_reference_dtype(item, reference_dtype) for item in obj]
+        if isinstance(obj, tuple):
+            return tuple(clone_to_reference_dtype(item, reference_dtype) for item in obj)
+        if isinstance(obj, dict):
+            return {key: clone_to_reference_dtype(value, reference_dtype) for key, value in obj.items()}
+        return obj
+
+    def copy_reference_gradients(reference_obj, public_obj):
+        if isinstance(reference_obj, torch.Tensor) and isinstance(public_obj, torch.Tensor):
+            if reference_obj.grad is not None:
+                public_obj.grad = reference_obj.grad.detach().to(public_obj.dtype)
+            return
+        if isinstance(reference_obj, (list, tuple)) and isinstance(public_obj, (list, tuple)):
+            for reference_item, public_item in zip(reference_obj, public_obj):
+                copy_reference_gradients(reference_item, public_item)
+        elif isinstance(reference_obj, dict) and isinstance(public_obj, dict):
+            for key in reference_obj:
+                copy_reference_gradients(reference_obj[key], public_obj[key])
+
     def compare_gradients(dev_obj, cpu_obj, name, *, category_override=None):
         __tracebackhide__ = True
         nonlocal tested_any
         if isinstance(dev_obj, torch.Tensor):
             if dev_obj.requires_grad:
                 if dev_obj.grad is not None and cpu_obj.grad is not None:
-                    compare(
-                        dev_obj.grad,
-                        cpu_obj.grad,
-                        category=category_override or category,
-                        dtype=dtype,
-                    )
+                    if cpu_obj.layout == torch.sparse_csr and cpu_obj.grad.layout == torch.sparse_csr:
+                        crow = cpu_obj.crow_indices()
+                        columns = cpu_obj.col_indices()
+                        rows = torch.repeat_interleave(
+                            torch.arange(cpu_obj.shape[0], device=columns.device),
+                            crow[1:] - crow[:-1],
+                        )
+                        if dev_obj.grad.layout == torch.sparse_csr:
+                            if not torch.equal(dev_obj.grad.crow_indices().cpu(), crow.cpu()):
+                                raise AssertionError(f"Gradient CSR row pattern mismatch for {name}")
+                            if not torch.equal(dev_obj.grad.col_indices().cpu(), columns.cpu()):
+                                raise AssertionError(f"Gradient CSR column pattern mismatch for {name}")
+                            actual_gradient = dev_obj.grad.values()
+                        else:
+                            actual_gradient = dev_obj.grad[rows.to(dev_obj.grad.device), columns.to(dev_obj.grad.device)]
+                        compare(
+                            actual_gradient,
+                            cpu_obj.grad.values(),
+                            category=category_override or category,
+                            dtype=_gradient_comparison_dtype(actual_gradient, dtype),
+                        )
+                    else:
+                        compare(
+                            dev_obj.grad,
+                            cpu_obj.grad,
+                            category=category_override or category,
+                            dtype=_gradient_comparison_dtype(dev_obj.grad, dtype),
+                        )
                     tested_any = True
                 elif dev_obj.grad is None and cpu_obj.grad is None:
                     pass
@@ -212,6 +497,7 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
                 )
 
     for sample in samples:
+        backward_contract = resolve_opinfo_backward_reference(op_name, sample, dtype)
         # Check if sample contains any differentiable tensors
         diff_tensors = get_differentiable_tensors(sample.input)
         diff_tensors.extend(get_differentiable_tensors(sample.args))
@@ -246,15 +532,27 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
             if not isinstance(actual_out, (torch.Tensor, list, tuple)):
                 continue
 
-            if not check_requires_grad(actual_out):
-                continue
+            if backward_contract is not None:
+                try:
+                    if not backward_contract.populate_gradients(dev_input, dev_args, dev_kwargs):
+                        backward_contract = None
+                except Exception as exc:
+                    cpu_failures.append(
+                        f"backward contract {backward_contract.reference_id}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                    continue
+            if backward_contract is None:
+                actual_backward_out = _project_output_for_backward(sample, actual_out)
+                if not check_requires_grad(actual_backward_out):
+                    continue
 
-            try:
-                run_backward(actual_out)
-                synchronize(device)
-            except Exception as exc:
-                cpu_failures.append(f"cpu validation backward: {type(exc).__name__}: {exc}")
-                continue
+                try:
+                    run_backward(actual_backward_out)
+                    synchronize(device)
+                except Exception as exc:
+                    cpu_failures.append(f"cpu validation backward: {type(exc).__name__}: {exc}")
+                    continue
 
             tested_any = True
             continue
@@ -264,29 +562,37 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
         cpu_args = clone_to_device(sample.args, "cpu", detach=True)
         cpu_kwargs = clone_to_device(sample.kwargs, "cpu", detach=True)
 
-        use_grid_f32_reference = (
-            op_name == "grid_sampler_3d"
-            and dtype in {torch.float16, torch.bfloat16}
-            and isinstance(cpu_input, torch.Tensor)
-            and len(cpu_args) >= 4
-            and isinstance(cpu_args[0], torch.Tensor)
-        )
-        expected_out = None
-        if use_grid_f32_reference:
+        if backward_contract is not None:
             try:
-                ref_input = cpu_input.detach().to(torch.float32).requires_grad_(True)
-                ref_grid = cpu_args[0].detach().to(torch.float32).requires_grad_(True)
-                ref_output = op_fn(ref_input, ref_grid, *cpu_args[1:], **cpu_kwargs)
-                grad_output = torch.ones_like(ref_output)
-                input_grad_f32, grid_grad_f32 = torch.autograd.grad(
-                    ref_output,
-                    (ref_input, ref_grid),
-                    grad_outputs=grad_output,
-                )
-                cpu_input.grad = input_grad_f32.to(dtype)
-                cpu_args[0].grad = grid_grad_f32.to(dtype)
+                if not backward_contract.populate_gradients(cpu_input, cpu_args, cpu_kwargs):
+                    backward_contract = None
             except Exception as e:
-                cpu_failures.append(f"f32 grid reference: {type(e).__name__}: {e}")
+                cpu_failures.append(
+                    f"backward contract {backward_contract.reference_id}: {type(e).__name__}: {e}"
+                )
+                continue
+
+        reference_dtype = None
+        if dtype in {torch.float16, torch.bfloat16} and op_name in _F32_OPMATH_BACKWARD_OPS:
+            reference_dtype = torch.float32
+        elif dtype == torch.float32 and op_name in {"linalg.matrix_exp", "matrix_exp"}:
+            reference_dtype = torch.float64
+        use_wide_reference = reference_dtype is not None and backward_contract is None
+        expected_out = None
+        if backward_contract is not None:
+            pass
+        elif use_wide_reference:
+            try:
+                reference_input = clone_to_reference_dtype(cpu_input, reference_dtype)
+                reference_args = clone_to_reference_dtype(cpu_args, reference_dtype)
+                reference_kwargs = clone_to_reference_dtype(cpu_kwargs, reference_dtype)
+                expected_out = op_fn(reference_input, *reference_args, **reference_kwargs)
+                run_backward(_project_output_for_backward(sample, expected_out))
+                copy_reference_gradients(reference_input, cpu_input)
+                copy_reference_gradients(reference_args, cpu_args)
+                copy_reference_gradients(reference_kwargs, cpu_kwargs)
+            except Exception as e:
+                cpu_failures.append(f"higher-opmath backward reference: {type(e).__name__}: {e}")
                 continue
         else:
             # Run CPU forward
@@ -325,9 +631,9 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
             raise RuntimeError(f"Device forward execution failed: {e}") from e
 
         # CPU backward, unless the f32 direct-backward reference already populated gradients.
-        if not use_grid_f32_reference:
+        if backward_contract is None and not use_wide_reference:
             try:
-                run_backward(expected_out)
+                run_backward(_project_output_for_backward(sample, expected_out))
             except Exception as e:
                 if is_cpu_reference_failure(e):
                     record_opinfo_oracle_failure(
@@ -344,14 +650,44 @@ def test_op_backward(op_name, dtype_str, device, compare, request):
 
         # Device backward
         try:
-            run_backward(actual_out)
+            run_backward(
+                actual_out
+                if use_wide_reference
+                else _project_output_for_backward(sample, actual_out)
+            )
             synchronize(device)
         except Exception as e:
             raise RuntimeError(f"Device backward execution failed: {e}") from e
 
+        if op_name == "nn.functional.rrelu":
+            if not isinstance(actual_out, torch.Tensor) or not isinstance(dev_input, torch.Tensor):
+                raise AssertionError("RReLU backward contract requires tensor input and output")
+            _compare_rrelu_saved_noise_gradient(
+                dev_input,
+                actual_out,
+                dev_kwargs,
+                compare,
+            )
+            tested_any = True
+            continue
+
+        if op_name in _RANDOMIZED_LINALG_BACKWARD_OPS:
+            _randomized_linalg_backward_contract(
+                op_name,
+                op_fn,
+                sample,
+                dev_input,
+                dev_args,
+                dev_kwargs,
+                dtype,
+                device,
+            )
+            tested_any = True
+            continue
+
         # Compare gradients of all inputs
         # Match CPU inputs with device inputs recursively
-        gradient_category = "backward" if use_grid_f32_reference else None
+        gradient_category = "backward" if use_wide_reference or backward_contract is not None else None
         compare_gradients(dev_input, cpu_input, "input", category_override=gradient_category)
         compare_gradients(dev_args, cpu_args, "args", category_override=gradient_category)
         compare_gradients(dev_kwargs, cpu_kwargs, "kwargs", category_override=gradient_category)

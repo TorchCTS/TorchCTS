@@ -16,12 +16,19 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 import torch
 
 from torchcts.core.coverage import generated_entries_for
 from torchcts.core.comparer import compare_inf_propagation, compare_nan_propagation
 from torchcts.core.contract_references import ContractReferenceError, resolve_generated_forward_reference
+from torchcts.core.fft_contract import (
+    compare_fft_nonfinite_groups,
+    generated_c2c_fft_contract_spec,
+)
+from torchcts.core.reference_oracles import unsigned_negation_reference
 from torchcts.core.device import synchronize
 from torchcts.core.non_unique_output_compare import compare_non_unique_output_if_applicable
 from torchcts.core.oracles import OracleUnavailable, oracle_collection_skip_for_surface, run_oracle_for_surface
@@ -42,8 +49,12 @@ from torchcts.core.dtype_contracts import (
     is_deterministic_cpu_unsupported,
 )
 from torchcts.core.reference_oracles import (
-    grid_sampler_3d_backward_f32_reference,
+    grid_sampler_backward_f32_reference,
+    grid_sampler_forward_f32_reference,
+    matmul_family_determinate_reference,
     matmul_family_reference,
+    segment_reduce_prod_backward_reference,
+    segment_reduce_prod_reference,
 )
 from torchcts.core.runtime_evidence import record_opinfo_oracle_failure
 from torchcts.sample_generation import (
@@ -1551,6 +1562,8 @@ def _functional_matmul_callable(entry: dict):
 
 def _native_or_reference_matmul_expected(entry: dict, callable_op, cpu_args: tuple, cpu_kwargs: dict) -> tuple[torch.Tensor, bool]:
     surface_kind = entry.get("surface_kind")
+    if cpu_args and isinstance(cpu_args[0], torch.Tensor):
+        return matmul_family_reference(entry["name"], cpu_args, cpu_kwargs), False
     try:
         if surface_kind == "out_variant":
             functional_op = _functional_matmul_callable(entry)
@@ -1677,7 +1690,39 @@ def _run_manual_matmul_case(
             f"{type(exc).__name__}: {exc}; schema={schema}; case_id={case_id}; input_condition={input_condition}"
         ) from exc
 
-    if input_condition != InputCondition.CLEAN:
+    if input_condition != InputCondition.CLEAN and dtype.is_complex:
+        semantic_expected, determinate = matmul_family_determinate_reference(
+            entry["name"], cpu_args, cpu_kwargs
+        )
+        if tuple(actual.shape) != tuple(semantic_expected.shape):
+            raise AssertionError(
+                f"{entry['name']} output shape mismatch: "
+                f"{tuple(actual.shape)} vs {tuple(semantic_expected.shape)}"
+            )
+        if actual.dtype != semantic_expected.dtype:
+            raise AssertionError(
+                f"{entry['name']} output dtype mismatch: "
+                f"{actual.dtype} vs {semantic_expected.dtype}"
+            )
+        if torch.device(device).type == "cpu":
+            return True
+        actual_lanes = torch.view_as_real(actual)
+        expected_lanes = torch.view_as_real(semantic_expected).to(actual.device)
+        device_mask = determinate.to(actual.device)
+        lane_dtype = (
+            torch.float64
+            if dtype == torch.complex128
+            else torch.float32
+            if dtype == torch.complex64
+            else torch.float16
+        )
+        compare(
+            actual_lanes[device_mask],
+            expected_lanes[device_mask],
+            category="matmul",
+            dtype=lane_dtype,
+        )
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="matmul", dtype=dtype)
@@ -1807,34 +1852,43 @@ def _run_manual_shape_case(
     cpu_args = cpu_sample.call_args()
     cpu_kwargs = cpu_sample.kwargs
     surface_kind = entry.get("surface_kind")
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        cpu_sample,
+        dtype,
+        input_condition,
+    )
 
-    try:
-        if surface_kind == "out_variant":
-            if _shape_uses_tensor_list_out(entry):
-                expected = _empty_shape_tensor_list(entry, cpu_args, "cpu")
-                returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
-                if returned is not None:
-                    raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for Tensor-list out")
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            if surface_kind == "out_variant":
+                if _shape_uses_tensor_list_out(entry):
+                    expected = _empty_shape_tensor_list(entry, cpu_args, "cpu")
+                    returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
+                    if returned is not None:
+                        raise AssertionError(f"{entry['name']} returned {returned!r}, expected None for Tensor-list out")
+                else:
+                    expected = torch.empty(0, dtype=_shape_out_dtype(entry, dtype), device="cpu")
+                    returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
+                    _assert_out_identity(returned, expected, entry["name"])
+            elif surface_kind == "mutating_or_inplace":
+                expected = _clone_writable_input(cpu_args[0])
+                returned = callable_op(expected, *cpu_args[1:], **cpu_kwargs)
+                if entry["name"] == "aten::set_data":
+                    if returned is not None:
+                        raise AssertionError(f"{entry['name']} returned {returned!r}, expected None")
+                else:
+                    _assert_inplace_identity(returned, expected, entry["name"])
+            elif surface_kind == "view_or_alias":
+                expected = callable_op(*cpu_args, **cpu_kwargs)
+            elif surface_kind == "functional_data":
+                expected = callable_op(*cpu_args, **cpu_kwargs)
             else:
-                expected = torch.empty(0, dtype=_shape_out_dtype(entry, dtype), device="cpu")
-                returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
-                _assert_out_identity(returned, expected, entry["name"])
-        elif surface_kind == "mutating_or_inplace":
-            expected = _clone_writable_input(cpu_args[0])
-            returned = callable_op(expected, *cpu_args[1:], **cpu_kwargs)
-            if entry["name"] == "aten::set_data":
-                if returned is not None:
-                    raise AssertionError(f"{entry['name']} returned {returned!r}, expected None")
-            else:
-                _assert_inplace_identity(returned, expected, entry["name"])
-        elif surface_kind == "view_or_alias":
-            expected = callable_op(*cpu_args, **cpu_kwargs)
-        elif surface_kind == "functional_data":
-            expected = callable_op(*cpu_args, **cpu_kwargs)
-        else:
+                return False
+        except Exception:
             return False
-    except Exception:
-        return False
 
     try:
         dev_sample = sample_shape(
@@ -1915,7 +1969,28 @@ def _run_manual_shape_case(
             )
         should_check_mutation_reflection = bool(expected_alias and actual_alias)
 
-    if input_condition != InputCondition.CLEAN:
+        if entry["name"] == "aten::_neg_view" and dtype in {
+            torch.uint8,
+            torch.uint16,
+            torch.uint32,
+            torch.uint64,
+        }:
+            if not actual.is_neg():
+                raise AssertionError(f"{entry['name']} did not preserve the lazy negative bit")
+            if torch.device(device).type == "cpu":
+                return True
+            materialized = actual.clone()
+            if materialized.is_neg():
+                materialized = materialized.resolve_neg()
+            semantic_expected = unsigned_negation_reference(cpu_args[0])
+            compare(materialized, semantic_expected, category="exact", dtype=dtype)
+            return True
+
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(actual, contract_reference, expected_device=device)
+    elif contract_reference is not None:
+        _compare_contract_tensor(actual, contract_reference, dtype, compare, expected_device=device)
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="copy", dtype=dtype)
@@ -2381,12 +2456,13 @@ def _run_fft_once(
     dtype: torch.dtype,
     device: str,
     manifest: dict,
-) -> torch.Tensor:
+    input_condition: str = InputCondition.CLEAN,
+) -> tuple[torch.Tensor, object]:
     sample = sample_fft(
         entry,
         dtype,
         device=device,
-        input_condition=InputCondition.CLEAN,
+        input_condition=input_condition,
         seed=manifest.get("ieee754_seed", 67),
     )
     args = sample.call_args()
@@ -2398,7 +2474,7 @@ def _run_fft_once(
         returned = callable_op(*args, **kwargs)
         if not isinstance(returned, torch.Tensor):
             raise AssertionError(f"{entry['name']} returned {type(returned).__name__}, expected Tensor")
-        return returned
+        return returned, sample
     out = torch.empty_strided(
         tuple(functional_result.shape),
         tuple(functional_result.stride()),
@@ -2407,7 +2483,7 @@ def _run_fft_once(
     )
     returned = callable_op(*args, **kwargs, out=out)
     _assert_out_identity(returned, out, entry["name"])
-    return out
+    return out, sample
 
 
 def _run_manual_fft_case(
@@ -2415,18 +2491,28 @@ def _run_manual_fft_case(
     callable_op,
     functional_op,
     dtype: torch.dtype,
+    input_condition: str,
     device: str,
     compare,
     manifest: dict,
 ) -> bool:
     schema = entry.get("schema", "")
+    special_c2c = (
+        entry["base_name"] == "_fft_c2c"
+        and dtype.is_complex
+        and input_condition != InputCondition.CLEAN
+    )
     try:
-        expected = _run_fft_once(entry, callable_op, functional_op, dtype, "cpu", manifest)
+        expected, cpu_sample = _run_fft_once(
+            entry, callable_op, functional_op, dtype, "cpu", manifest, input_condition
+        )
     except Exception:
         return False
 
     try:
-        actual = _run_fft_once(entry, callable_op, functional_op, dtype, device, manifest)
+        actual, _device_sample = _run_fft_once(
+            entry, callable_op, functional_op, dtype, device, manifest, input_condition
+        )
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
@@ -2446,7 +2532,21 @@ def _run_manual_fft_case(
         raise AssertionError(
             f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}"
         )
-    compare(actual, expected, category="fft", dtype=dtype)
+    if special_c2c and torch.device(device).type == "cpu":
+        return True
+    if special_c2c:
+        spec = generated_c2c_fft_contract_spec(cpu_sample.input, cpu_sample.args[0])
+        compare_fft_nonfinite_groups(
+            actual,
+            expected.to(actual.device),
+            cpu_sample.input,
+            spec,
+            dtype=dtype,
+            compare=compare,
+            label=entry["name"],
+        )
+    else:
+        compare(actual, expected, category="fft", dtype=dtype)
     return True
 
 
@@ -2466,10 +2566,25 @@ def run_manual_fft_strategy(entry: dict | None, device: str, compare, manifest: 
     functional_op = _functional_dispatcher_callable(entry)
     tested_any = False
     for dtype, _dtype_str in _contract_dtype_items_or(entry, manifest, [torch.float32]):
-        if dtype not in {torch.float32, torch.float64}:
+        if dtype not in {torch.float32, torch.float64, torch.complex64, torch.complex128}:
             continue
-        if _run_manual_fft_case(entry, callable_op, functional_op, dtype, device, compare, manifest):
-            tested_any = True
+        input_conditions = (
+            _manual_input_conditions(manifest, entry["base_name"], dtype)
+            if entry["base_name"] == "_fft_c2c" and dtype.is_complex
+            else [InputCondition.CLEAN]
+        )
+        for input_condition in input_conditions:
+            if _run_manual_fft_case(
+                entry,
+                callable_op,
+                functional_op,
+                dtype,
+                input_condition,
+                device,
+                compare,
+                manifest,
+            ):
+                tested_any = True
 
     if not tested_any:
         pytest.skip(f"coverage_strategy_pending: no manifest-enabled FFT cases for {entry['name']}")
@@ -2958,9 +3073,42 @@ def _run_manual_reduction_case(
     cpu_kwargs = sample.kwargs
     surface_kind = entry.get("surface_kind")
     schema = entry.get("schema", "")
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"], sample, dtype, input_condition
+    )
+
+    base_name = entry["base_name"].rstrip("_")
+    use_segment_prod_reference = (
+        input_condition == InputCondition.CLEAN
+        and dtype in {torch.float16, torch.bfloat16}
+        and base_name in {"segment_reduce", "_segment_reduce_backward"}
+        and (
+            (base_name == "segment_reduce" and cpu_args and cpu_args[0] == "prod")
+            or (base_name == "_segment_reduce_backward" and len(cpu_args) > 2 and cpu_args[2] == "prod")
+        )
+    )
 
     try:
-        if surface_kind == "out_variant":
+        if contract_reference is not None:
+            expected = contract_reference.value
+        elif use_segment_prod_reference and base_name == "segment_reduce":
+            expected = segment_reduce_prod_reference(
+                cpu_input,
+                lengths=cpu_kwargs.get("lengths"),
+                offsets=cpu_kwargs.get("offsets"),
+                axis=int(cpu_kwargs.get("axis", 0)),
+                initial=cpu_kwargs.get("initial"),
+            )
+        elif use_segment_prod_reference:
+            expected = segment_reduce_prod_backward_reference(
+                cpu_input,
+                cpu_args[1],
+                lengths=cpu_kwargs.get("lengths"),
+                offsets=cpu_kwargs.get("offsets"),
+                axis=int(cpu_kwargs.get("axis", 0)),
+                initial=cpu_kwargs.get("initial"),
+            )
+        elif surface_kind == "out_variant":
             functional_op = _functional_dispatcher_callable(entry)
             functional_expected = functional_op(cpu_input, *cpu_args, **cpu_kwargs)
             if not isinstance(functional_expected, torch.Tensor):
@@ -3025,7 +3173,11 @@ def _run_manual_reduction_case(
     if not isinstance(actual, torch.Tensor):
         raise AssertionError(f"{entry['name']} returned {type(actual).__name__}, expected Tensor; schema={schema}")
 
-    if input_condition != InputCondition.CLEAN:
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(actual, contract_reference, expected_device=device)
+    elif contract_reference is not None:
+        _compare_contract_tensor(actual, contract_reference, dtype, compare, expected_device=device)
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="reduction", dtype=dtype)
@@ -3586,6 +3738,9 @@ def _compare_multi_output_results(
 ) -> None:
     if len(actual) != len(expected):
         raise AssertionError(f"{entry['name']} returned {len(actual)} tensors, expected {len(expected)}")
+    if entry["base_name"].rstrip("_") == "_ctc_loss":
+        _compare_ctc_loss_results(entry, actual, expected, sample, device, compare)
+        return
     if compare_non_unique_output_if_applicable(
         entry["name"],
         actual,
@@ -3616,6 +3771,63 @@ def _compare_multi_output_results(
             _compare_special_tier(actual_item, expected_item, input_condition)
         else:
             compare(actual_item, expected_item, category="reduction", dtype=dtype)
+
+
+def _sample_argument_by_name(entry: dict, sample, name: str):
+    if sample is None:
+        raise AssertionError(f"{entry['name']} requires generated sample context")
+    positional_specs = [
+        arg for arg in entry.get("args", ())
+        if not arg.get("is_out") and not arg.get("kwarg_only")
+    ]
+    positional_values = sample.call_args()
+    for spec, value in zip(positional_specs, positional_values):
+        if spec.get("name") == name:
+            return value
+    if name in sample.kwargs:
+        return sample.kwargs[name]
+    raise AssertionError(f"{entry['name']} sample has no argument named {name!r}")
+
+
+def _length_values(value) -> list[int]:
+    if isinstance(value, torch.Tensor):
+        return [int(item) for item in value.detach().cpu().reshape(-1).tolist()]
+    return [int(item) for item in value]
+
+
+def _compare_ctc_loss_results(entry, actual, expected, sample, device, compare) -> None:
+    if len(actual) < 2 or len(expected) < 2:
+        raise AssertionError(f"{entry['name']} expected loss and log_alpha outputs")
+    actual_loss, actual_alpha = actual[:2]
+    expected_loss, expected_alpha = expected[:2]
+    for index, (actual_item, expected_item) in enumerate(
+        ((actual_loss, expected_loss), (actual_alpha, expected_alpha))
+    ):
+        if tuple(actual_item.shape) != tuple(expected_item.shape):
+            raise AssertionError(
+                f"{entry['name']} output {index} shape mismatch: "
+                f"{tuple(actual_item.shape)} vs {tuple(expected_item.shape)}"
+            )
+        if actual_item.dtype != expected_item.dtype:
+            raise AssertionError(
+                f"{entry['name']} output {index} dtype mismatch: "
+                f"{actual_item.dtype} vs {expected_item.dtype}"
+            )
+        if actual_item.device.type != torch.device(device).type:
+            raise AssertionError(f"{entry['name']} output {index} is on {actual_item.device}, expected {device}")
+    compare(actual_loss, expected_loss, category="loss", dtype=actual_loss.dtype)
+    input_lengths = _length_values(_sample_argument_by_name(entry, sample, "input_lengths"))
+    target_lengths = _length_values(_sample_argument_by_name(entry, sample, "target_lengths"))
+    if len(input_lengths) != actual_alpha.shape[0] or len(target_lengths) != actual_alpha.shape[0]:
+        raise AssertionError(f"{entry['name']} CTC length metadata does not match batch size")
+    for batch, (input_length, target_length) in enumerate(zip(input_lengths, target_lengths)):
+        valid_states = 2 * target_length + 1
+        compare(
+            actual_alpha[batch, :input_length, :valid_states],
+            expected_alpha[batch, :input_length, :valid_states],
+            category="reduction",
+            dtype=actual_alpha.dtype,
+        )
 
 
 def _run_manual_multi_output_reduction_case(
@@ -3747,16 +3959,25 @@ def _run_manual_upsample_case(
     cpu_kwargs = cpu_sample.kwargs
     surface_kind = entry.get("surface_kind")
     schema = entry.get("schema", "")
+    contract_reference = resolve_generated_forward_reference(
+        entry["name"],
+        cpu_sample,
+        dtype,
+        input_condition,
+    )
 
-    try:
-        if surface_kind == "out_variant":
-            expected = torch.empty(0, dtype=dtype, device="cpu")
-            returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
-            _assert_out_identity(returned, expected, entry["name"])
-        else:
-            expected = callable_op(*cpu_args, **cpu_kwargs)
-    except Exception:
-        return False
+    if contract_reference is not None:
+        expected = contract_reference.value
+    else:
+        try:
+            if surface_kind == "out_variant":
+                expected = torch.empty(0, dtype=dtype, device="cpu")
+                returned = callable_op(*cpu_args, **cpu_kwargs, out=expected)
+                _assert_out_identity(returned, expected, entry["name"])
+            else:
+                expected = callable_op(*cpu_args, **cpu_kwargs)
+        except Exception:
+            return False
 
     if not isinstance(expected, torch.Tensor):
         return False
@@ -3792,7 +4013,11 @@ def _run_manual_upsample_case(
     if actual.device.type != torch.device(device).type:
         raise AssertionError(f"{entry['name']} returned tensor on {actual.device}, expected {device}")
 
-    if input_condition != InputCondition.CLEAN:
+    if contract_reference is not None and torch.device(device).type == "cpu":
+        _assert_contract_reference_metadata(actual, contract_reference, expected_device=device)
+    elif contract_reference is not None:
+        _compare_contract_tensor(actual, contract_reference, dtype, compare, expected_device=device)
+    elif input_condition != InputCondition.CLEAN:
         _compare_special_tier(actual, expected, input_condition)
     else:
         compare(actual, expected, category="elementwise", dtype=dtype)
@@ -4018,7 +4243,7 @@ def _run_grid_once(
     dtype: torch.dtype,
     device: str,
     manifest: dict,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, object]:
     sample = sample_grid(
         entry,
         dtype,
@@ -4036,7 +4261,7 @@ def _run_grid_once(
     _assert_multi_output_identity(returned, out_kwargs, entry["name"])
     if not isinstance(returned, torch.Tensor):
         raise AssertionError(f"{entry['name']} returned {type(returned).__name__}, expected Tensor")
-    return returned
+    return returned, sample
 
 
 def _run_manual_grid_case(
@@ -4049,12 +4274,30 @@ def _run_manual_grid_case(
 ) -> bool:
     schema = entry.get("schema", "")
     try:
-        expected = _run_grid_once(entry, callable_op, dtype, "cpu", manifest)
+        if dtype in {torch.float16, torch.bfloat16}:
+            cpu_sample = sample_grid(
+                entry,
+                dtype,
+                device="cpu",
+                input_condition=InputCondition.CLEAN,
+                seed=manifest.get("ieee754_seed", 67),
+            )
+            reference_args = cpu_sample.call_args()
+            expected = grid_sampler_forward_f32_reference(
+                reference_args[0],
+                reference_args[1],
+                int(reference_args[2]),
+                int(reference_args[3]),
+                bool(reference_args[4]),
+            )
+        else:
+            native_expected, cpu_sample = _run_grid_once(entry, callable_op, dtype, "cpu", manifest)
+            expected = native_expected
     except Exception:
         return False
 
     try:
-        actual = _run_grid_once(entry, callable_op, dtype, device, manifest)
+        actual, _device_sample = _run_grid_once(entry, callable_op, dtype, device, manifest)
         synchronize(device)
     except Exception as exc:
         raise RuntimeError(
@@ -4153,7 +4396,7 @@ def _run_manual_grid_backward_case(
     use_f32_reference = _uses_f32_grid_backward_reference(entry, dtype)
     reference_sample = None
     if use_f32_reference:
-        reference_id = "grid_sampler_3d_backward_f32"
+        reference_id = "grid_sampler_backward_f32"
         try:
             reference_sample = sample_grid_backward(
                 entry,
@@ -4163,7 +4406,7 @@ def _run_manual_grid_backward_case(
                 seed=manifest.get("ieee754_seed", 67),
             )
             reference_args = reference_sample.call_args()
-            expected_items = grid_sampler_3d_backward_f32_reference(
+            expected_items = grid_sampler_backward_f32_reference(
                 reference_args[0],
                 reference_args[1],
                 reference_args[2],
@@ -4224,6 +4467,8 @@ def _run_manual_grid_backward_case(
 def _uses_f32_grid_backward_reference(entry: dict, dtype: torch.dtype) -> bool:
     return (
         entry.get("name") in {
+            "aten::grid_sampler_2d_backward",
+            "aten::grid_sampler_2d_backward.out",
             "aten::grid_sampler_3d_backward",
             "aten::grid_sampler_3d_backward.out",
         }
@@ -4591,8 +4836,15 @@ def _run_manual_linalg_case(
     manifest: dict,
 ) -> bool:
     schema = entry.get("schema", "")
+    contract_reference = None
     try:
-        expected, _cpu_sample = _run_linalg_once_with_sample(entry, callable_op, dtype, input_condition, "cpu", manifest)
+        native_expected, cpu_sample = _run_linalg_once_with_sample(
+            entry, callable_op, dtype, input_condition, "cpu", manifest
+        )
+        contract_reference = resolve_generated_forward_reference(
+            entry["name"], cpu_sample, dtype, input_condition
+        )
+        expected = contract_reference.value if contract_reference is not None else native_expected
     except Exception:
         return False
 
@@ -4611,6 +4863,23 @@ def _run_manual_linalg_case(
         raise AssertionError(f"{entry['name']} dtype mismatch: {actual.dtype} vs {expected.dtype}")
     if tuple(actual.shape) != tuple(expected.shape):
         raise AssertionError(f"{entry['name']} shape mismatch: {tuple(actual.shape)} vs {tuple(expected.shape)}")
+    if contract_reference is not None:
+        if torch.device(device).type == "cpu":
+            _assert_contract_reference_metadata(
+                actual,
+                contract_reference,
+                expected_device=device,
+            )
+        else:
+            _compare_contract_tensor(actual, contract_reference, dtype, compare, expected_device=device)
+        return True
+    if (
+        torch.device(device).type == "cpu"
+        and input_condition != InputCondition.CLEAN
+        and dtype.is_complex
+        and entry["base_name"].rstrip("_") == "linalg_matmul"
+    ):
+        return True
     if compare_non_unique_output_if_applicable(
         entry["name"],
         actual,

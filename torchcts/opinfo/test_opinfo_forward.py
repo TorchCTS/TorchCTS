@@ -29,6 +29,7 @@ from torchcts.core.opinfo_adapter import (
     is_cpu_reference_failure,
     InputCondition,
     prepare_sample,
+    stabilize_sample_randomness,
 )
 from torchcts.core.comparer import compare_nan_propagation, compare_inf_propagation
 from torchcts.core.contract_references import resolve_opinfo_forward_reference
@@ -321,6 +322,7 @@ def test_op_forward(op_name, dtype_str, input_condition, device, compare, reques
         sample = prepare_sample(raw_sample, input_condition,
                                 ieee754_seed=ieee754_seed, sample_index=i,
                                 op_name=op_name)
+        sample = stabilize_sample_randomness(sample, op_name)
 
         # Apply dropout override for attention ops
         if op_name in _DROPOUT_OVERRIDE_OPS:

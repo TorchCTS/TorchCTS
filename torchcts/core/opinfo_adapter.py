@@ -64,6 +64,37 @@ _ORTHOGONAL_POLYNOMIAL_OPS = frozenset({
 })
 
 
+@dataclass(frozen=True)
+class SampleTransformPolicy:
+    """Select tensor operand paths eligible for generic IEEE transformation."""
+
+    transform_input: bool = True
+    arg_indices: frozenset[int] | None = None
+    kwarg_names: frozenset[str] | None = None
+    validator: str | None = None
+
+
+_INPUT_ONLY_POLICY = SampleTransformPolicy(
+    transform_input=True,
+    arg_indices=frozenset(),
+    kwarg_names=frozenset(),
+)
+
+_BCE_LOGITS_POLICY = SampleTransformPolicy(
+    transform_input=True,
+    arg_indices=frozenset(),
+    kwarg_names=frozenset(),
+    validator="bce_logits",
+)
+
+_GRID_SAMPLE_POLICY = SampleTransformPolicy(
+    transform_input=True,
+    arg_indices=frozenset(),
+    kwarg_names=frozenset(),
+    validator="grid_sample",
+)
+
+
 _NO_IEEE754_PROPAGATION_OPS = frozenset({
     # Uninitialized memory has no value contract, so NaN/Inf propagation is not
     # meaningful.
@@ -95,10 +126,24 @@ _NO_IEEE754_PROPAGATION_OPS = frozenset({
     "log_normal",
     "cauchy",
     "exponential",
+    # Plain BCE consumes probabilities, not unconstrained logits.  NaN/Inf in
+    # either probability operand is outside its numerical domain; the logits
+    # variant has a separate policy and analytic endpoint reference below.
+    "nn.functional.binary_cross_entropy",
+    # Randomized factorizations have no NaN/Inf input-domain contract.
+    "pca_lowrank",
+    "svd_lowrank",
 })
 
 
-_NO_GENERIC_BACKWARD_ORACLE_OPS = _NO_IEEE754_PROPAGATION_OPS
+# Randomized low-rank routines do not have a useful generic NaN/Inf contract,
+# but their clean backward samples do provide a representation-invariant
+# ``output_process_fn_grad``.  Keep that clean backward coverage instead of
+# coupling it to the special-value exclusion list.
+_NO_GENERIC_BACKWARD_ORACLE_OPS = _NO_IEEE754_PROPAGATION_OPS - {
+    "pca_lowrank",
+    "svd_lowrank",
+}
 
 
 def _canonical_op_base(op_name):
@@ -114,10 +159,66 @@ def _canonical_op_base(op_name):
     return name.split(".", 1)[0]
 
 
-def _preserve_nonfinite_control_args(op_name):
-    """Return True when IEEE injection must not touch control-parameter tensors."""
+def _policy_op_name(op_name):
+    if not op_name:
+        return None
+    name = str(op_name)
+    if name.startswith("nn.functional."):
+        return name
+    return _canonical_op_base(name)
 
-    return _canonical_op_base(op_name) in _ORTHOGONAL_POLYNOMIAL_OPS
+
+def sample_transform_policy(op_name) -> SampleTransformPolicy:
+    """Return the operand-role policy for an OpInfo or dispatcher name."""
+
+    name = _policy_op_name(op_name)
+    if name in _ORTHOGONAL_POLYNOMIAL_OPS:
+        return _INPUT_ONLY_POLICY
+    if name in {
+        "binary_cross_entropy_with_logits",
+        "nn.functional.binary_cross_entropy_with_logits",
+    }:
+        return _BCE_LOGITS_POLICY
+    if name in {
+        "grid_sampler",
+        "grid_sampler_2d",
+        "grid_sampler_3d",
+        "nn.functional.grid_sample",
+    }:
+        return _GRID_SAMPLE_POLICY
+    if name in {"cov", "gradient"}:
+        # Covariance weights and gradient coordinate/spacing tensors are
+        # constrained controls.  Generic IEEE tiers exercise the observation
+        # or differentiated data only.
+        return _INPUT_ONLY_POLICY
+    return SampleTransformPolicy()
+
+
+def _all_finite_tensor(value) -> bool:
+    return not isinstance(value, torch.Tensor) or not (
+        value.is_floating_point() or value.is_complex()
+    ) or bool(torch.isfinite(value).all())
+
+
+def _validate_sample_policy(sample, policy: SampleTransformPolicy, op_name) -> None:
+    if policy.validator == "bce_logits":
+        if not sample.args or not isinstance(sample.args[0], torch.Tensor):
+            raise ValueError(f"{op_name} BCE sample has no tensor target")
+        target = sample.args[0]
+        if not bool(torch.isfinite(target).all()) or not bool(((target >= 0) & (target <= 1)).all()):
+            raise ValueError(f"{op_name} BCE target must remain finite and within [0, 1]")
+        controls = list(sample.args[1:3])
+        controls.extend(sample.kwargs.get(name) for name in ("weight", "pos_weight"))
+        if any(not _all_finite_tensor(value) for value in controls if value is not None):
+            raise ValueError(f"{op_name} BCE weight and pos_weight must remain finite")
+    elif policy.validator == "grid_sample":
+        if not sample.args or not isinstance(sample.args[0], torch.Tensor):
+            raise ValueError(f"{op_name} grid sample has no tensor coordinate operand")
+        if not bool(torch.isfinite(sample.args[0]).all()):
+            raise ValueError(
+                f"{op_name} generic IEEE sample must keep grid coordinates finite; "
+                "nonfinite coordinates require a dedicated coordinate contract"
+            )
 
 
 def _resolve_tensor_value_bits(t):
@@ -343,13 +444,12 @@ def _transform_obj(obj, target_condition, seed):
 
 
 def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0, op_name=None):
-    """Clone sample and transform ALL float tensors to match the target condition.
+    """Clone a sample and transform role-eligible tensors to the target condition.
 
-    Transforms all float/complex tensors in sample.input, sample.args,
-    and sample.kwargs. Complex tensors handled via view_as_real internally.
-    For op families with tensor-valued control parameters, such as special
-    orthogonal polynomials, non-finite injection is limited to the data input so
-    the sample remains valid for the dispatcher contract.
+    The default policy transforms every float/complex tensor.  Families with
+    constrained probability, coordinate, weight, degree, or control operands
+    select only their data input and validate that preserved controls remain in
+    domain. Complex tensors are handled through ``view_as_real`` internally.
 
     Args:
         sample: opinfo SampleInput
@@ -362,22 +462,98 @@ def prepare_sample(sample, target_condition, ieee754_seed=67, sample_index=0, op
     """
     from torch.testing._internal.opinfo.core import SampleInput
 
+    policy = sample_transform_policy(op_name)
     if target_condition == InputCondition.CLEAN:
         natural = classify_sample(sample)
         if natural == InputCondition.CLEAN:
+            _validate_sample_policy(sample, policy, op_name)
             return sample  # Already clean, no clone needed
 
     seed = ieee754_seed ^ (sample_index * 2654435761)  # Knuth multiplicative hash
 
-    new_input = _transform_obj(sample.input, target_condition, seed)
-    if _preserve_nonfinite_control_args(op_name):
-        new_args = sample.args
-        new_kwargs = sample.kwargs
-    else:
+    new_input = (
+        _transform_obj(sample.input, target_condition, seed)
+        if policy.transform_input
+        else sample.input
+    )
+    if policy.arg_indices is None:
         new_args = _transform_obj(sample.args, target_condition, seed + 1000000)
+    else:
+        new_args = tuple(
+            _transform_obj(item, target_condition, seed + 1000000 + index)
+            if index in policy.arg_indices
+            else item
+            for index, item in enumerate(sample.args)
+        )
+    if policy.kwarg_names is None:
         new_kwargs = _transform_obj(sample.kwargs, target_condition, seed + 2000000)
+    else:
+        new_kwargs = {
+            key: (
+                _transform_obj(value, target_condition, seed + 2000000 + index)
+                if key in policy.kwarg_names
+                else value
+            )
+            for index, (key, value) in enumerate(sample.kwargs.items())
+        }
 
-    return SampleInput(new_input, args=new_args, kwargs=new_kwargs)
+    prepared = SampleInput(new_input, args=new_args, kwargs=new_kwargs)
+    _validate_sample_policy(prepared, policy, op_name)
+    return prepared
+
+
+def stabilize_sample_randomness(sample, op_name):
+    """Make RNG-controllable OpInfo samples reproducible across devices.
+
+    Functional fractional max-pool accepts the same explicit random-sample
+    tensor as its dispatcher operator.  PyTorch's OpInfo samples omit it, which
+    otherwise makes CPU and target invocations choose unrelated pooling
+    regions.  Supplying a TorchCTS-owned tensor turns the comparison into the
+    deterministic operator contract without pretending that unrelated device
+    RNG streams must produce equal values.
+    """
+    if op_name not in {
+        "nn.functional.fractional_max_pool2d",
+        "nn.functional.fractional_max_pool3d",
+    }:
+        return sample
+    if "_random_samples" in (sample.kwargs or {}):
+        return sample
+    if not isinstance(sample.input, torch.Tensor):
+        return sample
+
+    from torch.testing._internal.opinfo.core import SampleInput
+
+    spatial_ndim = 3 if op_name.endswith("3d") else 2
+    input_tensor = sample.input
+    if input_tensor.ndim == spatial_ndim + 1:
+        batch_size = 1
+        channels = input_tensor.shape[0]
+    elif input_tensor.ndim == spatial_ndim + 2:
+        batch_size = input_tensor.shape[0]
+        channels = input_tensor.shape[1]
+    else:
+        raise ValueError(
+            f"{op_name} sample rank {input_tensor.ndim} is invalid for {spatial_ndim}D pooling"
+        )
+
+    count = batch_size * channels * spatial_ndim
+    values = (
+        torch.arange(count, dtype=torch.float64)
+        .remainder(17)
+        .add_(1)
+        .div_(18)
+        .to(device=input_tensor.device, dtype=input_tensor.dtype)
+        .reshape(batch_size, channels, spatial_ndim)
+    )
+    return SampleInput(
+        input_tensor,
+        args=sample.args,
+        kwargs={**(sample.kwargs or {}), "_random_samples": values},
+        output_process_fn_grad=getattr(sample, "output_process_fn_grad", None),
+        broadcasts_input=getattr(sample, "broadcasts_input", None),
+        name=getattr(sample, "name", None),
+    )
 
 
 
@@ -789,6 +965,7 @@ def get_backward_op_tests(manifest):
       3. Skip jiterator_* (in SKIP_OPS)
     """
     import torch.testing._internal.common_methods_invocations as cmi
+    from torchcts.core.backward_references import has_opinfo_backward_reference
 
     supported_dtypes = manifest.get("supported_dtypes", {})
     skip_ops = set(manifest.get("skip_ops", [])) | SKIP_OPS
@@ -821,17 +998,18 @@ def get_backward_op_tests(manifest):
 
             disposition = dtype_manifest_disposition(d, dt_str, supported_dtypes, op.name)
             if disposition.allowed:
-                contract = probe_opinfo_cpu_contract(op, d, phase="backward")
-                if not contract.allowed:
-                    _opinfo_skip_record(
-                        op.name,
-                        dt_str,
-                        contract.skip_reason or "cpu_contract_unknown",
-                        contract.detail,
-                        phase="backward",
-                        extra=_contract_skip_extra(contract),
-                    )
-                    continue
+                if not has_opinfo_backward_reference(op.name, d):
+                    contract = probe_opinfo_cpu_contract(op, d, phase="backward")
+                    if not contract.allowed:
+                        _opinfo_skip_record(
+                            op.name,
+                            dt_str,
+                            contract.skip_reason or "cpu_contract_unknown",
+                            contract.detail,
+                            phase="backward",
+                            extra=_contract_skip_extra(contract),
+                        )
+                        continue
                 tests.append((op.name, dt_str))
             elif disposition.skip_reason in ("dtype_not_supported", "dtype_regex_filtered"):
                 _opinfo_skip_record(

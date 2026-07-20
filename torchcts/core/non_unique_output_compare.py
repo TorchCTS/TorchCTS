@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import re
 from typing import Callable
@@ -25,6 +26,13 @@ from typing import Callable
 import torch
 
 from torchcts.core.comparer import mark_usable_fallback, restore_metrics, snapshot_metrics
+from torchcts.core.fft_contract import (
+    compare_fft_nonfinite_groups,
+    public_fft_contract_spec,
+)
+from torchcts.core.reference_oracles import (
+    matmul_family_determinate_reference,
+)
 
 
 REPRESENTATION_AMBIGUOUS = "representation_ambiguous"
@@ -48,6 +56,7 @@ class NonUniqueOutputContract:
     strict_cases: tuple[str, ...] = ()
     unsupported_cases: tuple[str, ...] = ()
     try_direct_first: bool = True
+    supports_special_tiers: bool = False
 
 
 class ContractNotApplicable(Exception):
@@ -88,6 +97,11 @@ def _contains_any(tokens: tuple[str, ...]) -> Callable[[str], bool]:
 
 def _matches_random_value(op_name: str) -> bool:
     name = _normalize_name(op_name)
+    # These operators consume the random decision made by a forward operator.
+    # Their mask/noise argument makes them deterministic, so a random-output
+    # fallback would hide real backward bugs.
+    if "backward" in name:
+        return False
     if _matches_any((
         "bernoulli",
         "geometric",
@@ -108,8 +122,7 @@ def _matches_random_value(op_name: str) -> bool:
         "nn.functional.dropout3d",
         "nn.functional.alpha_dropout",
         "nn.functional.feature_alpha_dropout",
-        "nn.functional.fractional_max_pool2d",
-        "nn.functional.fractional_max_pool3d",
+        "native_dropout",
     ))(name):
         return True
     if any(token in name for token in (
@@ -130,8 +143,6 @@ def _matches_random_value(op_name: str) -> bool:
     )):
         return True
     if "rand" in frozenset(part for part in re.split(r"[^A-Za-z0-9]+|_", name) if part):
-        return True
-    if "dropout" in name and "no_dropout" not in name:
         return True
     return False
 
@@ -245,6 +256,7 @@ def _identity_for_square(matrix: torch.Tensor) -> torch.Tensor:
 
 
 def _finite_values(tensor: torch.Tensor) -> torch.Tensor:
+    tensor = tensor.resolve_conj()
     return torch.view_as_real(tensor) if tensor.is_complex() else tensor
 
 
@@ -269,17 +281,66 @@ def _compare_unordered_values(
     expected_cpu = expected_values.detach().cpu().reshape(-1, expected_values.shape[-1])
     index_rows = []
     for actual_row, expected_row in zip(actual_cpu, expected_cpu):
-        unused = set(range(actual_row.numel()))
-        ordered = []
-        for expected_item in expected_row:
-            best = min(unused, key=lambda idx: float(torch.abs(actual_row[idx] - expected_item).item()))
-            unused.remove(best)
-            ordered.append(best)
-        index_rows.append(ordered)
+        cost = torch.abs(expected_row.unsqueeze(1) - actual_row.unsqueeze(0)).to(torch.float64)
+        if not bool(torch.isfinite(cost).all()):
+            raise AssertionError("unordered value matching received non-finite assignment costs")
+        index_rows.append(_minimum_cost_assignment(cost))
     indices = torch.tensor(index_rows, dtype=torch.long, device=actual_values.device).reshape(actual_values.shape)
     ordered_values = torch.gather(actual_values, -1, indices)
     compare(ordered_values, expected_values, category=category, dtype=actual_values.dtype)
     return ordered_values, indices
+
+
+def _minimum_cost_assignment(cost: torch.Tensor) -> list[int]:
+    """Return the minimum-cost column for each row using Hungarian assignment."""
+
+    if cost.ndim != 2 or cost.shape[0] != cost.shape[1]:
+        raise ValueError(f"assignment cost must be square, got {tuple(cost.shape)}")
+    n = cost.shape[0]
+    values = cost.detach().cpu().tolist()
+    u = [0.0] * (n + 1)
+    v = [0.0] * (n + 1)
+    p = [0] * (n + 1)
+    way = [0] * (n + 1)
+    for row in range(1, n + 1):
+        p[0] = row
+        min_value = [float("inf")] * (n + 1)
+        used = [False] * (n + 1)
+        column = 0
+        while True:
+            used[column] = True
+            current_row = p[column]
+            delta = float("inf")
+            next_column = 0
+            for candidate in range(1, n + 1):
+                if used[candidate]:
+                    continue
+                reduced = values[current_row - 1][candidate - 1] - u[current_row] - v[candidate]
+                if reduced < min_value[candidate]:
+                    min_value[candidate] = reduced
+                    way[candidate] = column
+                if min_value[candidate] < delta:
+                    delta = min_value[candidate]
+                    next_column = candidate
+            for candidate in range(n + 1):
+                if used[candidate]:
+                    u[p[candidate]] += delta
+                    v[candidate] -= delta
+                else:
+                    min_value[candidate] -= delta
+            column = next_column
+            if p[column] == 0:
+                break
+        while True:
+            previous = way[column]
+            p[column] = p[previous]
+            column = previous
+            if column == 0:
+                break
+    assignment = [0] * n
+    for column in range(1, n + 1):
+        assignment[p[column] - 1] = column - 1
+    return assignment
 
 
 def _gather_columns(matrix: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
@@ -320,6 +381,17 @@ def _check_eig(op_name, actual, expected, context, category, dtype, compare) -> 
         raise AssertionError(f"{op_name} eigenvectors contain zero vectors")
     matrix_complex = matrix.to(device=ordered_vectors.device, dtype=ordered_vectors.dtype)
     compare(matrix_complex @ ordered_vectors, ordered_vectors * ordered_values.unsqueeze(-2), category=category, dtype=ordered_vectors.dtype)
+
+
+def _check_eigvals(op_name, actual, expected, context, category, dtype, compare) -> None:
+    actual_values = _tensor_tuple(actual, op_name, min_len=1)[0]
+    expected_values = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _compare_unordered_values(
+        actual_values,
+        expected_values,
+        category=category,
+        compare=compare,
+    )
 
 
 def _check_svd(op_name, actual, expected, context, category, dtype, compare) -> None:
@@ -539,7 +611,45 @@ def _check_cumminmax(op_name, actual, expected, context, category, dtype, compar
 
 
 def _check_mode(op_name, actual, expected, context, category, dtype, compare) -> None:
-    _check_value_index_pair(op_name, actual, expected, context, category, dtype, compare)
+    input_tensor = _context_input(context)
+    actual_values, actual_indices = _tensor_tuple(actual, op_name, min_len=2)[:2]
+    expected_values, expected_indices = _tensor_tuple(expected, op_name, min_len=2)[:2]
+    _assert_tensor_metadata(op_name, actual_values, expected_values, 0)
+    _assert_tensor_metadata(op_name, actual_indices, expected_indices, 1)
+    dim = _selection_dim(op_name, context, input_tensor)
+    rows = input_tensor.detach().cpu().movedim(dim, -1).reshape(-1, input_tensor.shape[dim])
+    values = actual_values.detach().cpu().reshape(-1)
+    indices = actual_indices.detach().cpu().reshape(-1).to(torch.long)
+    if rows.shape[0] != values.numel() or values.numel() != indices.numel():
+        raise AssertionError(f"{op_name} value/index shapes are incompatible with reduction slices")
+    for row_index, (row, value, index) in enumerate(zip(rows, values, indices)):
+        index_value = int(index.item())
+        if not 0 <= index_value < row.numel():
+            raise AssertionError(f"{op_name} row {row_index} index {index_value} is out of bounds")
+        if not _scalar_semantically_equal(row[index_value], value):
+            raise AssertionError(f"{op_name} row {row_index} index does not point to its returned value")
+        candidate_count = _semantic_scalar_count(row, value)
+        maximum_count = max(
+            _semantic_scalar_count(row, candidate)
+            for candidate in row
+        )
+        if candidate_count != maximum_count:
+            raise AssertionError(
+                f"{op_name} row {row_index} returned frequency {candidate_count}, "
+                f"but the modal frequency is {maximum_count}"
+            )
+
+
+def _scalar_semantically_equal(left: torch.Tensor, right: torch.Tensor) -> bool:
+    if bool(torch.isnan(left)) and bool(torch.isnan(right)):
+        return True
+    return bool(left == right)
+
+
+def _semantic_scalar_count(row: torch.Tensor, value: torch.Tensor) -> int:
+    if bool(torch.isnan(value)):
+        return int(torch.isnan(row).sum().item())
+    return int((row == value).sum().item())
 
 
 def _matches_value_index(op_name: str) -> bool:
@@ -580,6 +690,41 @@ def _check_max_pool_indices(op_name, actual, expected, context, category, dtype,
     compare(gathered, actual_values, category="exact", dtype=actual_values.dtype)
 
 
+def _check_max_unpool(op_name, actual, expected, context, category, dtype, compare) -> None:
+    input_tensor = _context_input(context)
+    args = _context_args(context)
+    if not args or not isinstance(args[0], torch.Tensor):
+        raise AssertionError(f"{op_name} requires max-unpool index context")
+    indices = args[0]
+    actual_output = _tensor_tuple(actual, op_name, min_len=1)[0]
+    expected_output = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _assert_tensor_metadata(op_name, actual_output, expected_output, 0)
+    spatial_ndim = _max_pool_spatial_ndim(op_name, input_tensor)
+    spatial_size = 1
+    for size in input_tensor.shape[-spatial_ndim:]:
+        spatial_size *= size
+    source_rows = input_tensor.detach().cpu().reshape(-1, spatial_size)
+    index_rows = indices.detach().cpu().to(torch.long).reshape(source_rows.shape)
+    output_rows = actual_output.detach().cpu().reshape(source_rows.shape[0], -1)
+    for row_index, (source_row, index_row, output_row) in enumerate(zip(source_rows, index_rows, output_rows)):
+        legal_writers: dict[int, list[torch.Tensor]] = {}
+        for source_value, destination in zip(source_row, index_row):
+            destination_index = int(destination.item())
+            if not 0 <= destination_index < output_row.numel():
+                raise AssertionError(f"{op_name} row {row_index} index {destination_index} is out of bounds")
+            legal_writers.setdefault(destination_index, []).append(source_value)
+        for destination_index, actual_value in enumerate(output_row):
+            candidates = legal_writers.get(destination_index)
+            if candidates is None:
+                if not _scalar_semantically_equal(actual_value, torch.zeros_like(actual_value)):
+                    raise AssertionError(f"{op_name} row {row_index} unwritten destination is not zero")
+            elif not any(_scalar_semantically_equal(actual_value, candidate) for candidate in candidates):
+                raise AssertionError(
+                    f"{op_name} row {row_index} destination {destination_index} "
+                    "does not contain any legal writer value"
+                )
+
+
 def _check_structural(op_name, actual, expected, context, category, dtype, compare) -> None:
     def check_item(actual_item, expected_item):
         if isinstance(actual_item, torch.Tensor) and isinstance(expected_item, torch.Tensor):
@@ -600,6 +745,392 @@ def _check_structural(op_name, actual, expected, context, category, dtype, compa
     check_item(actual, expected)
 
 
+def _matches_rrelu_forward(op_name: str) -> bool:
+    name = _normalize_name(op_name)
+    return "backward" not in name and (
+        _matches_any(("nn.functional.rrelu", "rrelu_with_noise", "rrelu_with_noise_functional"))(name)
+        or "rrelu_with_noise" in name
+    )
+
+
+def _rrelu_parameters(op_name: str, context: dict) -> tuple[float, float, bool]:
+    name = _normalize_name(op_name)
+    args = _context_args(context)
+    kwargs = _context_kwargs(context)
+    offset = 1 if "rrelu_with_noise" in name else 0
+
+    def argument(key, index, default):
+        if key in kwargs:
+            return kwargs[key]
+        position = offset + index
+        return args[position] if position < len(args) else default
+
+    return (
+        float(argument("lower", 0, 1.0 / 8.0)),
+        float(argument("upper", 1, 1.0 / 3.0)),
+        bool(argument("training", 2, False)),
+    )
+
+
+def _check_rrelu(op_name, actual, expected, context, category, dtype, compare) -> None:
+    input_tensor = _context_input(context)
+    actual_output = _tensor_tuple(actual, op_name, min_len=1)[0]
+    expected_output = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _assert_tensor_metadata(op_name, actual_output, expected_output, 0)
+    if tuple(actual_output.shape) != tuple(input_tensor.shape):
+        raise AssertionError(f"{op_name} output shape does not match its input")
+
+    lower, upper, training = _rrelu_parameters(op_name, context)
+    if lower > upper:
+        raise AssertionError(f"{op_name} received lower={lower} greater than upper={upper}")
+
+    source = input_tensor.to(actual_output.device)
+    nonnegative = source >= 0
+    if bool(nonnegative.any()):
+        compare(
+            actual_output[nonnegative],
+            source[nonnegative],
+            category="exact",
+            dtype=actual_output.dtype,
+        )
+    nan_source = torch.isnan(source)
+    if bool(nan_source.any()) and not bool(torch.isnan(actual_output[nan_source]).all()):
+        raise AssertionError(f"{op_name} must propagate NaN inputs")
+
+    negative = source < 0
+    finite_negative = negative & torch.isfinite(source)
+    if bool(finite_negative.any()):
+        slopes = (actual_output[finite_negative] / source[finite_negative]).detach().cpu()
+        if training:
+            epsilon = 32 * torch.finfo(slopes.dtype).eps
+            if not bool(((slopes >= lower - epsilon) & (slopes <= upper + epsilon)).all()):
+                raise AssertionError(
+                    f"{op_name} negative-input slopes must be in [{lower}, {upper}] during training"
+                )
+        else:
+            expected_slope = torch.full_like(slopes, (lower + upper) / 2)
+            torch.testing.assert_close(slopes, expected_slope)
+
+    negative_infinite = negative & torch.isneginf(source)
+    if not bool(negative_infinite.any()):
+        return
+    outputs = actual_output[negative_infinite].detach().cpu()
+    if training:
+        reachable = (
+            (torch.isneginf(outputs) if upper > 0 else torch.zeros_like(outputs, dtype=torch.bool))
+            | (torch.isposinf(outputs) if lower < 0 else torch.zeros_like(outputs, dtype=torch.bool))
+            | (torch.isnan(outputs) if lower <= 0 <= upper else torch.zeros_like(outputs, dtype=torch.bool))
+        )
+        if not bool(reachable.all()):
+            raise AssertionError(
+                f"{op_name} -inf outputs are not reachable from slopes in [{lower}, {upper}]"
+            )
+    else:
+        midpoint = (lower + upper) / 2
+        if midpoint > 0:
+            valid = torch.isneginf(outputs)
+        elif midpoint < 0:
+            valid = torch.isposinf(outputs)
+        else:
+            valid = torch.isnan(outputs)
+        if not bool(valid.all()):
+            raise AssertionError(f"{op_name} -inf outputs do not match evaluation slope {midpoint}")
+
+
+def _randomized_linalg_matrix(op_name: str, context: dict) -> torch.Tensor:
+    matrix = _context_input(context)
+    args = _context_args(context)
+    # PyTorch's OpInfo wrapper factors a @ b.mT to exercise non-square and
+    # rank-deficient inputs. Dispatcher/public calls simply use the input.
+    if args and isinstance(args[0], torch.Tensor):
+        right = args[0].to(matrix.device)
+        if matrix.ndim >= 2 and right.ndim >= 2 and matrix.shape[-1] == right.shape[-1]:
+            matrix = matrix @ right.mT
+    if "pca_lowrank" in _normalize_name(op_name) and _context_kwargs(context).get("center", True):
+        matrix = matrix - matrix.mean(dim=-2, keepdim=True)
+    return matrix
+
+
+def _check_randomized_linalg(op_name, actual, expected, context, category, dtype, compare) -> None:
+    actual_u, actual_s, actual_v = _tensor_tuple(actual, op_name, min_len=3)[:3]
+    expected_u, expected_s, expected_v = _tensor_tuple(expected, op_name, min_len=3)[:3]
+    for index, (actual_item, expected_item) in enumerate(
+        zip((actual_u, actual_s, actual_v), (expected_u, expected_s, expected_v))
+    ):
+        _assert_tensor_metadata(op_name, actual_item, expected_item, index)
+        if not bool(torch.isfinite(_finite_values(actual_item).detach().cpu()).all()):
+            raise AssertionError(f"{op_name} output {index} contains non-finite values")
+
+    rank = actual_s.shape[-1]
+    if actual_u.shape[-1] != rank or actual_v.shape[-1] != rank:
+        raise AssertionError(f"{op_name} factor dimensions do not agree with singular values")
+    if bool((actual_s.detach().cpu() < 0).any()):
+        raise AssertionError(f"{op_name} singular values must be nonnegative")
+    if rank > 1 and bool((actual_s[..., 1:].detach().cpu() > actual_s[..., :-1].detach().cpu()).any()):
+        raise AssertionError(f"{op_name} singular values must be nonincreasing")
+
+    gram_u = actual_u.mH @ actual_u
+    gram_v = actual_v.mH @ actual_v
+    compare(gram_u, _identity_for_square(gram_u), category="linalg", dtype=actual_u.dtype)
+    compare(gram_v, _identity_for_square(gram_v), category="linalg", dtype=actual_v.dtype)
+
+    matrix = _randomized_linalg_matrix(op_name, context).to(actual_u.device)
+    reconstruction = (actual_u * actual_s.unsqueeze(-2)) @ actual_v.mH
+    if tuple(reconstruction.shape) != tuple(matrix.shape):
+        raise AssertionError(f"{op_name} factors do not reconstruct the input shape")
+    matrix_norm = torch.linalg.vector_norm(matrix).detach().cpu()
+    residual_norm = torch.linalg.vector_norm(matrix - reconstruction).detach().cpu()
+    if bool(matrix_norm > 0) and not bool(residual_norm < matrix_norm):
+        raise AssertionError(
+            f"{op_name} randomized approximation residual {residual_norm.item()} "
+            f"is not better than the zero approximation {matrix_norm.item()}"
+        )
+
+
+def _complex_lane_matches(actual: torch.Tensor, expected: torch.Tensor, dtype: torch.dtype) -> bool:
+    actual_lanes = torch.view_as_real(actual.reshape(()))
+    expected_lanes = torch.view_as_real(expected.reshape(()))
+    for actual_lane, expected_lane in zip(actual_lanes, expected_lanes):
+        if bool(torch.isnan(expected_lane)):
+            if not bool(torch.isnan(actual_lane)):
+                return False
+        elif bool(torch.isinf(expected_lane)):
+            if not bool(actual_lane == expected_lane):
+                return False
+        else:
+            tolerance = 2e-5 if dtype == torch.complex128 else 2e-4
+            if not bool(torch.isclose(actual_lane, expected_lane, rtol=tolerance, atol=tolerance)):
+                return False
+    return True
+
+
+def _complex_product_outcomes(values: tuple[complex, ...], dtype: torch.dtype) -> tuple[torch.Tensor, ...]:
+    cache: dict[tuple[int, int], set[complex]] = {}
+
+    def outcomes(start: int, stop: int) -> set[complex]:
+        key = (start, stop)
+        if key in cache:
+            return cache[key]
+        if stop - start == 1:
+            result = {values[start]}
+        else:
+            result = set()
+            for split in range(start + 1, stop):
+                for left in outcomes(start, split):
+                    for right in outcomes(split, stop):
+                        result.add(left * right)
+                if len(result) > 256:
+                    break
+        cache[key] = result
+        return result
+
+    return tuple(torch.tensor(value, dtype=dtype) for value in outcomes(0, len(values)))
+
+
+def _check_complex_product(op_name, actual, expected, context, category, dtype, compare) -> None:
+    if not dtype.is_complex:
+        raise ContractNotApplicable
+    input_tensor = _context_input(context).detach().cpu()
+    args = _context_args(context)
+    kwargs = _context_kwargs(context)
+    raw_dim = args[0] if args else kwargs.get("dim")
+    if raw_dim is None or raw_dim == ():
+        raw_dims = tuple(range(input_tensor.ndim))
+    elif isinstance(raw_dim, int):
+        raw_dims = (raw_dim,)
+    elif isinstance(raw_dim, (tuple, list)):
+        raw_dims = tuple(int(dim) for dim in raw_dim)
+    else:
+        raise AssertionError(f"{op_name} received unsupported dim value {raw_dim!r}")
+
+    mask = kwargs.get("mask")
+    if input_tensor.ndim == 0:
+        if raw_dims not in {(), (0,), (-1,)}:
+            raise AssertionError(f"{op_name} scalar reduction has invalid dims {raw_dims}")
+        input_tensor = input_tensor.reshape(1)
+        dims = (0,)
+        if isinstance(mask, torch.Tensor):
+            mask = mask.detach().cpu().reshape(1)
+    else:
+        dims = tuple(dim % input_tensor.ndim for dim in raw_dims)
+        if len(set(dims)) != len(dims):
+            raise AssertionError(f"{op_name} reduction dims contain duplicates")
+
+    if mask is None:
+        mask_tensor = torch.ones(input_tensor.shape, dtype=torch.bool)
+    elif isinstance(mask, torch.Tensor):
+        try:
+            mask_tensor = torch.broadcast_to(mask.detach().cpu().to(torch.bool), input_tensor.shape)
+        except RuntimeError as error:
+            raise AssertionError(f"{op_name} mask is not broadcastable to its input") from error
+    else:
+        mask_tensor = torch.full(input_tensor.shape, bool(mask), dtype=torch.bool)
+
+    actual_tensor = _tensor_tuple(actual, op_name, min_len=1)[0].detach().cpu()
+    expected_tensor = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _assert_tensor_metadata(op_name, actual_tensor, expected_tensor, 0)
+    unreduced_dims = tuple(dim for dim in range(input_tensor.ndim) if dim not in dims)
+    permutation = (*unreduced_dims, *dims)
+    permuted_input = input_tensor.permute(permutation)
+    permuted_mask = mask_tensor.permute(permutation)
+    reduction_size = math.prod(input_tensor.shape[dim] for dim in dims)
+    group_count = math.prod(input_tensor.shape[dim] for dim in unreduced_dims)
+    rows = permuted_input.reshape(group_count, reduction_size)
+    mask_rows = permuted_mask.reshape(group_count, reduction_size)
+    outputs = actual_tensor.reshape(-1)
+    if len(rows) != outputs.numel():
+        raise AssertionError(f"{op_name} output shape is incompatible with its reduction slices")
+    for row_index, (row, mask_row, output) in enumerate(zip(rows, mask_rows, outputs)):
+        values = tuple(
+            complex(value) for value, included in zip(row.tolist(), mask_row.tolist()) if included
+        )
+        if not values:
+            candidates = (torch.tensor(1 + 0j, dtype=dtype),)
+        elif len(values) == 1:
+            candidates = (torch.tensor(values[0], dtype=dtype),)
+        else:
+            candidates = _complex_product_outcomes(values, dtype)
+        if not any(_complex_lane_matches(output, candidate, dtype) for candidate in candidates):
+            raise AssertionError(f"{op_name} row {row_index} is not produced by any legal multiplication order")
+
+
+def _check_welford_mean(op_name, actual, expected, context, category, dtype, compare) -> None:
+    actual_dispersion, actual_mean = _tensor_tuple(actual, op_name, min_len=2)[:2]
+    expected_dispersion, expected_mean = _tensor_tuple(expected, op_name, min_len=2)[:2]
+    _assert_tensor_metadata(op_name, actual_dispersion, expected_dispersion, 0)
+    _assert_tensor_metadata(op_name, actual_mean, expected_mean, 1)
+    input_tensor = _context_input(context)
+    args = _context_args(context)
+    kwargs = _context_kwargs(context)
+    dim = kwargs.get("dim", args[0] if args else None)
+    keepdim = bool(kwargs.get("keepdim", args[-1] if args and isinstance(args[-1], bool) else False))
+    if input_tensor.is_complex():
+        semantic_mean = torch.complex(
+            input_tensor.real.mean(dim=dim, keepdim=keepdim),
+            input_tensor.imag.mean(dim=dim, keepdim=keepdim),
+        )
+    else:
+        semantic_mean = input_tensor.mean(dim=dim, keepdim=keepdim)
+    compare(actual_mean, semantic_mean.to(actual_mean.device), category="reduction", dtype=actual_mean.dtype)
+    compare(actual_dispersion, expected_dispersion, category="reduction", dtype=actual_dispersion.dtype)
+
+
+_FFT_TRANSFORM_NAMES = frozenset({
+    "fft.fft",
+    "fft.ifft",
+    "fft.fft2",
+    "fft.ifft2",
+    "fft.fftn",
+    "fft.ifftn",
+    "fft.rfft",
+    "fft.irfft",
+    "fft.rfft2",
+    "fft.irfft2",
+    "fft.rfftn",
+    "fft.irfftn",
+    "fft.hfft",
+    "fft.ihfft",
+    "fft.hfft2",
+    "fft.ihfft2",
+    "fft.hfftn",
+    "fft.ihfftn",
+    "stft",
+    "istft",
+})
+
+_MATMUL_OPINFO_DISPATCHERS = {
+    "matmul": "aten::matmul",
+    "mm": "aten::mm",
+    "bmm": "aten::bmm",
+    "addmm": "aten::addmm",
+    "addbmm": "aten::addbmm",
+    "baddbmm": "aten::baddbmm",
+    "nn.functional.linear": "aten::linear",
+}
+
+
+def _matches_complex_matmul(op_name: str) -> bool:
+    name = _normalize_name(op_name)
+    if name in _MATMUL_OPINFO_DISPATCHERS:
+        return True
+    return name == "aten::linalg_matmul" or name.startswith("aten::linalg_matmul.")
+
+
+def _complex_matmul_dispatcher(op_name: str) -> str:
+    name = _normalize_name(op_name)
+    return _MATMUL_OPINFO_DISPATCHERS.get(name, name)
+
+
+def _check_complex_matmul_determinate(op_name, actual, expected, context, category, dtype, compare) -> None:
+    if context.get("input_condition") in (None, "clean") or not dtype.is_complex:
+        raise ContractNotApplicable
+    actual_tensor = _tensor_tuple(actual, op_name, min_len=1)[0]
+    expected_tensor = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _assert_tensor_metadata(op_name, actual_tensor, expected_tensor, 0)
+    semantic_expected, determinate = matmul_family_determinate_reference(
+        _complex_matmul_dispatcher(op_name),
+        (_context_input(context), *_context_args(context)),
+        _context_kwargs(context),
+    )
+    if tuple(semantic_expected.shape) != tuple(expected_tensor.shape):
+        raise AssertionError(
+            f"{op_name} semantic matmul shape mismatch: "
+            f"{tuple(semantic_expected.shape)} vs {tuple(expected_tensor.shape)}"
+        )
+    actual_lanes = torch.view_as_real(actual_tensor)
+    expected_lanes = torch.view_as_real(
+        semantic_expected.to(expected_tensor.dtype)
+    ).to(actual_tensor.device)
+    device_mask = determinate.to(actual_tensor.device)
+    compare(
+        actual_lanes[device_mask],
+        expected_lanes[device_mask],
+        category="matmul",
+        dtype=_real_dtype_for_complex(actual_tensor.dtype),
+    )
+
+
+def _matches_fft_transform(op_name: str) -> bool:
+    return _normalize_name(op_name) in _FFT_TRANSFORM_NAMES
+
+
+def _all_values_finite(tensor: torch.Tensor) -> bool:
+    values = torch.view_as_real(tensor) if tensor.is_complex() else tensor
+    return bool(torch.isfinite(values.detach().cpu()).all())
+
+
+def _check_fft_special_contract(op_name, actual, expected, context, category, dtype, compare) -> None:
+    if context.get("input_condition") in (None, "clean"):
+        raise ContractNotApplicable
+    actual_tensor = _tensor_tuple(actual, op_name, min_len=1)[0]
+    expected_tensor = _tensor_tuple(expected, op_name, min_len=1)[0]
+    _assert_tensor_metadata(op_name, actual_tensor, expected_tensor, 0)
+    source = _context_input(context)
+    if not isinstance(source, torch.Tensor):
+        raise ContractNotApplicable
+    name = _normalize_name(op_name)
+    if name in {"stft", "istft"}:
+        if not _all_values_finite(source) and _all_values_finite(actual_tensor):
+            raise AssertionError(f"{op_name} dropped every nonfinite input contribution")
+        return
+
+    spec = public_fft_contract_spec(
+        op_name,
+        source,
+        _context_args(context),
+        _context_kwargs(context),
+    )
+    compare_fft_nonfinite_groups(
+        actual_tensor,
+        expected_tensor.to(actual_tensor.device),
+        source,
+        spec,
+        dtype=actual_tensor.dtype,
+        compare=compare,
+        label=op_name,
+    )
+
+
 _UNINITIALIZED_NAMES = frozenset({
     "empty",
     "_empty_affine_quantized",
@@ -618,13 +1149,10 @@ def _matches_uninitialized(op_name: str) -> bool:
 
 def _matches_value_only_linalg(op_name: str) -> bool:
     return _matches_any((
-        "eigvals",
         "eigvalsh",
         "svdvals",
-        "linalg.eigvals",
         "linalg.eigvalsh",
         "linalg.svdvals",
-        "linalg_eigvals",
         "linalg_eigvalsh",
         "linalg_svdvals",
         "solve",
@@ -646,6 +1174,7 @@ NON_UNIQUE_OUTPUT_CONTRACTS: tuple[NonUniqueOutputContract, ...] = (
     NonUniqueOutputContract("eigh_eigenvalues", REPRESENTATION_AMBIGUOUS, STRICT_BY_API, _matches_eigh_eigenvalues_only, None, "Eigenvalue-only eigh overloads have a unique value contract."),
     NonUniqueOutputContract("eigh", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("eigh", "linalg.eigh", "_linalg_eigh", "linalg_eigh")), _check_eigh, "Eigenvectors are sign/phase/eigenspace ambiguous."),
     NonUniqueOutputContract("eig", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("eig", "linalg.eig", "linalg_eig")), _check_eig, "Eigenvalue order and eigenvector phase are ambiguous."),
+    NonUniqueOutputContract("eigvals", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("eigvals", "linalg.eigvals", "linalg_eigvals")), _check_eigvals, "General eigenvalue order is unspecified."),
     NonUniqueOutputContract("svd", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("svd", "linalg.svd", "_linalg_svd", "linalg_svd")), _check_svd, "Singular vectors are sign/phase/subspace ambiguous."),
     NonUniqueOutputContract("qr", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("qr", "linalg.qr", "linalg_qr")), _check_qr, "QR factors have sign/phase ambiguity."),
     NonUniqueOutputContract("lu", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("linalg.lu", "linalg_lu", "lu")), _check_lu, "LU pivot choices can be representation ambiguous."),
@@ -656,9 +1185,16 @@ NON_UNIQUE_OUTPUT_CONTRACTS: tuple[NonUniqueOutputContract, ...] = (
     NonUniqueOutputContract("arg_reduce", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("argmax", "argmin", "masked.argmax", "masked.argmin")), _check_arg_reduce, "Tie indices are ambiguous for arg reductions."),
     NonUniqueOutputContract("value_index", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_value_index, _check_cumminmax, "Value/index pair indices are ambiguous under ties."),
     NonUniqueOutputContract("mode", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("mode",)), _check_mode, "Mode tie indices are ambiguous; values remain checked."),
+    NonUniqueOutputContract("complex_matmul_determinate", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_complex_matmul, _check_complex_matmul_determinate, "Exceptional complex matmul algorithms may differ on indeterminate lanes; expanded real-arithmetic lanes with unique values remain strict.", try_direct_first=False, supports_special_tiers=True),
+    NonUniqueOutputContract("fft_special", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_fft_transform, _check_fft_special_contract, "Nonfinite FFT masks vary by legal factorization; metadata, finite transform groups, and propagation into affected groups remain checked.", try_direct_first=False, supports_special_tiers=True),
+    NonUniqueOutputContract("complex_product", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("prod", "masked.prod")), _check_complex_product, "Complex nonfinite product masks may vary by legal reassociation, but every result must match a valid multiplication tree.", supports_special_tiers=True),
+    NonUniqueOutputContract("welford_mean", REPRESENTATION_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("std_mean", "var_mean")), _check_welford_mean, "The public mean follows arithmetic-mean semantics even when Welford dispersion state is nonfinite.", supports_special_tiers=True),
+    NonUniqueOutputContract("fractional_max_pool", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _matches_any(("nn.functional.fractional_max_pool2d", "nn.functional.fractional_max_pool3d", "fractional_max_pool2d", "fractional_max_pool3d")), _check_max_pool_indices, "Fractional pooling uses shared explicit random samples; only tied argmax indices may differ."),
     NonUniqueOutputContract("max_pool_indices", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _contains_any(("max_pool1d", "max_pool2d", "max_pool3d", "adaptive_max_pool1d", "adaptive_max_pool2d", "adaptive_max_pool3d")), _check_max_pool_indices, "Max-pool tie indices are ambiguous; values and index-to-value legality remain checked."),
+    NonUniqueOutputContract("max_unpool_writers", TIE_INDEX_AMBIGUOUS, COVERED_BY_CONTRACT, _contains_any(("max_unpool1d", "max_unpool2d", "max_unpool3d")), _check_max_unpool, "Duplicate max-unpool destinations may contain any legal writer value."),
+    NonUniqueOutputContract("rrelu", RANDOM_VALUE, COVERED_BY_CONTRACT, _matches_rrelu_forward, _check_rrelu, "Training RReLU samples slopes randomly; positive values are exact and negative slopes remain within the requested interval."),
     NonUniqueOutputContract("random", RANDOM_VALUE, STRUCTURAL_ONLY, _matches_random_value, _check_structural, "Random values have no CPU equality contract without a seeded API guarantee.", try_direct_first=False),
-    NonUniqueOutputContract("randomized_linalg", RANDOM_VALUE, STRUCTURAL_ONLY, _matches_any(("svd_lowrank", "pca_lowrank")), _check_structural, "Randomized low-rank linalg returns approximation bases without a CPU representation contract.", try_direct_first=False),
+    NonUniqueOutputContract("randomized_linalg", RANDOM_VALUE, COVERED_BY_CONTRACT, _matches_any(("svd_lowrank", "pca_lowrank")), _check_randomized_linalg, "Randomized low-rank bases may differ, but must be orthonormal and form a useful approximation.", try_direct_first=False),
     NonUniqueOutputContract("uninitialized", UNINITIALIZED_VALUE, STRUCTURAL_ONLY, _matches_uninitialized, _check_structural, "Uninitialized allocation values have no value contract.", try_direct_first=False),
     NonUniqueOutputContract("geqrf", REPRESENTATION_AMBIGUOUS, INTENTIONALLY_EXACT, _matches_any(("geqrf",)), None, "Packed reflector format has no standalone legality checker here."),
     NonUniqueOutputContract("orgqr_ormqr", REPRESENTATION_AMBIGUOUS, INTENTIONALLY_EXACT, _matches_any(("orgqr", "ormqr")), None, "These consume packed reflector state; exact output remains the practical contract."),
@@ -895,7 +1431,11 @@ def compare_non_unique_output_if_applicable(
     contract = contract_for_op_name(op_name)
     if contract is None or contract.checker is None:
         return False
-    if input_condition not in (None, "clean") and contract.ambiguity_type == REPRESENTATION_AMBIGUOUS:
+    if (
+        input_condition not in (None, "clean")
+        and contract.ambiguity_type == REPRESENTATION_AMBIGUOUS
+        and not contract.supports_special_tiers
+    ):
         return False
 
     context = {

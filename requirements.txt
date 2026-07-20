@@ -3,4 +3,5 @@ pytest>=7.0.0
 psutil>=5.0.0
 numpy
 expecttest
+mpmath>=1.3,<2
 -e .

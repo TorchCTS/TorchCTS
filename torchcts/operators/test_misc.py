@@ -18,9 +18,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import math
+
 import pytest
 import torch
 from torchcts.core.device import synchronize
+from torchcts.core.reference_oracles import (
+    saturate_weight_to_fp16_reference,
+    weight_int8pack_mm_reference,
+)
 
 MISC_DTYPES = [torch.float32, torch.int64]
 
@@ -30,6 +36,47 @@ def _compare_tuple(actual, expected, compare, category="exact", dtype=torch.floa
     for actual_tensor, expected_tensor in zip(actual, expected):
         synchronize(actual_tensor.device.type)
         compare(actual_tensor, expected_tensor, category=category, dtype=dtype)
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::_saturate_weight_to_fp16")
+@pytest.mark.parametrize("shape", [(), (5,), (2, 3), (2, 2, 3), (2, 2, 2, 3)])
+def test_saturate_weight_to_fp16_is_rank_independent_and_functional(shape, device, compare):
+    count = 1 if not shape else math.prod(shape)
+    input_cpu = torch.linspace(-100000.0, 100000.0, count, dtype=torch.float32).reshape(shape)
+    expected = saturate_weight_to_fp16_reference(input_cpu)
+    assert expected.reshape(-1)[0] >= -65504.0
+    assert expected.reshape(-1)[-1] <= 65504.0
+    if torch.device(device).type == "cpu":
+        return
+
+    input_dev = input_cpu.to(device)
+    before = input_dev.detach().clone()
+    actual = torch.ops.aten._saturate_weight_to_fp16.default(input_dev)
+    synchronize(device)
+    compare(actual, expected, category="elementwise", dtype=torch.float32)
+    compare(input_dev, before, category="exact", dtype=torch.float32)
+    assert actual.untyped_storage().data_ptr() != input_dev.untyped_storage().data_ptr()
+
+
+@pytest.mark.smoke
+@pytest.mark.covers("aten::_weight_int8pack_mm")
+@pytest.mark.parametrize("inner_size", [4, 8, 10])
+def test_weight_int8pack_mm_short_and_tail_dimensions(inner_size, device, compare):
+    input_cpu = torch.linspace(-1.0, 1.0, 2 * inner_size, dtype=torch.float32).reshape(2, inner_size)
+    weight_cpu = (
+        torch.arange(12 * inner_size, dtype=torch.int32).remainder(31).sub(15).to(torch.int8)
+    ).reshape(12, inner_size)
+    scales_cpu = torch.linspace(0.1, 1.2, 12, dtype=torch.float32)
+    expected = weight_int8pack_mm_reference(input_cpu, weight_cpu, scales_cpu)
+    if torch.device(device).type == "cpu":
+        return
+
+    actual = torch.ops.aten._weight_int8pack_mm.default(
+        input_cpu.to(device), weight_cpu.to(device), scales_cpu.to(device)
+    )
+    synchronize(device)
+    compare(actual, expected, category="matmul", dtype=torch.float32)
 
 @pytest.mark.smoke
 @pytest.mark.covers("aten::kthvalue")
@@ -145,10 +192,15 @@ def test_low_level_misc_dispatcher_helpers(device, compare):
     synchronize(device)
     compare(actual, expected, category="elementwise", dtype=torch.float32)
 
-    saturated_cpu = torch.ops.aten._saturate_weight_to_fp16.default(input_cpu * 100000.0)
-    saturated_dev = torch.ops.aten._saturate_weight_to_fp16.default(input_dev * 100000.0)
-    synchronize(device)
-    compare(saturated_dev, saturated_cpu, category="elementwise", dtype=torch.float32)
+    saturation_input = input_dev * 100000.0
+    saturation_before = saturation_input.detach().clone()
+    saturated_expected = saturate_weight_to_fp16_reference(input_cpu * 100000.0)
+    if torch.device(device).type != "cpu":
+        saturated_dev = torch.ops.aten._saturate_weight_to_fp16.default(saturation_input)
+        synchronize(device)
+        compare(saturated_dev, saturated_expected, category="elementwise", dtype=torch.float32)
+        compare(saturation_input, saturation_before, category="exact", dtype=torch.float32)
+        assert saturated_dev.untyped_storage().data_ptr() != saturation_input.untyped_storage().data_ptr()
 
     cloned_cpu = torch.ops.aten._lazy_clone.default(input_cpu)
     cloned_dev = torch.ops.aten._lazy_clone.default(input_dev)
@@ -316,14 +368,15 @@ def test_low_level_numeric_dispatcher_helpers(device, compare):
     int8_weight_cpu = torch.arange(-24, 24, dtype=torch.int8).reshape(12, 4)
     int8_scales_cpu = torch.linspace(0.1, 1.2, 12, dtype=torch.float32)
     int8_input_cpu = torch.linspace(-1.0, 1.0, 8, dtype=torch.float32).reshape(2, 4)
-    expected = torch.ops.aten._weight_int8pack_mm.default(
+    expected = weight_int8pack_mm_reference(
         int8_input_cpu, int8_weight_cpu, int8_scales_cpu,
     )
-    actual = torch.ops.aten._weight_int8pack_mm.default(
-        int8_input_cpu.to(device), int8_weight_cpu.to(device), int8_scales_cpu.to(device),
-    )
-    synchronize(device)
-    compare(actual, expected, category="matmul", dtype=torch.float32)
+    if torch.device(device).type != "cpu":
+        actual = torch.ops.aten._weight_int8pack_mm.default(
+            int8_input_cpu.to(device), int8_weight_cpu.to(device), int8_scales_cpu.to(device),
+        )
+        synchronize(device)
+        compare(actual, expected, category="matmul", dtype=torch.float32)
 
     hash_input_cpu = torch.arange(6, dtype=torch.int64).reshape(2, 3)
     expected_hash = torch.empty(2, dtype=torch.uint64)

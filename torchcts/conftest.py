@@ -2644,7 +2644,7 @@ def pytest_collection_modifyitems(session, config, items):
                     skip_reason = disposition.skip_reason
                     detail = disposition.detail
                     dtype_manifest_skip = skip_reason in _DTYPE_MANIFEST_SKIP_REASONS
-                elif contract_surfaces:
+                elif contract_surfaces and contract_exempt_reason is None:
                     input_condition = item.callspec.params.get("input_condition", "clean")
                     generated_entry = item.callspec.params.get("entry")
                     if isinstance(generated_entry, dict) and contract_surfaces == [generated_entry.get("name")]:
@@ -2705,7 +2705,7 @@ def pytest_collection_modifyitems(session, config, items):
                             break
 
         # 3. Fixed hardcoded dtype contract gates
-        if not skip_reason:
+        if not skip_reason and contract_exempt_reason is None:
             skip_reason, detail, skip_record_extra = _fixed_dtype_contract_skip_for_item(
                 item,
                 supported_dtypes,

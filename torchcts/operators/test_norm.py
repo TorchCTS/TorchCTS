@@ -20,6 +20,7 @@
 
 import pytest
 import torch
+from torchcts.core.backward_references import group_norm_backward_reference
 from torchcts.core.device import synchronize
 
 NORM_DTYPES = [torch.float32, torch.float16, torch.bfloat16]
@@ -395,6 +396,58 @@ def test_native_group_norm_dispatcher_variants(device, compare):
     _assert_returned_outputs(expected_return, out_cpu)
     _assert_returned_outputs(actual_return, out_dev)
     _compare_tensor_tuple(out_dev, out_cpu, compare, category="backward")
+
+
+@pytest.mark.smoke
+@pytest.mark.requires("training")
+@pytest.mark.covers("aten::group_norm")
+@pytest.mark.covers("aten::native_group_norm_backward")
+def test_group_norm_bias_only_backward_uses_independent_reduction(device, compare):
+    input_cpu = torch.linspace(-2.0, 2.0, steps=24, dtype=torch.float32).reshape(2, 4, 3)
+    bias_cpu = torch.tensor([-0.5, -0.25, 0.25, 0.5], dtype=torch.float32)
+    grad_cpu = torch.linspace(0.25, 2.5, steps=24, dtype=torch.float32).reshape_as(input_cpu)
+    expected_input_grad, _, expected_bias_grad = group_norm_backward_reference(
+        input_cpu,
+        2,
+        None,
+        grad_cpu,
+        1e-5,
+    )
+    torch.testing.assert_close(expected_bias_grad, grad_cpu.sum(dim=(0, 2)))
+    if torch.device(device).type == "cpu":
+        return
+
+    input_dev = input_cpu.to(device).requires_grad_(True)
+    bias_dev = bias_cpu.to(device).requires_grad_(True)
+    output_dev = torch.nn.functional.group_norm(
+        input_dev,
+        2,
+        weight=None,
+        bias=bias_dev,
+        eps=1e-5,
+    )
+    output_dev.backward(grad_cpu.to(device))
+    synchronize(device)
+    compare(input_dev.grad, expected_input_grad, category="backward", dtype=torch.float32)
+    compare(bias_dev.grad, expected_bias_grad, category="backward", dtype=torch.float32)
+
+    forward_dev = torch.ops.aten.native_group_norm(
+        input_cpu.to(device), None, bias_cpu.to(device), 2, 4, 3, 2, 1e-5
+    )
+    direct = torch.ops.aten.native_group_norm_backward(
+        grad_cpu.to(device),
+        input_cpu.to(device),
+        forward_dev[1],
+        forward_dev[2],
+        None,
+        2,
+        4,
+        3,
+        2,
+        [False, False, True],
+    )
+    synchronize(device)
+    compare(direct[2], expected_bias_grad, category="backward", dtype=torch.float32)
 
 
 @pytest.mark.smoke

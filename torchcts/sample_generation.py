@@ -460,9 +460,21 @@ def contract_dtype_items_for_entry(entry: dict, manifest: dict) -> list[tuple[to
     return items
 
 
+_CLEAN_ONLY_GENERATED_FAMILIES = frozenset({
+    # Both operands are constrained positive-domain values.  Injecting NaN or
+    # infinity creates an invalid internal-distribution sample rather than an
+    # IEEE-754 propagation case.
+    "_dirichlet_grad",
+    "_standard_gamma_grad",
+})
+
+
 def ieee754_enabled(manifest: dict | None, op_name: str) -> bool:
     """Return whether NaN/Inf sample tiers should be generated for ``op_name``."""
 
+    normalized_name = str(op_name).removeprefix("aten::").split(".", 1)[0]
+    if normalized_name in _CLEAN_ONLY_GENERATED_FAMILIES:
+        return False
     manifest = manifest or {}
     cap = manifest.get("capabilities", {}).get("ieee754", True)
     if cap is True:
@@ -3913,6 +3925,34 @@ def reduction_sample(
     sample_index: int = 0,
 ) -> GeneratedSample:
     base_name = entry["base_name"].rstrip("_")
+    if base_name == "_segment_reduce_backward":
+        data = make_tensor_values(dtype, device, shape=(5,), domain="mixed")
+        lengths = torch.tensor([2, 3], dtype=torch.long, device=device)
+        reduction = "prod" if input_condition == InputCondition.CLEAN else "sum"
+        output = torch.ops.aten.segment_reduce.default(data, reduction, lengths=lengths)
+        grad = make_tensor_values(dtype, device, shape=(2,), domain="mixed")
+        prepared = prepare_sample(
+            _sample_input(
+                grad,
+                (output, data, reduction),
+                kwargs={"lengths": lengths, "offsets": None, "axis": 0, "initial": None},
+            ),
+            input_condition,
+            ieee754_seed=seed,
+            sample_index=sample_index,
+            op_name=entry.get("base_name") or entry.get("name"),
+        )
+        strategy = entry.get("generated", {}).get("strategy") or {}
+        return _wrap_prepared_sample(
+            entry=entry,
+            strategy_name="manual_reduction",
+            family=strategy.get("family"),
+            dtype=dtype,
+            device=device,
+            input_condition=input_condition,
+            prepared=prepared,
+            sample_index=sample_index,
+        )
     args = []
     kwargs = {}
     softmax_logits = None

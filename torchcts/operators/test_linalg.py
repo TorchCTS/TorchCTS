@@ -20,10 +20,41 @@
 
 import pytest
 import torch
+from torchcts.core.backward_references import vander_backward_reference
 from torchcts.core.device import synchronize
 from torchcts.core.non_unique_output_compare import compare_non_unique_output
 
 LINALG_DTYPES = [torch.float32]
+
+
+@pytest.mark.smoke
+@pytest.mark.requires("training")
+@pytest.mark.covers("aten::vander")
+def test_public_vander_decreasing_backward_uses_column_power_reference(device, compare):
+    input_cpu = torch.tensor([0.5, 0.75, 1.25, 1.5], dtype=torch.float32)
+    grad_cpu = torch.tensor(
+        [
+            [1.0, 2.0, 3.0, 4.0],
+            [1.5, -0.5, 2.5, 3.5],
+            [-1.0, 0.25, 0.5, 2.0],
+            [3.0, 2.0, 1.0, -1.0],
+        ],
+        dtype=torch.float32,
+    )
+    expected = vander_backward_reference(
+        input_cpu,
+        grad_cpu,
+        columns=4,
+        increasing=False,
+    )
+    if torch.device(device).type == "cpu":
+        return
+
+    input_dev = input_cpu.to(device).requires_grad_(True)
+    output = torch.vander(input_dev, N=4, increasing=False)
+    output.backward(grad_cpu.to(device))
+    synchronize(device)
+    compare(input_dev.grad, expected, category="backward", dtype=torch.float32)
 
 
 def _compare_linalg_tensor(actual, expected, compare, dtype=torch.float32):
