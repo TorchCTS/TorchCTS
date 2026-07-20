@@ -29,6 +29,10 @@ from torchcts.core.opinfo_adapter import (
     get_live_opinfo,
     get_op_error_inputs,
 )
+from torchcts.core.sample_transport import (
+    SampleTransportError,
+    move_sample_preserving_relations,
+)
 
 pytestmark = pytest.mark.covers_category("opinfo_error_behavior")
 
@@ -87,6 +91,21 @@ def _move_obj(obj, device):
     if isinstance(obj, dict):
         return {key: _move_obj(value, device) for key, value in obj.items()}
     return obj
+
+
+def _move_sample(sample, device, mover):
+    if mover is None:
+        return move_sample_preserving_relations(
+            sample.input,
+            sample.args,
+            sample.kwargs,
+            device,
+        )
+    return (
+        mover(sample.input, device),
+        mover(sample.args, device),
+        mover(sample.kwargs, device),
+    )
 
 
 def _describe_sample_obj(obj):
@@ -195,6 +214,17 @@ def _aggregate_error_outcomes(op_name, outcomes):
             f"{_format_outcomes(backend_failures)}",
         )
 
+    transport_invalid = [
+        outcome for outcome in outcomes
+        if outcome.classification == "transport_invalid"
+    ]
+    if transport_invalid:
+        return (
+            "transport_invalid",
+            f"OPINFO_SAMPLE_TRANSPORT_INVALID for {op_name}:\n"
+            f"{_format_outcomes(transport_invalid)}",
+        )
+
     transport_failures = [
         outcome for outcome in outcomes
         if outcome.classification == "target_sample_transport_failure"
@@ -216,7 +246,7 @@ def _aggregate_error_outcomes(op_name, outcomes):
     )
 
 
-def _evaluate_error_candidates(op_name, errors, device, op_fn, *, mover=_move_obj):
+def _evaluate_error_candidates(op_name, errors, device, op_fn, *, mover=None):
     outcomes = []
     for index, err_in in enumerate(errors):
         si = err_in.sample_input
@@ -224,10 +254,13 @@ def _evaluate_error_candidates(op_name, errors, device, op_fn, *, mover=_move_ob
         outcomes.append(outcome)
 
         try:
-            cpu_input = mover(si.input, "cpu")
-            cpu_args = mover(si.args, "cpu")
-            cpu_kwargs = mover(si.kwargs, "cpu")
+            cpu_input, cpu_args, cpu_kwargs = _move_sample(si, "cpu", mover)
             outcome.cpu_placement = "succeeded"
+        except SampleTransportError as exc:
+            outcome.cpu_placement = "failed"
+            outcome.set_cpu_exception(exc)
+            outcome.classification = "transport_invalid"
+            continue
         except Exception as exc:
             outcome.cpu_placement = "failed"
             outcome.set_cpu_exception(exc)
@@ -257,10 +290,13 @@ def _evaluate_error_candidates(op_name, errors, device, op_fn, *, mover=_move_ob
             continue
 
         try:
-            dev_input = mover(si.input, device)
-            dev_args = mover(si.args, device)
-            dev_kwargs = mover(si.kwargs, device)
+            dev_input, dev_args, dev_kwargs = _move_sample(si, device, mover)
             outcome.target_placement = "succeeded"
+        except SampleTransportError as exc:
+            outcome.target_placement = "failed"
+            outcome.set_target_exception(exc)
+            outcome.classification = "transport_invalid"
+            continue
         except Exception as exc:
             outcome.target_placement = "failed"
             outcome.set_target_exception(exc)
