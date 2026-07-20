@@ -44,7 +44,7 @@ backend validation run.
 | Metric | Current value |
 | --- | ---: |
 | Generated at | 2026-07-11T18:17:01.726986Z |
-| TorchCTS version | 0.4.0 |
+| TorchCTS version | 0.4.1 |
 | PyTorch version | 2.12.1 |
 | Pytest nodes collected | 19,481 |
 | Pytest executable nodes | 18,666 |
