@@ -19,11 +19,11 @@
     },
     {
       "path": "scripts/oracle_fixtures/generate_integer_c17.c",
-      "sha256": "d168bf2e928adde42d85290d3040129c7be7d858c1b70e31607c8f8ede12d92c"
+      "sha256": "11dfe6f29fecf9e74057ff9d82bdfa6556a82c3d351654d050c3e92db7681214"
     },
     {
       "path": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
-      "sha256": "07301a22c7aca765e023082882310b271c17603e71fbb7cc4d33cd2cf4cdaebf"
+      "sha256": "6748ae3de32a7e318eab5ffffbab8e55516b75c2f332f17906dede19c79232a8"
     },
     {
       "path": "scripts/oracle_fixtures/generate_nonunique_records.py",
