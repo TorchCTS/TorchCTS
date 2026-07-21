@@ -1,0 +1,406 @@
+{
+  "applicability": {
+    "backend": "all",
+    "input_condition": "shape_and_nonfinite_contributor_contract",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-fft-contracts",
+  "case_pack": "CP-FFT",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape",
+      "contributor_set"
+    ],
+    "derivation": "Hand enumeration of transform dimensions, truncation, Hermitian self-conjugate lanes, and batch groups.",
+    "kind": "exact_shape_mask_and_group_admissibility"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "comparison": {
+      "expected": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x3f800000",
+          "0x40000000",
+          "0x40400000",
+          "0x40800000"
+        ],
+        "shape": [
+          2,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          2,
+          1
+        ]
+      }
+    },
+    "generated_c2c": {
+      "contributor_mask": {
+        "dtype": "torch.bool",
+        "encoding": "boolean",
+        "layout": "torch.strided",
+        "shape": [
+          2,
+          3,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          6,
+          2,
+          1
+        ],
+        "values": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "spec": {
+        "dimensions": [
+          1
+        ],
+        "family": "_fft_c2c",
+        "full_lengths": [
+          3
+        ],
+        "half_spectrum_dimension": null,
+        "kind": "c2c",
+        "retained_source_lengths": [
+          3
+        ]
+      }
+    },
+    "public_c2c": {
+      "contributor_mask": {
+        "dtype": "torch.bool",
+        "encoding": "boolean",
+        "layout": "torch.strided",
+        "shape": [
+          2,
+          4,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          8,
+          2,
+          1
+        ],
+        "values": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ]
+      },
+      "spec": {
+        "dimensions": [
+          1
+        ],
+        "family": "fft",
+        "full_lengths": [
+          3
+        ],
+        "half_spectrum_dimension": null,
+        "kind": "c2c",
+        "retained_source_lengths": [
+          3
+        ]
+      }
+    },
+    "public_c2r": {
+      "contributor_mask": {
+        "dtype": "torch.bool",
+        "encoding": "boolean",
+        "layout": "torch.strided",
+        "shape": [
+          3,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          2,
+          1
+        ],
+        "values": [
+          true,
+          false,
+          true,
+          true,
+          true,
+          false
+        ]
+      },
+      "spec": {
+        "dimensions": [
+          0
+        ],
+        "family": "irfft",
+        "full_lengths": [
+          4
+        ],
+        "half_spectrum_dimension": 0,
+        "kind": "c2r",
+        "retained_source_lengths": [
+          3
+        ]
+      }
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_fft_contract_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.fft_contract.public_fft_contract_spec",
+    "torchcts.core.fft_contract.generated_c2c_fft_contract_spec",
+    "torchcts.core.fft_contract.fft_source_contributor_mask",
+    "torchcts.core.fft_contract.compare_fft_nonfinite_groups"
+  ],
+  "inputs": {
+    "comparison": {
+      "accepted_actual": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x7fc00000",
+          "0x00000000",
+          "0x40400000",
+          "0x40800000"
+        ],
+        "shape": [
+          2,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          2,
+          1
+        ]
+      },
+      "args": [
+        2,
+        1
+      ],
+      "kwargs": {},
+      "op_name": "fft.fft",
+      "rejected_actual": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x00000000",
+          "0x00000000",
+          "0x40400000",
+          "0x40800000"
+        ],
+        "shape": [
+          2,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          2,
+          1
+        ]
+      },
+      "source": {
+        "dtype": "torch.float32",
+        "encoding": "ieee754_bits",
+        "layout": "torch.strided",
+        "shape": [
+          2,
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          2,
+          1
+        ],
+        "values": [
+          "0x7fc00000",
+          "0x3f800000",
+          "0x40000000",
+          "0x40400000"
+        ]
+      }
+    },
+    "generated_c2c": {
+      "dimensions": [
+        -1
+      ],
+      "source": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x00000000",
+          "0x3f800000",
+          "0x40000000",
+          "0x40400000",
+          "0x40800000",
+          "0x40a00000"
+        ],
+        "shape": [
+          2,
+          3
+        ],
+        "storage_offset": 0,
+        "strides": [
+          3,
+          1
+        ]
+      }
+    },
+    "public_c2c": {
+      "args": [
+        3,
+        1
+      ],
+      "kwargs": {},
+      "op_name": "fft.fft",
+      "source": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0xbf800000",
+          "0xc0000000",
+          "0xc0400000",
+          "0xc0800000",
+          "0xc0a00000",
+          "0xc0c00000",
+          "0xc0e00000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x00000000",
+          "0x3f800000",
+          "0x40000000",
+          "0x40400000",
+          "0x40800000",
+          "0x40a00000",
+          "0x40c00000",
+          "0x40e00000"
+        ],
+        "shape": [
+          2,
+          4
+        ],
+        "storage_offset": 0,
+        "strides": [
+          4,
+          1
+        ]
+      }
+    },
+    "public_c2r": {
+      "args": [
+        4,
+        0
+      ],
+      "kwargs": {},
+      "op_name": "fft.irfft",
+      "source": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x40000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x00000000",
+          "0x3f800000",
+          "0x40400000"
+        ],
+        "shape": [
+          3
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      }
+    }
+  },
+  "oracle_ids": [
+    "public_fft_contract_spec",
+    "generated_c2c_fft_contract_spec",
+    "fft_source_contributor_mask",
+    "compare_fft_nonfinite_groups"
+  ],
+  "oracle_kind": "fft_contract",
+  "raw_evidence": [
+    "raw/SRC-DIRECT-DFT/fft-contracts.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-shape-enumeration"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-DIRECT-DFT",
+    "SRC-MANUAL-ENUM",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V2_ADMISSIBILITY"
+}

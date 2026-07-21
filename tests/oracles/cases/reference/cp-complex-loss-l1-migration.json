@@ -1,0 +1,109 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "dtypes": [
+      "torch.complex64",
+      "torch.float32"
+    ],
+    "input_condition": "has_inf",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-complex-loss-l1-migration",
+  "case_pack": "CP-COMPLEX-LOSS",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Per-element hypot of independently subtracted real and imaginary lanes.",
+    "kind": "exact_ieee_bits"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [
+    "aten::l1_loss"
+  ],
+  "expected": {
+    "output": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x40a00000",
+        "0x7f800000"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.complex_l1_loss_reference"
+  ],
+  "inputs": {
+    "input": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40800000",
+        "0x3f800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40400000",
+        "0x7f800000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "reduction": "none",
+    "target": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x00000000",
+        "0x40000000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "complex_l1_loss"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/migrated-selftests.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

@@ -1,0 +1,98 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_independent_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-matrixexp-remaining-core",
+  "case_pack": "CP-MATRIXEXP",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops or 100-digit formula evaluation followed by explicit public-dtype rounding.",
+    "kind": "ulp_with_exact_metadata",
+    "ulp_ceiling": 8
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "decimal": [
+      "2.718281828459045090795598298427648842334747314453125",
+      "0",
+      "0",
+      "0.3678794411714423215955237701614608674458111310317678345078368016974614957448998"
+    ],
+    "expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0x4005bf0a8b145769",
+        "0x0000000000000000",
+        "0x0000000000000000",
+        "0x3fd78b56362cef38"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.matrix_exp_f64_reference"
+  ],
+  "inputs": {
+    "input": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0x3ff0000000000000",
+        "0x0000000000000000",
+        "0x0000000000000000",
+        "0xbff0000000000000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "matrix_exp_f64_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/remaining-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-DLMF-MP",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

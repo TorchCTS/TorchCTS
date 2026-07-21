@@ -1,0 +1,393 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-int4-exact-core",
+  "case_pack": "CP-INT4",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops and exact/high-precision formula evaluation with declared public-dtype rounding.",
+    "kind": "exact_bits_and_metadata"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "dynamic_unpacked": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        8
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        1
+      ],
+      "values": [
+        "0x00000000",
+        "0x3f800000",
+        "0x40000000",
+        "0x40400000",
+        "0x40800000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x40e00000",
+        "0x41000000",
+        "0x41100000",
+        "0x41200000",
+        "0x41300000",
+        "0x41400000",
+        "0x41500000",
+        "0x41600000",
+        "0x41700000"
+      ]
+    },
+    "expected_dequant": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        8
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        1
+      ],
+      "values": [
+        "0xc0400000",
+        "0xc0200000",
+        "0xc0000000",
+        "0xbfc00000",
+        "0xc0800000",
+        "0xc0400000",
+        "0xc0000000",
+        "0xbf800000",
+        "0xbf800000",
+        "0x3f800000",
+        "0x40400000",
+        "0x40a00000",
+        "0x00000000",
+        "0xbf000000",
+        "0xbf800000",
+        "0xbfc00000"
+      ]
+    },
+    "expected_dynamic_dequant": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        8
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        1
+      ],
+      "values": [
+        "0xc0800000",
+        "0xc0600000",
+        "0xc0400000",
+        "0xc0200000",
+        "0xc0800000",
+        "0xc0400000",
+        "0xc0000000",
+        "0xbf800000",
+        "0x00000000",
+        "0x40000000",
+        "0x40800000",
+        "0x40c00000",
+        "0xc0000000",
+        "0xc0200000",
+        "0xc0400000",
+        "0xc0600000"
+      ]
+    },
+    "expected_dynamic_matmul": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0xc0e80000",
+        "0x415c0000"
+      ]
+    },
+    "expected_matmul": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0xc0a00000",
+        "0x41540000"
+      ]
+    },
+    "packed_even_high": {
+      "bit_width": 8,
+      "dtype": "torch.uint8",
+      "encoding": "integer_decimal",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        4
+      ],
+      "signed": false,
+      "storage_offset": 0,
+      "strides": [
+        4,
+        1
+      ],
+      "values": [
+        "1",
+        "35",
+        "69",
+        "103",
+        "137",
+        "171",
+        "205",
+        "239"
+      ]
+    },
+    "packed_even_low": {
+      "bit_width": 8,
+      "dtype": "torch.uint8",
+      "encoding": "integer_decimal",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        4
+      ],
+      "signed": false,
+      "storage_offset": 0,
+      "strides": [
+        4,
+        1
+      ],
+      "values": [
+        "16",
+        "50",
+        "84",
+        "118",
+        "152",
+        "186",
+        "220",
+        "254"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_exact_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.pack_int4_values",
+    "torchcts.core.reference_oracles.unpack_int4_values",
+    "torchcts.core.reference_oracles.tinygemm_int4_dequantize_reference",
+    "torchcts.core.reference_oracles.tinygemm_int4_matmul_reference",
+    "torchcts.core.reference_oracles.unpack_dynamic_int4_weight_bytes",
+    "torchcts.core.reference_oracles.dynamic_int4_dequantize_reference",
+    "torchcts.core.reference_oracles.dynamic_int4_matmul_reference"
+  ],
+  "inputs": {
+    "dynamic_bias": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3e800000",
+        "0xbf800000"
+      ]
+    },
+    "dynamic_packed": {
+      "bit_width": 8,
+      "dtype": "torch.uint8",
+      "encoding": "integer_decimal",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        4
+      ],
+      "signed": false,
+      "storage_offset": 0,
+      "strides": [
+        4,
+        1
+      ],
+      "values": [
+        "16",
+        "50",
+        "84",
+        "118",
+        "152",
+        "186",
+        "220",
+        "254"
+      ]
+    },
+    "dynamic_scales": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0x3f000000",
+        "0x3f800000",
+        "0x40000000",
+        "0xbf000000"
+      ]
+    },
+    "group_size": 4,
+    "input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        8
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0xc0000000",
+        "0x3f000000",
+        "0x40400000",
+        "0xbf800000",
+        "0x40000000",
+        "0x00000000",
+        "0xbf000000"
+      ]
+    },
+    "logical": {
+      "bit_width": 32,
+      "dtype": "torch.int32",
+      "encoding": "integer_decimal",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        8
+      ],
+      "signed": true,
+      "storage_offset": 0,
+      "strides": [
+        8,
+        1
+      ],
+      "values": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15"
+      ]
+    },
+    "qparams": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        4,
+        2,
+        1
+      ],
+      "values": [
+        "0x3f000000",
+        "0x3f800000",
+        "0x40000000",
+        "0xbf800000",
+        "0x3f800000",
+        "0x00000000",
+        "0xbf000000",
+        "0x40000000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "pack_int4_values",
+    "unpack_int4_values",
+    "tinygemm_int4_dequantize_reference",
+    "tinygemm_int4_matmul_reference",
+    "unpack_dynamic_int4_weight_bytes",
+    "dynamic_int4_dequantize_reference",
+    "dynamic_int4_matmul_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/exact-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

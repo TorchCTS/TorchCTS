@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "case_id": "cp-complex-arithmetic-migration",
+      "path": "reference/cp-complex-arithmetic-migration.json",
+      "sha256": "113365ef00f561f2fb4d817ef231bd2aa953a38f66991d3198aad96f70991f33"
+    },
+    {
+      "case_id": "cp-complex-convolution-migration",
+      "path": "reference/cp-complex-convolution-migration.json",
+      "sha256": "686413567479aab578f643f015b71c044a4651b4a3bf2f5c016434214d351259"
+    },
+    {
+      "case_id": "cp-complex-loss-l1-migration",
+      "path": "reference/cp-complex-loss-l1-migration.json",
+      "sha256": "daae89533f1d2c9ee8060f9192e532539d833ad8db370028f5287e4705da9473"
+    },
+    {
+      "case_id": "cp-complex-unary-log2-migration",
+      "path": "reference/cp-complex-unary-log2-migration.json",
+      "sha256": "23df13b0c9a407b27baa3793cdbcc05e929d88a606b1ec42a2f24a45bbb65e24"
+    },
+    {
+      "case_id": "cp-embedding-frequency-migration",
+      "path": "backward/cp-embedding-frequency-migration.json",
+      "sha256": "5fcb4581b97a4931fad09ef53d4eb7cfe1d17c19cdcf477ca1aa60c052939eda"
+    },
+    {
+      "case_id": "cp-grid-3d-backward-migration",
+      "path": "backward/cp-grid-3d-backward-migration.json",
+      "sha256": "4b6fbbc7662bce66ba32ea8afbafa0e3df3913ca6967a441ccb2e8d2f8bdb856"
+    },
+    {
+      "case_id": "cp-integer-c17",
+      "path": "reference/cp-integer-c17.json",
+      "sha256": "81f3d2ca0a32138e0da0360eba12724327f51f3502292034a98b1efe7f58b889"
+    },
+    {
+      "case_id": "cp-cast-exact-core",
+      "path": "reference/cp-cast-exact-core.json",
+      "sha256": "0c3015851ad4bc5e957165cbe7457a7d3d1bcbd1cddba07d483d809b7ed7e6bb"
+    },
+    {
+      "case_id": "cp-histc-exact-core",
+      "path": "reference/cp-histc-exact-core.json",
+      "sha256": "7eaa8294e6cbf4b2cb84794db531c7a33e513c2b92e09dd790c4208d11bcf912"
+    },
+    {
+      "case_id": "cp-im2col-exact-core",
+      "path": "reference/cp-im2col-exact-core.json",
+      "sha256": "e681fc57e095e4405f1996ca37c693fb5731fa885cf54490e179b2c25c103e8b"
+    },
+    {
+      "case_id": "cp-int4-exact-core",
+      "path": "reference/cp-int4-exact-core.json",
+      "sha256": "5c1de46133ad7c1edc56cb7ff041cc196395abda9d965c0980e0c2d76ea0d76c"
+    },
+    {
+      "case_id": "cp-linear_bwd-exact-core",
+      "path": "backward/cp-linear_bwd-exact-core.json",
+      "sha256": "68e75ca221add1eeb5c0e267db77acf50a3fd663c925a5039c20ca1845faf59c"
+    },
+    {
+      "case_id": "cp-logit-exact-core",
+      "path": "backward/cp-logit-exact-core.json",
+      "sha256": "6ce9d114c755d545b79e764381ef9158c0fee517966686c4c8817e45e644e50e"
+    },
+    {
+      "case_id": "cp-matmul-exact-core",
+      "path": "reference/cp-matmul-exact-core.json",
+      "sha256": "e2bba7287d088f976e35de128ad8042f425082ec2086247b258aff40cf429c0e"
+    },
+    {
+      "case_id": "cp-polynomial-exact-core",
+      "path": "reference/cp-polynomial-exact-core.json",
+      "sha256": "d246c52d29a25828c5ad6ba088633d9b5d33c6c9c9451c3ad469ca4a263f5fa5"
+    },
+    {
+      "case_id": "cp-pool-exact-core",
+      "path": "reference/cp-pool-exact-core.json",
+      "sha256": "9934f2638d34f19a530a2857926897bf65157b0039f070ff73eb87d8826b2ad0"
+    },
+    {
+      "case_id": "cp-quant-exact-core",
+      "path": "reference/cp-quant-exact-core.json",
+      "sha256": "8af616d359bbb00df223362d47ebad2c99c535072348178c1e7980fc92ba9620"
+    },
+    {
+      "case_id": "cp-segment-exact-core",
+      "path": "reference/cp-segment-exact-core.json",
+      "sha256": "c1f6769b6799429d5f327670ec42da52dbf86fd8107481c2f5bf557442486d9a"
+    },
+    {
+      "case_id": "cp-softmargin-exact-core",
+      "path": "reference/cp-softmargin-exact-core.json",
+      "sha256": "2a9868224cf3ba92df4839aabdc65fc09ec25763a888d5ec8399d22e0e1a1f56"
+    },
+    {
+      "case_id": "cp-complex_arith-remaining-core",
+      "path": "reference/cp-complex_arith-remaining-core.json",
+      "sha256": "60d73371000ce1d7a345bfa15b069f7ad81b048a79a87b6b45d6acaaf9163092"
+    },
+    {
+      "case_id": "cp-complex_loss-remaining-core",
+      "path": "reference/cp-complex_loss-remaining-core.json",
+      "sha256": "c24c79c6f5857fe46508d8f4aa073fbfff71dfec71c71e6d8743d296837809eb"
+    },
+    {
+      "case_id": "cp-complex_unary-remaining-core",
+      "path": "reference/cp-complex_unary-remaining-core.json",
+      "sha256": "3451fef1bd61d6bb867f53f12552dd077433f86de11a6ed62e58150822588240"
+    },
+    {
+      "case_id": "cp-conv-remaining-core",
+      "path": "reference/cp-conv-remaining-core.json",
+      "sha256": "43234196be612d3ec5d73c68b0b22bbfb01a220c9a55c5977fd580ab028ec8a9"
+    },
+    {
+      "case_id": "cp-grad_cov-remaining-core",
+      "path": "reference/cp-grad_cov-remaining-core.json",
+      "sha256": "087fa89e8add5689cdeccb774b622d0c3db129c613ccf8d6489a99db7f1b6e28"
+    },
+    {
+      "case_id": "cp-grid-remaining-core",
+      "path": "reference/cp-grid-remaining-core.json",
+      "sha256": "e8258405807bea574a9405a79ef616bc32b7212f7593f9f496527fa90518427b"
+    },
+    {
+      "case_id": "cp-lanczos-remaining-core",
+      "path": "reference/cp-lanczos-remaining-core.json",
+      "sha256": "1e164ff6d4980d5a8498d2c246cd7d5334f571a77d22280d0dcc01b77bbc8302"
+    },
+    {
+      "case_id": "cp-ldexp_cumprod-remaining-core",
+      "path": "reference/cp-ldexp_cumprod-remaining-core.json",
+      "sha256": "f14e357979233f24a31a1a9313aa0d90b695be1690cf0b62feb2ceb46ed89f8c"
+    },
+    {
+      "case_id": "cp-matrixexp-remaining-core",
+      "path": "reference/cp-matrixexp-remaining-core.json",
+      "sha256": "1227296b0251286edb495737c4e27e2eedd03fa6e1236a6be2ae2b8dcb97261f"
+    },
+    {
+      "case_id": "cp-special-remaining-core",
+      "path": "high_precision/cp-special-remaining-core.json",
+      "sha256": "01ccd1c3598351b1eb266ebbc9299e2063767e40fa911dda0eb4020f333a1c29"
+    },
+    {
+      "case_id": "cp-linalg_bwd-backward",
+      "path": "backward/cp-linalg_bwd-backward.json",
+      "sha256": "77b09adba0c77ab8b91ff38ec5d001c0fff76c6d1c3a1887b417730ecc742ecc"
+    },
+    {
+      "case_id": "cp-norm_sparse_bwd-backward",
+      "path": "backward/cp-norm_sparse_bwd-backward.json",
+      "sha256": "2cf6ecfa86b271915fc849f2c16d08eb999258f93058e68a3ccc3493ac61f0ac"
+    },
+    {
+      "case_id": "cp-routing-backward",
+      "path": "backward/cp-routing-backward.json",
+      "sha256": "a976eda840a4a987de7313547aa4b5d9d2785bca6aab57b670d11254e8980e06"
+    },
+    {
+      "case_id": "cp-fft-contracts",
+      "path": "fft/cp-fft-contracts.json",
+      "sha256": "87cdcf227551f42bf3ae48f3bb04f7f37c1d9575e3b9362518acefa3b25eae1f"
+    },
+    {
+      "case_id": "cp-non-unique-contracts",
+      "path": "non_unique/cp-non-unique-contracts.json",
+      "sha256": "1adf63a8be2b80cae42732995a9ed0d58d78b04d901107827012167be34a61d1"
+    },
+    {
+      "case_id": "cp-direct-dispositions",
+      "path": "direct/cp-direct-dispositions.json",
+      "sha256": "a133c184e6d240d5ebf9a94a73325cb282cc6952b340632befd48f999fce97ca"
+    }
+  ]
+}

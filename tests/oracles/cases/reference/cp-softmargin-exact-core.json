@@ -1,0 +1,196 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-softmargin-exact-core",
+  "case_pack": "CP-SOFTMARGIN",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops and exact/high-precision formula evaluation with declared public-dtype rounding.",
+    "kind": "float32_ulp",
+    "ulp_ceiling": 3
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "backward_mean": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0xbe4cca6b",
+        "0xbddc511b",
+        "0xbd4ccccd",
+        "0x3e15b886",
+        "0xb7e47eb5"
+      ]
+    },
+    "backward_none": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0xbf7ffd06",
+        "0xbf09b2b1",
+        "0xbe800000",
+        "0x3f3b26a8",
+        "0xb90ecf31"
+      ]
+    },
+    "decimal_loss": [
+      "10.000045398899216864646769487829307105596781502281787558794264063195488918050659",
+      "0.31326168751822283404899549496785564191528008567034837471906351483719490150918722",
+      "0.69314718055994530941723212145817656807550013436025525412068000949339362196969472",
+      "1.3132616875182228340489954949678556419152800856703483747190635148371949015091872",
+      "0.000045398899216864646769487829307105596781502281787558794264063195488918050659008859"
+    ],
+    "loss_mean": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [],
+      "storage_offset": 0,
+      "strides": [],
+      "values": [
+        "0x401db165"
+      ]
+    },
+    "loss_none": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x41200030",
+        "0x3ea063d6",
+        "0x3f317218",
+        "0x3fa818f5",
+        "0x383e6ab2"
+      ]
+    },
+    "loss_sum": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [],
+      "storage_offset": 0,
+      "strides": [],
+      "values": [
+        "0x41451dbe"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_exact_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.soft_margin_loss_reference",
+    "torchcts.core.reference_oracles.soft_margin_loss_backward_reference"
+  ],
+  "inputs": {
+    "grad": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0xc0000000",
+        "0x3f000000",
+        "0x3f800000",
+        "0x40400000"
+      ]
+    },
+    "input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0xc1200000",
+        "0xbf800000",
+        "0x00000000",
+        "0x3f800000",
+        "0x41200000"
+      ]
+    },
+    "target": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0xbf800000",
+        "0x3f800000",
+        "0xbf800000",
+        "0x3f800000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "soft_margin_loss_reference",
+    "soft_margin_loss_backward_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/exact-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

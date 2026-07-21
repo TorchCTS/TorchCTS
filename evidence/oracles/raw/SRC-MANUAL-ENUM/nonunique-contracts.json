@@ -1,0 +1,231 @@
+{
+    "records": {
+        "CP-NON-UNIQUE": [
+            {
+                "admissibility_rule": "Eigenvalues are unique up to numeric tolerance.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": null,
+                "family": "eigh_eigenvalues",
+                "representative_op": "linalg.eigh.eigenvalues",
+                "status": "strict_by_api"
+            },
+            {
+                "admissibility_rule": "Eigenvectors may change sign or unit phase; require eigen equation, orthonormality, and reconstruction.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_eigh",
+                "family": "eigh",
+                "representative_op": "linalg.eigh",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Eigenpairs may permute and eigenvectors may scale; require finite nonzero vectors and eigen equations.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_eig",
+                "family": "eig",
+                "representative_op": "linalg.eig",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Eigenvalues may permute; compare the minimum-cost value matching.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_eigvals",
+                "family": "eigvals",
+                "representative_op": "linalg.eigvals",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Singular vectors may change sign or phase; require values, orthogonality, and reconstruction.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_svd",
+                "family": "svd",
+                "representative_op": "linalg.svd",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Q/R signs may move together; require orthogonality, triangular R, and reconstruction.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_qr",
+                "family": "qr",
+                "representative_op": "linalg.qr",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Pivot choices may differ; require permutation legality and P@L@U reconstruction.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_lu",
+                "family": "lu",
+                "representative_op": "linalg.lu",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Packed pivots may differ; require valid pivots and unpacked reconstruction.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_lu",
+                "family": "lu_factor",
+                "representative_op": "linalg.lu_factor",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Require all four Moore-Penrose identities.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_pinv",
+                "family": "pinv",
+                "representative_op": "linalg.pinv",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Rank-deficient solutions may differ by a null-space vector; require equal projection and residual norm.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_lstsq",
+                "family": "lstsq",
+                "representative_op": "linalg.lstsq",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Tied indices may permute unless stable; values and gathered index legality stay exact.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_sortlike",
+                "family": "sort",
+                "representative_op": "sort",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Any in-bounds index that selects the extremal value is legal.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_arg_reduce",
+                "family": "arg_reduce",
+                "representative_op": "argmax",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Returned values remain exact and indices must select those values.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_cumminmax",
+                "family": "value_index",
+                "representative_op": "cummax",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Any value with maximal frequency and any index selecting it is legal.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_mode",
+                "family": "mode",
+                "representative_op": "mode",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Only lanes proven determinate by expanded real arithmetic remain strict.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_complex_matmul_determinate",
+                "family": "complex_matmul_determinate",
+                "representative_op": "matmul",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Finite groups compare normally; affected groups must retain a nonfinite.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_fft_special_contract",
+                "family": "fft_special",
+                "representative_op": "fft.fft",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Result must belong to the finite set of legal multiplication trees.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_complex_product",
+                "family": "complex_product",
+                "representative_op": "prod",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Mean follows public arithmetic-mean semantics even when dispersion is nonfinite.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": "_check_welford_mean",
+                "family": "welford_mean",
+                "representative_op": "std_mean",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Values remain exact and indices must point to those values.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_max_pool_indices",
+                "family": "fractional_max_pool",
+                "representative_op": "fractional_max_pool2d",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Tied maxima may choose any in-plane index selecting the returned value.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_max_pool_indices",
+                "family": "max_pool_indices",
+                "representative_op": "max_pool2d",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Duplicate destinations may contain any source writer; unwritten destinations must be zero.",
+                "ambiguity_type": "tie_index_ambiguous",
+                "checker": "_check_max_unpool",
+                "family": "max_unpool_writers",
+                "representative_op": "max_unpool2d",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Nonnegative values are exact and negative slopes stay within the requested interval.",
+                "ambiguity_type": "random_value",
+                "checker": "_check_rrelu",
+                "family": "rrelu",
+                "representative_op": "nn.functional.rrelu",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Only output structure and finite-value class are contractual without seeded equivalence.",
+                "ambiguity_type": "random_value",
+                "checker": "_check_structural",
+                "family": "random",
+                "representative_op": "rand",
+                "status": "structural_only"
+            },
+            {
+                "admissibility_rule": "Require orthonormal factors and a useful approximation, not identical random bases.",
+                "ambiguity_type": "random_value",
+                "checker": "_check_randomized_linalg",
+                "family": "randomized_linalg",
+                "representative_op": "svd_lowrank",
+                "status": "covered_by_contract"
+            },
+            {
+                "admissibility_rule": "Only output structure is contractual; values are deliberately unconstrained.",
+                "ambiguity_type": "uninitialized_value",
+                "checker": "_check_structural",
+                "family": "uninitialized",
+                "representative_op": "empty",
+                "status": "structural_only"
+            },
+            {
+                "admissibility_rule": "Packed reflector state has no portable standalone legality checker.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": null,
+                "family": "geqrf",
+                "representative_op": "geqrf",
+                "status": "intentionally_exact"
+            },
+            {
+                "admissibility_rule": "Consumers of packed reflector state retain exact comparison.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": null,
+                "family": "orgqr_ormqr",
+                "representative_op": "orgqr",
+                "status": "intentionally_exact"
+            },
+            {
+                "admissibility_rule": "Value-only linalg results retain numeric comparison.",
+                "ambiguity_type": "representation_ambiguous",
+                "checker": null,
+                "family": "value_only_linalg",
+                "representative_op": "linalg.svdvals",
+                "status": "strict_by_api"
+            }
+        ]
+    },
+    "schema_version": 1
+}

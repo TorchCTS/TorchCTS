@@ -1,0 +1,145 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_independent_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-lanczos-remaining-core",
+  "case_pack": "CP-LANCZOS",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops or 100-digit formula evaluation followed by explicit public-dtype rounding.",
+    "kind": "ulp_with_exact_metadata",
+    "ulp_ceiling": 8
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "coefficients": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3ff0000000000000",
+        "0x3fe37423899a1558",
+        "0x0000000000000000",
+        "0xbfc101eae33b69c6",
+        "0x0000000000000000"
+      ]
+    },
+    "output": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        2,
+        2,
+        1
+      ],
+      "values": [
+        "0x4006310cff60414c",
+        "0x4010e779804fdf59"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.lanczos3_coefficient",
+    "torchcts.core.reference_oracles.lanczos2d_aa_reference"
+  ],
+  "inputs": {
+    "align_corners": false,
+    "distances": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x0000000000000000",
+        "0x3fe0000000000000",
+        "0x3ff0000000000000",
+        "0x3ff4000000000000",
+        "0x4008000000000000"
+      ]
+    },
+    "input": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        2,
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        6,
+        6,
+        3,
+        1
+      ],
+      "values": [
+        "0x3ff0000000000000",
+        "0x4000000000000000",
+        "0x4008000000000000",
+        "0x4010000000000000",
+        "0x4014000000000000",
+        "0x4018000000000000"
+      ]
+    },
+    "output_size": [
+      1,
+      2
+    ]
+  },
+  "oracle_ids": [
+    "lanczos3_coefficient",
+    "lanczos2d_aa_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/remaining-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-DLMF-MP",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

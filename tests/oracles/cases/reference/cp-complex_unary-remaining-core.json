@@ -1,0 +1,144 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_independent_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-complex_unary-remaining-core",
+  "case_pack": "CP-COMPLEX-UNARY",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops or 100-digit formula evaluation followed by explicit public-dtype rounding.",
+    "kind": "ulp_with_exact_metadata",
+    "ulp_ceiling": 4
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "expm1": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3ed0d84b",
+        "0x3e8063bb",
+        "0xc0ebdb84"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f18f391",
+        "0xbf3b1776",
+        "0xbef46323"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "rsqrt": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbe9d5520",
+        "0xbf593924",
+        "0x3e4ccccd"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3fa69e29",
+        "0x3e90d0c3",
+        "0x3f19999a"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "sigmoid": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3d71ad18",
+        "0x3e196bf6",
+        "0xbe053e9b"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f1fd07f",
+        "0x3e777d05",
+        "0x3f791e46"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.complex_sigmoid_reference",
+    "torchcts.core.reference_oracles.complex_rsqrt_reference",
+    "torchcts.core.reference_oracles.complex_expm1_reference"
+  ],
+  "inputs": {
+    "input": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3e800000",
+        "0x3f400000",
+        "0xbfc00000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f000000",
+        "0xbf800000",
+        "0x40000000"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    }
+  },
+  "oracle_ids": [
+    "complex_sigmoid_reference",
+    "complex_rsqrt_reference",
+    "complex_expm1_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/remaining-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-DLMF-MP",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

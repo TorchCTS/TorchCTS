@@ -1,0 +1,92 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_backward_formula_or_routing_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-routing-backward",
+  "case_pack": "CP-ROUTING",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Finite reviewed truth table for every gated operation and negative control.",
+    "kind": "exact_routing_table"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "has_reference": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "generator": "scripts/oracle_fixtures/generate_backward_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.backward_references.has_opinfo_backward_reference",
+    "torchcts.core.backward_references.resolve_opinfo_backward_reference"
+  ],
+  "inputs": {
+    "has_reference": [
+      {
+        "dtype": "torch.float32",
+        "op": "linalg.cond"
+      },
+      {
+        "dtype": "torch.complex64",
+        "op": "linalg.vander"
+      },
+      {
+        "dtype": "torch.complex64",
+        "op": "__rpow__"
+      },
+      {
+        "dtype": "torch.float32",
+        "op": "__rpow__"
+      },
+      {
+        "dtype": "torch.bfloat16",
+        "op": "_segment_reduce"
+      },
+      {
+        "dtype": "torch.float32",
+        "op": "_segment_reduce"
+      },
+      {
+        "dtype": "torch.float32",
+        "op": "unrelated"
+      }
+    ]
+  },
+  "oracle_ids": [
+    "has_opinfo_backward_reference",
+    "resolve_opinfo_backward_reference"
+  ],
+  "oracle_kind": "permanent_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/backward.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V3_ROUTING"
+}

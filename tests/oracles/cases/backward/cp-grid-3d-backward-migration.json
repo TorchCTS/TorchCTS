@@ -1,0 +1,348 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "dtypes": [
+      "torch.bfloat16"
+    ],
+    "input_condition": "finite_clean",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-grid-3d-backward-migration",
+  "case_pack": "CP-GRID",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Exact-rational trilinear weights, reflection derivatives, and VJP, rounded once to bfloat16.",
+    "kind": "exact_bfloat16_bits"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [
+    "aten::grid_sampler_3d_backward"
+  ],
+  "expected": {
+    "contributors": [
+      [
+        {
+          "index_zyx": [
+            0,
+            0,
+            0
+          ],
+          "value": "0",
+          "weight": "63/256"
+        },
+        {
+          "index_zyx": [
+            0,
+            0,
+            1
+          ],
+          "value": "1",
+          "weight": "9/256"
+        },
+        {
+          "index_zyx": [
+            0,
+            1,
+            0
+          ],
+          "value": "2",
+          "weight": "21/256"
+        },
+        {
+          "index_zyx": [
+            0,
+            1,
+            1
+          ],
+          "value": "3",
+          "weight": "3/256"
+        },
+        {
+          "index_zyx": [
+            1,
+            0,
+            0
+          ],
+          "value": "4",
+          "weight": "105/256"
+        },
+        {
+          "index_zyx": [
+            1,
+            0,
+            1
+          ],
+          "value": "5",
+          "weight": "15/256"
+        },
+        {
+          "index_zyx": [
+            1,
+            1,
+            0
+          ],
+          "value": "6",
+          "weight": "35/256"
+        },
+        {
+          "index_zyx": [
+            1,
+            1,
+            1
+          ],
+          "value": "7",
+          "weight": "5/256"
+        }
+      ],
+      [
+        {
+          "index_zyx": [
+            0,
+            0,
+            0
+          ],
+          "value": "0",
+          "weight": "7/512"
+        },
+        {
+          "index_zyx": [
+            0,
+            0,
+            1
+          ],
+          "value": "1",
+          "weight": "49/512"
+        },
+        {
+          "index_zyx": [
+            0,
+            1,
+            0
+          ],
+          "value": "2",
+          "weight": "49/512"
+        },
+        {
+          "index_zyx": [
+            0,
+            1,
+            1
+          ],
+          "value": "3",
+          "weight": "343/512"
+        },
+        {
+          "index_zyx": [
+            1,
+            0,
+            0
+          ],
+          "value": "4",
+          "weight": "1/512"
+        },
+        {
+          "index_zyx": [
+            1,
+            0,
+            1
+          ],
+          "value": "5",
+          "weight": "7/512"
+        },
+        {
+          "index_zyx": [
+            1,
+            1,
+            0
+          ],
+          "value": "6",
+          "weight": "7/512"
+        },
+        {
+          "index_zyx": [
+            1,
+            1,
+            1
+          ],
+          "value": "7",
+          "weight": "49/512"
+        }
+      ]
+    ],
+    "grad_grid": {
+      "dtype": "torch.bfloat16",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        1,
+        2,
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        6,
+        6,
+        6,
+        3,
+        1
+      ],
+      "values": [
+        "0xbec0",
+        "0x3f40",
+        "0x3fc0",
+        "0xbf20",
+        "0x3fa0",
+        "0xc020"
+      ]
+    },
+    "grad_input": {
+      "dtype": "torch.bfloat16",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        2,
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        8,
+        4,
+        2,
+        1
+      ],
+      "values": [
+        "0x3e2c",
+        "0xbdbf",
+        "0xbd6e",
+        "0xbf54",
+        "0x3e9c",
+        "0x3cdc",
+        "0x3daf",
+        "0xbdd7"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.grid_sampler_3d_backward_f32_reference"
+  ],
+  "inputs": {
+    "align_corners": true,
+    "grad_output": {
+      "dtype": "torch.bfloat16",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        2,
+        2,
+        2,
+        1
+      ],
+      "values": [
+        "0x3f40",
+        "0xbfa0"
+      ]
+    },
+    "grid": {
+      "dtype": "torch.bfloat16",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        1,
+        2,
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        6,
+        6,
+        6,
+        3,
+        1
+      ],
+      "values": [
+        "0xbfa0",
+        "0xbf00",
+        "0x3e80",
+        "0x3f40",
+        "0x3fa0",
+        "0xbf40"
+      ]
+    },
+    "input": {
+      "dtype": "torch.bfloat16",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        2,
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        8,
+        8,
+        4,
+        2,
+        1
+      ],
+      "values": [
+        "0x0000",
+        "0x3f80",
+        "0x4000",
+        "0x4040",
+        "0x4080",
+        "0x40a0",
+        "0x40c0",
+        "0x40e0"
+      ]
+    },
+    "interpolation_mode": 0,
+    "padding_mode": 2
+  },
+  "oracle_ids": [
+    "grid_sampler_backward_f32"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/migrated-selftests.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-PUBLIC-API",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

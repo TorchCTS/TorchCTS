@@ -1,0 +1,286 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_independent_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-complex_arith-remaining-core",
+  "case_pack": "CP-COMPLEX-ARITH",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops or 100-digit formula evaluation followed by explicit public-dtype rounding.",
+    "kind": "exact_bits_and_metadata"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "foreach_add_alpha_half": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3fc00000",
+        "0x40200000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40200000",
+        "0x00000000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "foreach_addcmul": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40a00000",
+        "0xc1340000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40a00000",
+        "0xc0900000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "multiplied": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40400000",
+        "0xc13c0000",
+        "0x3fe00000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40800000",
+        "0xc0600000",
+        "0xc0100000"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.has_nonnegative_integral_complex_exponent",
+    "torchcts.core.reference_oracles.complex_mul_reference",
+    "torchcts.core.reference_oracles.foreach_complex_compound_reference"
+  ],
+  "inputs": {
+    "exponent_cases": [
+      {
+        "expected": true,
+        "input": {
+          "dtype": "torch.complex64",
+          "encoding": "complex_ieee754_bits",
+          "imag": [
+            "0x00000000"
+          ],
+          "layout": "torch.strided",
+          "real": [
+            "0x40000000"
+          ],
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "strides": [
+            1
+          ]
+        }
+      },
+      {
+        "expected": false,
+        "input": {
+          "dtype": "torch.complex64",
+          "encoding": "complex_ieee754_bits",
+          "imag": [
+            "0x00000000"
+          ],
+          "layout": "torch.strided",
+          "real": [
+            "0xbf800000"
+          ],
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "strides": [
+            1
+          ]
+        }
+      },
+      {
+        "expected": false,
+        "input": {
+          "dtype": "torch.complex64",
+          "encoding": "complex_ieee754_bits",
+          "imag": [
+            "0x00000000"
+          ],
+          "layout": "torch.strided",
+          "real": [
+            "0x3fc00000"
+          ],
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "strides": [
+            1
+          ]
+        }
+      },
+      {
+        "expected": false,
+        "input": {
+          "dtype": "torch.complex64",
+          "encoding": "complex_ieee754_bits",
+          "imag": [
+            "0x3f800000"
+          ],
+          "layout": "torch.strided",
+          "real": [
+            "0x40400000"
+          ],
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "strides": [
+            1
+          ]
+        }
+      }
+    ],
+    "foreach_base": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40000000",
+        "0x3f000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f800000",
+        "0xbf800000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "foreach_other": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbf800000",
+        "0x40800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40400000",
+        "0x40000000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "left": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40000000",
+        "0x3f000000",
+        "0xc0000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f800000",
+        "0xc0400000",
+        "0x3e800000"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "right": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbf800000",
+        "0x40800000",
+        "0xbf800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40000000",
+        "0x3f000000",
+        "0xbf800000"
+      ],
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    }
+  },
+  "oracle_ids": [
+    "has_nonnegative_integral_complex_exponent",
+    "complex_mul_reference",
+    "foreach_complex_compound_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/remaining-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

@@ -1,0 +1,376 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "dtypes": [
+      "torch.complex64"
+    ],
+    "input_condition": "has_inf_or_nan",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-complex-arithmetic-migration",
+  "case_pack": "CP-COMPLEX-ARITH",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent real/imaginary IEEE operations and exponent predicate; non-integral lanes use a frozen sentinel to prove pass-through without calling pow.",
+    "kind": "exact_ieee_lane_bits"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [
+    "aten::add.Tensor",
+    "aten::sub.Tensor",
+    "aten::rsub.Tensor",
+    "aten::pow.Tensor_Tensor"
+  ],
+  "expected": {
+    "general_power_passthrough": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3f800000",
+        "0x40000000",
+        "0x40400000",
+        "0x40800000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x40e00000",
+        "0x41000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x41300000",
+        "0x41400000",
+        "0x41500000",
+        "0x41600000",
+        "0x41700000",
+        "0x41800000",
+        "0x41880000",
+        "0x41900000"
+      ],
+      "shape": [
+        8
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "integer_power": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xff800000",
+        "0x7f800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x7f800000",
+        "0xff800000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "unit_alpha": {
+      "add": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3f400000",
+          "0x7f800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0xff800000",
+          "0x40400000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "rsub": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0xbe800000",
+          "0xff800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0xff800000",
+          "0x3f800000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "sub": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3e800000",
+          "0x7f800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x7f800000",
+          "0xbf800000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      }
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.complex_unit_alpha_add_sub_reference",
+    "torchcts.core.reference_oracles.complex_tensor_integer_power_reference"
+  ],
+  "inputs": {
+    "general_power_passthrough": {
+      "base": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x40000000",
+          "0x40000000",
+          "0x40000000",
+          "0x40000000",
+          "0x40000000",
+          "0x40000000",
+          "0x40000000",
+          "0x40000000"
+        ],
+        "shape": [
+          8
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "exponent": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000",
+          "0x3f800000",
+          "0x00000000",
+          "0x00000000",
+          "0x7fc00000",
+          "0x7f800000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0xbf800000",
+          "0x3fc00000",
+          "0x40000000",
+          "0x7fc00000",
+          "0x7f800000",
+          "0x40000000",
+          "0x40000000",
+          "0xff800000"
+        ],
+        "shape": [
+          8
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "native_sentinel": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3f800000",
+          "0x40000000",
+          "0x40400000",
+          "0x40800000",
+          "0x40a00000",
+          "0x40c00000",
+          "0x40e00000",
+          "0x41000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x41300000",
+          "0x41400000",
+          "0x41500000",
+          "0x41600000",
+          "0x41700000",
+          "0x41800000",
+          "0x41880000",
+          "0x41900000"
+        ],
+        "shape": [
+          8
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      }
+    },
+    "integer_power": {
+      "base": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3d800000",
+          "0x7f800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0xff800000",
+          "0x3f88bac7"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "exponent": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x00000000",
+          "0x00000000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x40000000",
+          "0x40000000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "native_placeholder": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x7fc00000",
+          "0x7fc00000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x7fc00000",
+          "0x7fc00000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      }
+    },
+    "unit_alpha": {
+      "left": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3f000000",
+          "0x7f800000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0x00000000",
+          "0x3f800000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      },
+      "right": {
+        "dtype": "torch.complex64",
+        "encoding": "complex_ieee754_bits",
+        "imag": [
+          "0x3e800000",
+          "0x40400000"
+        ],
+        "layout": "torch.strided",
+        "real": [
+          "0xff800000",
+          "0x40000000"
+        ],
+        "shape": [
+          2
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ]
+      }
+    }
+  },
+  "oracle_ids": [
+    "complex_unit_alpha_add_sub",
+    "complex_tensor_integer_power"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/migrated-selftests.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

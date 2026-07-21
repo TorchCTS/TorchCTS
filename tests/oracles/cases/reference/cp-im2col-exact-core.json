@@ -1,0 +1,180 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-im2col-exact-core",
+  "case_pack": "CP-IM2COL",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops and exact/high-precision formula evaluation with declared public-dtype rounding.",
+    "kind": "exact_bits_and_metadata"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "columns": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        4,
+        6
+      ],
+      "storage_offset": 0,
+      "strides": [
+        24,
+        6,
+        1
+      ],
+      "values": [
+        "0x00000000",
+        "0x3f800000",
+        "0x40000000",
+        "0x40800000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x3f800000",
+        "0x40000000",
+        "0x40400000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x40e00000",
+        "0x40800000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x41000000",
+        "0x41100000",
+        "0x41200000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x40e00000",
+        "0x41100000",
+        "0x41200000",
+        "0x41300000"
+      ]
+    },
+    "reconstructed": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        3,
+        4
+      ],
+      "storage_offset": 0,
+      "strides": [
+        12,
+        12,
+        4,
+        1
+      ],
+      "values": [
+        "0x00000000",
+        "0x40000000",
+        "0x40800000",
+        "0x40400000",
+        "0x41000000",
+        "0x41a00000",
+        "0x41c00000",
+        "0x41600000",
+        "0x41000000",
+        "0x41900000",
+        "0x41a00000",
+        "0x41300000"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_exact_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.im2col_reference",
+    "torchcts.core.reference_oracles.col2im_reference"
+  ],
+  "inputs": {
+    "input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        1,
+        1,
+        3,
+        4
+      ],
+      "storage_offset": 0,
+      "strides": [
+        12,
+        12,
+        4,
+        1
+      ],
+      "values": [
+        "0x00000000",
+        "0x3f800000",
+        "0x40000000",
+        "0x40400000",
+        "0x40800000",
+        "0x40a00000",
+        "0x40c00000",
+        "0x40e00000",
+        "0x41000000",
+        "0x41100000",
+        "0x41200000",
+        "0x41300000"
+      ]
+    },
+    "output_size": [
+      3,
+      4
+    ],
+    "parameters": {
+      "dilation": [
+        1,
+        1
+      ],
+      "kernel_size": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "stride": [
+        1,
+        1
+      ]
+    }
+  },
+  "oracle_ids": [
+    "im2col_reference",
+    "col2im_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/exact-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

@@ -35,6 +35,9 @@ torchcts = ["templates/*.py", "opinfo_cache/ieee754_undefined.json", "coverage_e
 
 [tool.pytest.ini_options]
 testpaths = ["torchcts"]
+markers = [
+    "oracle_contract(id, validation_class): development-only validation of a TorchCTS-owned oracle contract",
+]
 filterwarnings = [
     # PyTorch deprecated API warnings (triggered by OpInfo samples, not our code)
     "ignore:torch\\.cholesky is deprecated:UserWarning",

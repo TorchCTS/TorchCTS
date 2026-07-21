@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "generators": [
+    {
+      "path": "scripts/oracle_fixtures/generate_backward_records.py",
+      "sha256": "08a81834cf9593cbcc52e45e2ec682ef6dad2fd01d557485035d3e49033851e5"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_exact_core_records.py",
+      "sha256": "d170ef9823c7c85f95b0320ee8e45139ed8d7d3d4d0d49b5dd3450edb14fcfcc"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_direct_dispositions.py",
+      "sha256": "562dab8a02bd75821f5af3fb521e5be3377a81f82de2c3c58cd0214723085770"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_fft_contract_records.py",
+      "sha256": "d82a7b6079e9e219a35b3920c78f567b0c802a1f7170bab848cad9b0c1bcdc9c"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_integer_c17.c",
+      "sha256": "d168bf2e928adde42d85290d3040129c7be7d858c1b70e31607c8f8ede12d92c"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
+      "sha256": "07301a22c7aca765e023082882310b271c17603e71fbb7cc4d33cd2cf4cdaebf"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_nonunique_records.py",
+      "sha256": "c70bb234b4d60fcbb7860e205196e87d2d1f0f3c181fcc9f02f54b285724c5ee"
+    },
+    {
+      "path": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+      "sha256": "228fe35a2c0a9fa584b6e0f24ca7c080d6ca0bbe028069704fd613a4052e789d"
+    }
+  ]
+}

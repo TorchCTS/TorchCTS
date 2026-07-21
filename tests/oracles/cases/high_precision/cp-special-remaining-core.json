@@ -1,0 +1,333 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_independent_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-special-remaining-core",
+  "case_pack": "CP-SPECIAL",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops or 100-digit formula evaluation followed by explicit public-dtype rounding.",
+    "kind": "ulp_with_exact_metadata",
+    "ulp_ceiling": 4
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "dirichlet_expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fcf1d96e45627b8",
+        "0x3fd23bef5c6bd863"
+      ]
+    },
+    "gamma_grad_expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fe8a2805ff19309",
+        "0x3feb690878932534"
+      ]
+    },
+    "i0_expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3ff0000000000000",
+        "0x3ff441ce4b386c2d",
+        "0x401d8347c2b292d4"
+      ]
+    },
+    "kaiser_expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3f55d4f802b78d38",
+        "0x3fd5c902550971fa",
+        "0x3ff0000000000000",
+        "0x3fd5c902550971fa",
+        "0x3f55d4f802b78d38"
+      ]
+    },
+    "polygamma_expected": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0xc030d42c0452055d",
+        "0xc0033ba004f00621",
+        "0xbfce3bef327df0e7"
+      ]
+    },
+    "regularized_lower": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fe0a7ef5c18edd2",
+        "0x3fdc4c96b121ccdb",
+        "0x3fea76da4db53fe1"
+      ]
+    },
+    "regularized_upper": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fdeb02147ce245c",
+        "0x3fe1d9b4a76f1992",
+        "0x3fc62496c92b007c"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_remaining_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.high_precision_reference.dirichlet_grad_reference",
+    "torchcts.core.high_precision_reference.standard_gamma_grad_reference",
+    "torchcts.core.high_precision_reference.i0_reference",
+    "torchcts.core.high_precision_reference.polygamma_reference",
+    "torchcts.core.high_precision_reference.regularized_gamma_reference",
+    "torchcts.core.high_precision_reference.kaiser_window_reference"
+  ],
+  "inputs": {
+    "dirichlet_alpha": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3ff8000000000000",
+        "0x4000000000000000"
+      ]
+    },
+    "dirichlet_total": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x4010000000000000",
+        "0x4014000000000000"
+      ]
+    },
+    "dirichlet_x": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fd0000000000000",
+        "0x3fe3333333333333"
+      ]
+    },
+    "gamma_alpha": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3ff8000000000000",
+        "0x4008000000000000"
+      ]
+    },
+    "gamma_output": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fe8000000000000",
+        "0x4000000000000000"
+      ]
+    },
+    "i0_input": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x0000000000000000",
+        "0x3ff0000000000000",
+        "0x400c000000000000"
+      ]
+    },
+    "kaiser_beta": 8.6,
+    "kaiser_length": 5,
+    "kaiser_periodic": false,
+    "polygamma_input": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fe0000000000000",
+        "0x3ff0000000000000",
+        "0x4004000000000000"
+      ]
+    },
+    "polygamma_order": 2,
+    "regularized_shape": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fe0000000000000",
+        "0x4000000000000000",
+        "0x4014000000000000"
+      ]
+    },
+    "regularized_value": {
+      "dtype": "torch.float64",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3fd0000000000000",
+        "0x3ff8000000000000",
+        "0x401c000000000000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "dirichlet_grad_reference",
+    "standard_gamma_grad_reference",
+    "i0_reference",
+    "polygamma_reference",
+    "regularized_gamma_reference",
+    "kaiser_window_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/remaining-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-DLMF-MP",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

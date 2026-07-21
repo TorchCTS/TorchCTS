@@ -1,0 +1,197 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "dtypes": [
+      "torch.complex64"
+    ],
+    "input_condition": "has_inf",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-complex-convolution-migration",
+  "case_pack": "CP-CONV",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Direct scalar transposed-convolution destination enumeration and explicit complex multiplication formula.",
+    "kind": "exact_ieee_lane_bits"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [
+    "aten::conv_transpose1d"
+  ],
+  "expected": {
+    "output": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x7f800000",
+        "0x7f800000",
+        "0x40000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x7f800000",
+        "0xff800000",
+        "0x3e800000"
+      ],
+      "shape": [
+        1,
+        1,
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        3,
+        3,
+        1
+      ]
+    },
+    "term_map": [
+      {
+        "output": 0,
+        "terms": [
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      {
+        "output": 1,
+        "terms": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      },
+      {
+        "output": 2,
+        "terms": [
+          [
+            1,
+            1
+          ]
+        ]
+      }
+    ]
+  },
+  "generator": "scripts/oracle_fixtures/generate_migrated_selftest_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.complex_convolution_reference",
+    "torchcts.core.reference_oracles.slow_complex_convolution_reference"
+  ],
+  "inputs": {
+    "bias": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbf000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3e800000"
+      ],
+      "shape": [
+        1
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "input": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3e800000",
+        "0xc0000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x7f800000",
+        "0x3f800000"
+      ],
+      "shape": [
+        1,
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        2,
+        1
+      ]
+    },
+    "kwargs": {
+      "dilation": [
+        1
+      ],
+      "groups": 1,
+      "output_padding": [
+        0
+      ],
+      "padding": [
+        0
+      ],
+      "stride": [
+        1
+      ]
+    },
+    "op_name": "nn.functional.conv_transpose1d",
+    "weight": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x40400000",
+        "0x3f000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40000000",
+        "0xbf800000"
+      ],
+      "shape": [
+        1,
+        1,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        2,
+        1
+      ]
+    }
+  },
+  "oracle_ids": [
+    "complex_convolution_four_real"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/migrated-selftests.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

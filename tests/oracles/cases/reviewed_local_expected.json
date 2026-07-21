@@ -1,0 +1,68 @@
+{
+  "reviewed": [
+    {
+      "assignment_lines": [87],
+      "function": "test_compact_gcd_signed_minimum_uses_unsigned_magnitude",
+      "line": 82,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [108],
+      "function": "test_histc_casts_completed_integer_counts_once",
+      "line": 101,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [125, 126],
+      "function": "test_igamma_tiny_shape_tails_use_high_precision_reference",
+      "line": 122,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [156, 157, 160, 161],
+      "function": "test_long_strided_complex_dot_uses_c128_residual",
+      "line": 143,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [191],
+      "function": "test_complex32_flip_uses_raw_element_bits",
+      "line": 179,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [208, 209],
+      "function": "test_kaiser_large_and_infinite_beta_use_stable_limit",
+      "line": 207,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [239],
+      "function": "test_strided_extrema_preserve_first_signed_zero_on_ties",
+      "line": 231,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [257],
+      "function": "test_ldexp_wide_int64_exponents_do_not_wrap",
+      "line": 254,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    },
+    {
+      "assignment_lines": [277],
+      "function": "test_logit_backward_negative_zero_is_simd_width_independent",
+      "line": 274,
+      "path": "torchcts/operators/test_edge_contracts.py",
+      "reason": "semantic CPU-contract exemption with local expected/reference calculation"
+    }
+  ],
+  "schema_version": 1
+}

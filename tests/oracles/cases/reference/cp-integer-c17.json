@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "case_id": "cp-integer-c17",
+  "oracle_kind": "value_reference",
+  "validation_class": "V1_FIXED_VALUE",
+  "case_pack": "CP-INTEGER",
+  "oracle_ids": [
+    "float_to_uint8_signed_truncate",
+    "unsigned_negation_modulo",
+    "gcd_signed_min_magnitude"
+  ],
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.float_to_uint8_reference",
+    "torchcts.core.reference_oracles.unsigned_negation_reference",
+    "torchcts.core.reference_oracles.gcd_integer_reference"
+  ],
+  "dispatcher_surfaces": ["aten::_cast_Byte"],
+  "applicability": {
+    "backend": "cpu_development_host",
+    "dtypes": ["torch.float64", "torch.int64", "torch.uint8", "torch.uint16", "torch.uint32", "torch.uint64"],
+    "input_condition": "finite_defined_c17_conversion_range",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "inputs": {
+    "float_to_uint8": {
+      "dtype": "torch.float64",
+      "shape": [11],
+      "strides": [1],
+      "storage_offset": 0,
+      "layout": "torch.strided",
+      "encoding": "ieee754_bits",
+      "values": ["0xc080080000000000", "0xc070000000000000", "0xc06fe00000000000", "0xbff0000000000000", "0xbfeccccccccccccd", "0x0000000000000000", "0x3feccccccccccccd", "0x3ff0000000000000", "0x406fe00000000000", "0x4070000000000000", "0x407ff00000000000"]
+    },
+    "gcd_left": {
+      "dtype": "torch.int64",
+      "shape": [4],
+      "strides": [1],
+      "storage_offset": 0,
+      "layout": "torch.strided",
+      "encoding": "integer_decimal",
+      "bit_width": 64,
+      "signed": true,
+      "values": ["-9223372036854775808", "-9223372036854775808", "-9223372036854775808", "84"]
+    },
+    "gcd_right": {
+      "dtype": "torch.int64",
+      "shape": [4],
+      "strides": [1],
+      "storage_offset": 0,
+      "layout": "torch.strided",
+      "encoding": "integer_decimal",
+      "bit_width": 64,
+      "signed": true,
+      "values": ["31", "-31", "0", "-30"]
+    },
+    "unsigned": {
+      "torch.uint8": {"dtype": "torch.uint8", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 8, "signed": false, "values": ["0", "1", "255", "128"]},
+      "torch.uint16": {"dtype": "torch.uint16", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 16, "signed": false, "values": ["0", "1", "65535", "32768"]},
+      "torch.uint32": {"dtype": "torch.uint32", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 32, "signed": false, "values": ["0", "1", "4294967295", "2147483648"]},
+      "torch.uint64": {"dtype": "torch.uint64", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 64, "signed": false, "values": ["0", "1", "18446744073709551615", "9223372036854775808"]}
+    }
+  },
+  "expected": {
+    "float_to_uint8": {"dtype": "torch.uint8", "shape": [11], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 8, "signed": false, "values": ["255", "0", "1", "255", "0", "0", "0", "1", "255", "0", "255"]},
+    "gcd": {"dtype": "torch.int64", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 64, "signed": true, "values": ["1", "1", "-9223372036854775808", "6"]},
+    "unsigned": {
+      "torch.uint8": {"dtype": "torch.uint8", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 8, "signed": false, "values": ["0", "255", "1", "128"]},
+      "torch.uint16": {"dtype": "torch.uint16", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 16, "signed": false, "values": ["0", "65535", "1", "32768"]},
+      "torch.uint32": {"dtype": "torch.uint32", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 32, "signed": false, "values": ["0", "4294967295", "1", "2147483648"]},
+      "torch.uint64": {"dtype": "torch.uint64", "shape": [4], "strides": [1], "storage_offset": 0, "layout": "torch.strided", "encoding": "integer_decimal", "bit_width": 64, "signed": false, "values": ["0", "18446744073709551615", "1", "9223372036854775808"]}
+    }
+  },
+  "comparison": {
+    "kind": "exact_tensor_bits_and_metadata",
+    "asserts": ["value", "dtype", "shape"],
+    "derivation": "C17 truncation to int64_t, modulo conversion/unsigned arithmetic, and exact Euclidean magnitudes; PyTorch source supplies result dtype/schema."
+  },
+  "source_ids": ["SRC-IEEE-C", "SRC-PYTORCH-SOURCE"],
+  "generator": "scripts/oracle_fixtures/generate_integer_c17.c",
+  "raw_evidence": [
+    "raw/SRC-IEEE-C/cp-integer-apple-clang17.json"
+  ],
+  "created_at": "2026-07-20",
+  "review": {
+    "reviewed_by": ["fixture-schema-implementation", "independent-c17-capture"],
+    "reviewed_at": "2026-07-20",
+    "conclusion": "implementation_correct"
+  }
+}

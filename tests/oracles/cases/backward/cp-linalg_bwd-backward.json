@@ -1,0 +1,264 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_backward_formula_or_routing_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-linalg_bwd-backward",
+  "case_pack": "CP-LINALG-BWD",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Exact matrix calculus and 100-digit complex formulas with explicit float32 rounding.",
+    "kind": "mixed_exact_and_ulp",
+    "ulp_ceiling": 4
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "cond_expected": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0x00000000",
+        "0x00000000",
+        "0xc0000000"
+      ]
+    },
+    "rpow_base_expected": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbf2ce99e",
+        "0x3f0964d1"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f131049",
+        "0xbf37e4f6"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "rpow_exponent_expected": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0xbfcf54eb",
+        "0xbf29598d"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3e98b292",
+        "0x3ec9cc11"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "vander_expected": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x40a00000",
+        "0xbf800000"
+      ]
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_backward_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.backward_references.vander_backward_reference",
+    "torchcts.core.backward_references.complex_rpow_backward_reference",
+    "torchcts.core.backward_references.condition_number_backward_reference"
+  ],
+  "inputs": {
+    "cond_grad": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [],
+      "storage_offset": 0,
+      "strides": [],
+      "values": [
+        "0x3f800000"
+      ]
+    },
+    "cond_input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        2,
+        1
+      ],
+      "values": [
+        "0x40000000",
+        "0x00000000",
+        "0x00000000",
+        "0x3f800000"
+      ]
+    },
+    "cond_p": 2,
+    "rpow_base": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3f800000",
+        "0xbf000000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x40000000",
+        "0x3fc00000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "rpow_exponent": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x3f000000",
+        "0x3f800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f800000",
+        "0xbe800000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "rpow_grad": {
+      "dtype": "torch.complex64",
+      "encoding": "complex_ieee754_bits",
+      "imag": [
+        "0x00000000",
+        "0xbf800000"
+      ],
+      "layout": "torch.strided",
+      "real": [
+        "0x3f800000",
+        "0x3f000000"
+      ],
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ]
+    },
+    "vander_columns": 3,
+    "vander_grad": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2,
+        3
+      ],
+      "storage_offset": 0,
+      "strides": [
+        3,
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ]
+    },
+    "vander_increasing": true,
+    "vander_input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        2
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x40000000",
+        "0xbf800000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "vander_backward_reference",
+    "complex_rpow_backward_reference",
+    "condition_number_backward_reference"
+  ],
+  "oracle_kind": "permanent_reference",
+  "raw_evidence": [
+    "raw/SRC-NUMPY-FORMULA/backward.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-NUMPY-FORMULA",
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}

@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "schema_version": 1,
+      "source_id": "SRC-IEEE-C",
+      "kind": "published_standard_and_compiled_reference",
+      "title": "IEEE 754-2019 and ISO C17 scalar conversion rules",
+      "version": "IEEE 754-2019; ISO/IEC 9899:2018",
+      "revision": "Apple clang 17.0.0 (clang-1700.6.3.2), arm64-apple-darwin25.3.0",
+      "url": "https://standards.ieee.org/ieee/754/6210/",
+      "authority_for": ["value", "integer_conversion", "unsigned_modulo", "gcd_magnitude"],
+      "not_authority_for": ["pytorch_schema", "pytorch_routing", "backend_execution"],
+      "raw_evidence": [
+        {
+          "path": "raw/SRC-IEEE-C/cp-integer-apple-clang17.json",
+          "sha256": "bf60fcdeeb70c31e9edbbf928af07ac9c91a8eac2cea539a98b6d5eb6d645ac4"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-C99-COMPLEX",
+      "kind": "published_standard_and_compiled_reference",
+      "title": "ISO C17 complex arithmetic",
+      "version": "ISO/IEC 9899:2018",
+      "revision": "WG14 N2176; two-libc corroboration required per case",
+      "url": "https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2176.pdf",
+      "authority_for": ["value", "complex_lane_class", "signed_zero"],
+      "not_authority_for": ["pytorch_schema", "undefined_behavior", "backend_execution"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-DLMF-MP",
+      "kind": "published_definition_and_high_precision_calculation",
+      "title": "NIST DLMF definitions evaluated with mpmath",
+      "version": "DLMF 1.2.4; mpmath 1.3.0",
+      "revision": "160 decimal digits; dependencies pinned in requirements-oracles.lock",
+      "url": "https://dlmf.nist.gov/",
+      "authority_for": ["value", "mathematical_definition", "rounding_target"],
+      "not_authority_for": ["pytorch_schema", "backend_execution", "pytorch_subgradient"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-SYMPY-EXACT",
+      "kind": "exact_symbolic_calculation",
+      "title": "SymPy exact rational and symbolic calculation",
+      "version": "SymPy 1.14.0",
+      "revision": "dependencies pinned in requirements-oracles.lock",
+      "url": "https://github.com/sympy/sympy/tree/sympy-1.14.0",
+      "authority_for": ["value", "exact_rational", "symbolic_derivative"],
+      "not_authority_for": ["pytorch_schema", "backend_execution", "floating_special_values"],
+      "raw_evidence": [
+        {
+          "path": "raw/SRC-SYMPY-EXACT/exact-core.json",
+          "sha256": "27faeb24de5f9b11cc1dea52eed25fc3e1f3452886a8d6c2cfecab6122410bc3"
+        },
+        {
+          "path": "raw/SRC-SYMPY-EXACT/migrated-selftests.json",
+          "sha256": "65b85eca97995b67b79491413c9ee6aaca15ad8e3f952881e8e1507f52be1d40"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-NUMPY-FORMULA",
+      "kind": "independent_formula_implementation",
+      "title": "Checked-in scalar-loop formulas using NumPy only for storage",
+      "version": "NumPy 2.5.0",
+      "revision": "dependencies pinned in requirements-oracles.lock",
+      "url": "https://github.com/numpy/numpy/tree/v2.5.0",
+      "authority_for": ["value", "formula_intermediates", "shape"],
+      "not_authority_for": ["same_high_level_operation", "pytorch_schema", "backend_execution"],
+      "raw_evidence": [
+        {
+          "path": "raw/SRC-NUMPY-FORMULA/remaining-core.json",
+          "sha256": "73a3ba7073fa7afe0dbb810c90d8d6ebd1a748a1e3555f9e31940d3685e36d1f"
+        },
+        {
+          "path": "raw/SRC-NUMPY-FORMULA/backward.json",
+          "sha256": "005f9b9347db290ee538d0c2d0fb62dd3a457f6e2f2b6dec9de397620291d5f3"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-SCIPY-LAPACK",
+      "kind": "independent_numerical_library",
+      "title": "SciPy linalg with recorded LAPACK driver",
+      "version": "SciPy 1.18.0",
+      "revision": "dependencies pinned in requirements-oracles.lock",
+      "url": "https://github.com/scipy/scipy/tree/v1.18.0",
+      "authority_for": ["value", "reconstruction", "orthogonality", "residual"],
+      "not_authority_for": ["packed_representation", "phase_choice", "pytorch_schema"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-ONNX-REF",
+      "kind": "independent_specification_evaluator",
+      "title": "ONNX ReferenceEvaluator",
+      "version": "ONNX 1.22.0",
+      "revision": "dependencies pinned in requirements-oracles.lock",
+      "url": "https://github.com/onnx/onnx/tree/v1.22.0",
+      "authority_for": ["value", "onnx_model", "finite_neural_operator_semantics"],
+      "not_authority_for": ["pytorch_private_state", "pytorch_aliasing", "pytorch_special_values"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-JAX-X64",
+      "kind": "independent_automatic_differentiation",
+      "title": "JAX CPU x64 VJP of checked-in formulas",
+      "version": "jax 0.11.0; jaxlib 0.11.0",
+      "revision": "dependencies pinned in requirements-oracles.lock",
+      "url": "https://github.com/jax-ml/jax/tree/jax-v0.11.0",
+      "authority_for": ["value", "gradient", "vjp", "finite_differentiable_formula"],
+      "not_authority_for": ["pytorch_subgradient", "nondifferentiable_points", "pytorch_schema"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-DIRECT-DFT",
+      "kind": "independent_arbitrary_precision_formula",
+      "title": "Direct arbitrary-precision DFT and IDFT loops",
+      "version": "mpmath 1.3.0",
+      "revision": "160 decimal digits; dependencies pinned in requirements-oracles.lock",
+      "url": "https://mpmath.org/doc/current/",
+      "authority_for": ["value", "dft_term", "normalization", "contributor_set"],
+      "not_authority_for": ["numpy_fft", "scipy_fft", "pytorch_fft"],
+      "raw_evidence": [
+        {
+          "path": "raw/SRC-DIRECT-DFT/fft-contracts.json",
+          "sha256": "fb89a294c51cc8eab21c45571c322c6f701a7ce2e6e8ff10189f3295d75b66fc"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-MANUAL-ENUM",
+      "kind": "reviewed_finite_enumeration",
+      "title": "Literal finite enumeration with derivation",
+      "version": "schema 1",
+      "revision": "two-person review required in each generator record",
+      "url": "https://github.com/krisbailey/torchcts/tree/2ebc1f788227cba5d4d0e0fcb79b6416dfcbb24b/evidence/oracles",
+      "authority_for": ["value", "legal_set", "alias_graph", "mutation_graph", "shape", "dtype"],
+      "not_authority_for": ["unreviewed_enumeration", "vendor_opaque_bytes"],
+      "raw_evidence": [
+        {
+          "path": "raw/SRC-MANUAL-ENUM/nonunique-contracts.json",
+          "sha256": "6644a08393c3197d23f00f8e454a5d6bb993117417276f6a2fcebc831c31ce8f"
+        },
+        {
+          "path": "raw/SRC-MANUAL-ENUM/direct-dispositions.json",
+          "sha256": "e845d69b5352dfe733b2f47cd457f8bcc152c17e2589593ba9e1369bfaa69023"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-PYTORCH-SOURCE",
+      "kind": "pinned_upstream_source",
+      "title": "PyTorch implementation and schemas at supported official tags",
+      "version": "PyTorch 2.7.0 through 2.12.1",
+      "revision": "134179474539648ba7dee1317959529fbd0e7f89,e2d141dbde55c2a4370fac5165b0561b6af4798b,ba56102387ef21a3b04b357e5b183d48f0afefc7,0fabc3ba44823f257e70ce397d989c8de5e362c1,d38164a545b4a4e4e0cf73ce67173f70574890b6,449b1768410104d3ed79d3bcfe4ba1d65c7f22c0,70d99e998b4955e0049d13a98d77ae1b14db1f45,0d62256a2b23365f8e1604297eb23a6545102aa8,7269437d655783a26cba32aa88195b741ff496aa",
+      "url": "https://github.com/pytorch/pytorch/tree/7269437d655783a26cba32aa88195b741ff496aa",
+      "authority_for": ["dtype", "shape", "schema", "routing", "version_applicability", "pytorch_private_state"],
+      "not_authority_for": ["independent_value", "backend_conformance"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-PUBLIC-API",
+      "kind": "pinned_public_api_contract",
+      "title": "PyTorch public API documentation source",
+      "version": "PyTorch 2.7.0 through 2.12.1",
+      "revision": "official tag commits listed by SRC-PYTORCH-SOURCE",
+      "url": "https://github.com/pytorch/pytorch/tree/7269437d655783a26cba32aa88195b741ff496aa/docs/source",
+      "authority_for": ["dtype", "shape", "public_behavior", "version_applicability"],
+      "not_authority_for": ["independent_value", "private_schema", "backend_execution"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-VENDOR-CAPTURE",
+      "kind": "physical_backend_capture",
+      "title": "Reviewed TorchCTS vendor/backend evidence",
+      "version": "TorchCTS backend evidence schema at 2ebc1f788227cba5d4d0e0fcb79b6416dfcbb24b",
+      "revision": "exact source_id and build are recorded per case",
+      "url": "https://github.com/krisbailey/torchcts/tree/2ebc1f788227cba5d4d0e0fcb79b6416dfcbb24b/evidence/backends",
+      "authority_for": ["backend_execution", "hardware_gate", "decoded_semantics", "mutation_graph"],
+      "not_authority_for": ["mathematical_definition", "portable_opaque_bytes"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-RANDOM123",
+      "kind": "published_known_answer_vectors",
+      "title": "Random123 Philox known-answer vectors",
+      "version": "Random123 1.14.0",
+      "revision": "v1.14.0",
+      "url": "https://github.com/DEShawResearch/random123/tree/v1.14.0",
+      "authority_for": ["value", "philox_counter", "philox_key", "random_vector"],
+      "not_authority_for": ["pytorch_counter_mapping", "distribution_from_single_sample"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-SOBOL-JK",
+      "kind": "published_direction_numbers_and_independent_implementation",
+      "title": "Joe-Kuo Sobol direction numbers and SciPy qmc.Sobol",
+      "version": "new-joe-kuo-6.21201; SciPy 1.18.0",
+      "revision": "direction-file revision must be recorded by any accepted case; dependencies pinned in requirements-oracles.lock",
+      "url": "https://web.maths.unsw.edu.au/~fkuo/sobol/",
+      "authority_for": ["value", "sobol_direction_number", "sequence_state"],
+      "not_authority_for": ["pytorch_state_layout", "backend_execution"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-CTC-DP",
+      "kind": "independent_exact_dynamic_program",
+      "title": "Graves CTC forward/backward recurrence",
+      "version": "Graves et al. 2006 recurrence",
+      "revision": "checked-in exact-rational implementation hash recorded per case",
+      "url": "https://www.cs.toronto.edu/~graves/icml_2006.pdf",
+      "authority_for": ["value", "gradient", "forward_table", "backward_table"],
+      "not_authority_for": ["vendor_workspace", "pytorch_schema"],
+      "raw_evidence": []
+    },
+    {
+      "schema_version": 1,
+      "source_id": "SRC-PHYSICAL-BACKEND",
+      "kind": "required_exact_backend_execution",
+      "title": "Exact-overload physical backend execution",
+      "version": "TorchCTS backend evidence schema at 2ebc1f788227cba5d4d0e0fcb79b6416dfcbb24b",
+      "revision": "hardware, driver, PyTorch build, schema, and source_id recorded per case",
+      "url": "https://github.com/krisbailey/torchcts/tree/2ebc1f788227cba5d4d0e0fcb79b6416dfcbb24b/evidence/backends",
+      "authority_for": ["backend_execution", "hardware_gate", "exact_overload", "status_promotion"],
+      "not_authority_for": ["mathematical_definition", "source_only_promotion"],
+      "raw_evidence": []
+    }
+  ]
+}

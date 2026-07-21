@@ -1,0 +1,189 @@
+{
+  "applicability": {
+    "backend": "cpu_development_host",
+    "input_condition": "fixed_formula_record",
+    "pytorch": ">=2.7.0,<2.12.2"
+  },
+  "case_id": "cp-polynomial-exact-core",
+  "case_pack": "CP-POLYNOMIAL",
+  "comparison": {
+    "asserts": [
+      "value",
+      "dtype",
+      "shape"
+    ],
+    "derivation": "Independent scalar loops and exact/high-precision formula evaluation with declared public-dtype rounding.",
+    "kind": "exact_bits_and_metadata"
+  },
+  "created_at": "2026-07-20",
+  "dispatcher_surfaces": [],
+  "expected": {
+    "laguerre": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f080000",
+        "0xbe155555",
+        "0xbf200000"
+      ]
+    },
+    "shifted": {
+      "t": {
+        "dtype": "torch.float32",
+        "encoding": "ieee754_bits",
+        "layout": "torch.strided",
+        "shape": [
+          5
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ],
+        "values": [
+          "0x3f800000",
+          "0xbf800000",
+          "0xbf000000",
+          "0x80000000",
+          "0x3f800000"
+        ]
+      },
+      "u": {
+        "dtype": "torch.float32",
+        "encoding": "ieee754_bits",
+        "layout": "torch.strided",
+        "shape": [
+          5
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ],
+        "values": [
+          "0x3f800000",
+          "0xc0000000",
+          "0x00000000",
+          "0x80000000",
+          "0x40a00000"
+        ]
+      },
+      "v": {
+        "dtype": "torch.float32",
+        "encoding": "ieee754_bits",
+        "layout": "torch.strided",
+        "shape": [
+          5
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ],
+        "values": [
+          "0x3f800000",
+          "0xc0400000",
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ]
+      },
+      "w": {
+        "dtype": "torch.float32",
+        "encoding": "ieee754_bits",
+        "layout": "torch.strided",
+        "shape": [
+          5
+        ],
+        "storage_offset": 0,
+        "strides": [
+          1
+        ],
+        "values": [
+          "0x3f800000",
+          "0xbf800000",
+          "0xbf800000",
+          "0xbf800000",
+          "0x41100000"
+        ]
+      }
+    }
+  },
+  "generator": "scripts/oracle_fixtures/generate_exact_core_records.py",
+  "implementation_entry_points": [
+    "torchcts.core.reference_oracles.laguerre_polynomial_reference",
+    "torchcts.core.reference_oracles.shifted_chebyshev_polynomial_reference"
+  ],
+  "inputs": {
+    "degrees": {
+      "bit_width": 64,
+      "dtype": "torch.int64",
+      "encoding": "integer_decimal",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "signed": true,
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4"
+      ]
+    },
+    "input": {
+      "dtype": "torch.float32",
+      "encoding": "ieee754_bits",
+      "layout": "torch.strided",
+      "shape": [
+        5
+      ],
+      "storage_offset": 0,
+      "strides": [
+        1
+      ],
+      "values": [
+        "0xbf800000",
+        "0x00000000",
+        "0x3e800000",
+        "0x3f000000",
+        "0x3f800000"
+      ]
+    }
+  },
+  "oracle_ids": [
+    "laguerre_polynomial_reference",
+    "shifted_chebyshev_polynomial_reference"
+  ],
+  "oracle_kind": "value_reference",
+  "raw_evidence": [
+    "raw/SRC-SYMPY-EXACT/exact-core.json"
+  ],
+  "review": {
+    "conclusion": "implementation_correct",
+    "reviewed_at": "2026-07-20",
+    "reviewed_by": [
+      "fixture-schema-implementation",
+      "independent-formula-reproduction"
+    ]
+  },
+  "schema_version": 1,
+  "source_ids": [
+    "SRC-SYMPY-EXACT",
+    "SRC-IEEE-C",
+    "SRC-PYTORCH-SOURCE"
+  ],
+  "validation_class": "V1_FIXED_VALUE"
+}
