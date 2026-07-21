@@ -9,6 +9,9 @@ Run the release gate from the repository root:
 
 ```bash
 .venv/bin/python -m pytest -q torchcts/selftest --validation
+.venv/bin/python scripts/oracle_fixtures/verify_manifest.py --check
+.venv/bin/python -m pytest -q tests/oracles
+.venv/bin/python scripts/verify_backend_evidence.py
 .venv/bin/python -m torchcts coverage audit
 .venv/bin/python -m torchcts coverage check --fail-on-unknown
 .venv/bin/python -m compileall -q torchcts
@@ -19,6 +22,11 @@ git diff --check
 Run backend hardware jobs on the hosts that support the corresponding backend
 families. Backend-pack coverage is only accepted from a build that can execute
 the direct dispatcher path.
+
+The oracle-validation commands are development and release gates only. They do
+not run from an installed TorchCTS package, do not contribute backend
+conformance results, and do not make fixture or evidence files runtime
+dependencies.
 
 ## Updating PyTorch Compatibility
 
@@ -99,7 +107,9 @@ metadata must use the root `README.md` as the long description because
 Inspect the wheel and sdist contents before upload. They must include required
 TorchCTS package data and must not include generated results, build outputs,
 caches, local manifests, temporary planning files, publish credentials, or local
-helper scripts.
+helper scripts. Run `scripts/verify_package_artifacts.py` on both artifacts; it
+also requires their packaged README content to match the current root
+`README.md` exactly.
 
 ## Repository Hygiene
 
