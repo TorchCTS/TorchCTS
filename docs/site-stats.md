@@ -5,7 +5,7 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-07-19T22:35:52.964501Z |
+| Generated at | 2026-07-20T21:07:47.399596Z |
 | TorchCTS version | 0.4.1 |
 | Installed TorchCTS metadata version | 0.4.1 |
 | pyproject.toml version | 0.4.1 |
@@ -14,15 +14,16 @@ It describes the current checkout and installed PyTorch build; it is not a backe
 | PyTorch version | 2.12.1 |
 | Python version | 3.14.2 |
 | Platform | macOS-26.3-arm64-arm-64bit-Mach-O |
-| Coverage audit timestamp | 2026-07-19T22:32:36.600620Z |
+| Coverage audit timestamp | 2026-07-20T21:04:51.984543Z |
 | Pytest collection included | yes |
 
 ## Headline Stats
 
 | Metric | Value |
 | --- | --- |
-| Pytest nodes collected | 19405 |
-| Pytest executable nodes | 18588 |
+| Pytest nodes collected | 19395 |
+| Oracle QA nodes collected | 80 |
+| Pytest executable nodes | 18578 |
 | Pytest skip-marked nodes | 3 |
 | Structured deselected nodes | 814 |
 | ATen overloads inventoried | 3225 |
@@ -45,7 +46,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Pytest nodes | Executable nodes | Pytest skip-marked nodes | Structured deselected nodes | Coverage surfaces | Generated dispatcher cases | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 446 | 445 | 0 | 1 | 418 | 418 | Core primitive behavior that every backend should run continuously. |
+| 1 | 436 | 435 | 0 | 1 | 418 | 418 | Core primitive behavior that every backend should run continuously. |
 | 2 | 13789 | 13655 | 0 | 134 | 964 | 143 | Normal correctness coverage for common tensor-producing and tensor-consuming surfaces. |
 | 3 | 1085 | 741 | 3 | 341 | 1049 | 711 | Mainstream framework semantics such as mutation, aliasing, RNG, metadata, and generated variants. |
 | 4 | 2405 | 2174 | 0 | 231 | 382 | 273 | Broad production behavior including training/autograd-adjacent and family-specialized cases. |
@@ -60,17 +61,17 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | Collection command | `python -m pytest --collect-only -q torchcts --validation --level 8` |
 | Structured collection metadata | yes |
-| Structured records parsed | 19405 |
-| Node IDs parsed from stdout | 18591 |
-| Pytest summary count | 19405 |
+| Structured records parsed | 19395 |
+| Node IDs parsed from stdout | 18581 |
+| Pytest summary count | 19395 |
 | Parameterized node IDs | 19222 |
-| Unparameterized node IDs | 183 |
+| Unparameterized node IDs | 173 |
 
 ## Pytest Collection Decisions
 
 | Name | Count |
 | --- | --- |
-| executable | 18588 |
+| executable | 18578 |
 | structured_deselected | 814 |
 | pytest_skip_marked | 3 |
 
@@ -108,7 +109,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | stress | 30 |
 | rng | 28 |
 | memory | 24 |
-| selftest | 24 |
+| selftest | 14 |
 | device_api | 12 |
 | errors | 5 |
 | multi_device | 3 |
@@ -121,7 +122,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | opinfo | 13070 |
 | generated | 4258 |
 | handwritten | 2053 |
-| selftest | 24 |
+| selftest | 14 |
 
 ## Pytest Nodes By File
 
@@ -175,7 +176,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | torchcts/autograd/test_double_backward.py | 12 |
 | torchcts/generated/test_rng_variants.py | 12 |
 | torchcts/memory/test_allocator.py | 12 |
-| torchcts/selftest/test_contract_references.py | 10 |
 | torchcts/dtypes/test_complex.py | 9 |
 | torchcts/stress/test_large_tensors.py | 9 |
 | torchcts/operators/test_linalg.py | 8 |
@@ -415,7 +415,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 16601 |
+| none | 16591 |
 | training | 2399 |
 | compile | 120 |
 | sparse | 37 |
@@ -523,13 +523,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | generated | 4258 |
 | path_shape | 850 |
 | handwritten | 781 |
-| category | 446 |
+| category | 436 |
 
 ## Collection Nodes By Surface Kind
 
 | Name | Count |
 | --- | --- |
-| none | 15125 |
+| none | 15115 |
 | out_variant | 1639 |
 | functional_data | 1443 |
 | mutating_or_inplace | 939 |
@@ -543,7 +543,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| none | 15147 |
+| none | 15137 |
 | out | 1619 |
 | functional | 1613 |
 | inplace | 939 |
@@ -1273,13 +1273,13 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | Name | Count |
 | --- | --- |
 | present | 18698 |
-| missing | 707 |
+| missing | 697 |
 
 ## Collection Coverage ID Presence
 
 | Name | Count |
 | --- | --- |
-| missing | 13516 |
+| missing | 13506 |
 | present | 5889 |
 
 ## Collection Nodes By Coverage Category
@@ -1328,7 +1328,6 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | custom_quantized_decode | 25 |
 | quantized_container_plumbing | 25 |
 | generated_layout_storage_variants | 24 |
-| selftest | 24 |
 | workload_shape | 21 |
 | generated_factories | 20 |
 | factory | 19 |
@@ -1336,6 +1335,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | autograd_inplace_safety | 18 |
 | metadata_device | 15 |
 | nested | 15 |
+| selftest | 14 |
 | allocator | 12 |
 | device_api_behavior | 12 |
 | double_backward | 12 |
@@ -1365,7 +1365,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Level | Count |
 | --- | --- |
-| 1 | 446 |
+| 1 | 436 |
 | 2 | 13789 |
 | 3 | 1085 |
 | 4 | 2405 |
@@ -1380,7 +1380,7 @@ This table combines pytest collection inventory with dispatcher coverage invento
 
 | Name | Count |
 | --- | --- |
-| executable | 445 |
+| executable | 435 |
 | structured_deselected | 1 |
 
 ### Level 2
@@ -1432,6 +1432,16 @@ This table combines pytest collection inventory with dispatcher coverage invento
 | --- | --- |
 | executable | 27 |
 | structured_deselected | 3 |
+
+## Oracle QA Collection Summary
+
+Oracle QA is a separate development and release suite. It is not part of TorchCTS runtime execution or the installed wheel.
+
+| Metric | Value |
+| --- | --- |
+| Collection command | `python -m pytest --collect-only -q tests/oracles` |
+| Oracle QA node IDs parsed | 80 |
+| Pytest summary count | 80 |
 
 ## Targeted Path-Shape Coverage
 
@@ -2830,8 +2840,8 @@ No entries.
 
 | Metric | Value |
 | --- | --- |
-| Coverage markers discovered | 388 |
-| Category markers discovered | 524 |
+| Coverage markers discovered | 378 |
+| Category markers discovered | 514 |
 | Unmapped hand-authored tests | 0 |
 | Audit warnings | 0 |
 | Audit errors | 0 |
@@ -2860,7 +2870,7 @@ No entries.
 | autograd | 30 |
 | dtypes | 30 |
 | rng | 24 |
-| selftest | 24 |
+| selftest | 14 |
 | compiler | 13 |
 | generated | 10 |
 | stress | 10 |

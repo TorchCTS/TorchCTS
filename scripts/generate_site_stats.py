@@ -216,6 +216,56 @@ def _collect_pytest_nodes(extra_pytest_args: list[str]) -> dict:
     }
 
 
+def _collect_oracle_pytest_nodes() -> dict:
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q",
+        "tests/oracles",
+    ]
+    command_display = [
+        "python",
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q",
+        "tests/oracles",
+    ]
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    nodes = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.startswith("tests/oracles/") and "::" in line
+    ]
+    collected_from_summary = None
+    match = re.search(r"(\d+) tests? collected", output)
+    if match:
+        collected_from_summary = int(match.group(1))
+    if result.returncode != 0:
+        tail = "\n".join(output.splitlines()[-80:])
+        raise RuntimeError(
+            "oracle pytest collection failed with exit code "
+            f"{result.returncode}\nCommand: {' '.join(command)}\n{tail}"
+        )
+    return {
+        "command": command,
+        "command_display": command_display,
+        "nodes": nodes,
+        "node_count": len(nodes),
+        "collected_from_summary": collected_from_summary,
+    }
+
+
 def _fallback_records_from_nodes(nodes: list[str]) -> list[dict]:
     records = []
     for nodeid in nodes:
@@ -748,7 +798,13 @@ def _semantic_level_overview_rows(collection_stats: dict | None, coverage: dict,
     return rows
 
 
-def render_markdown(*, audit: dict, collection: dict | None, include_collect: bool) -> str:
+def render_markdown(
+    *,
+    audit: dict,
+    collection: dict | None,
+    include_collect: bool,
+    oracle_collection: dict | None = None,
+) -> str:
     coverage = _coverage_stats(audit)
     known_crashes = _known_crash_stats()
     dtype_contracts = _dtype_contract_stats()
@@ -788,6 +844,7 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
 
     headline_rows = [
         ["Pytest nodes collected", collection_stats["total"] if collection_stats else "not collected"],
+        ["Oracle QA nodes collected", oracle_collection["node_count"] if oracle_collection else "not collected"],
         ["Pytest executable nodes", collection_stats["decisions"].get("executable", 0) if collection_stats else "not collected"],
         ["Pytest skip-marked nodes", collection_stats["decisions"].get("pytest_skip_marked", 0) if collection_stats else "not collected"],
         ["Structured deselected nodes", collection_stats["decisions"].get("structured_deselected", 0) if collection_stats else "not collected"],
@@ -871,6 +928,27 @@ def render_markdown(*, audit: dict, collection: dict | None, include_collect: bo
         lines.append("## Pytest Collection Summary")
         lines.append("")
         lines.append("Pytest collection was skipped. Re-run without `--no-collect` to include test-node breakdowns.")
+        lines.append("")
+
+    if oracle_collection:
+        lines.append("## Oracle QA Collection Summary")
+        lines.append("")
+        lines.append("Oracle QA is a separate development and release suite. It is not part of TorchCTS runtime execution or the installed wheel.")
+        lines.append("")
+        command = " ".join(oracle_collection.get("command_display", oracle_collection["command"]))
+        lines.extend(_table(
+            ["Metric", "Value"],
+            [
+                ["Collection command", f"`{command}`"],
+                ["Oracle QA node IDs parsed", oracle_collection["node_count"]],
+                [
+                    "Pytest summary count",
+                    oracle_collection["collected_from_summary"]
+                    if oracle_collection["collected_from_summary"] is not None
+                    else "not found",
+                ],
+            ],
+        ))
         lines.append("")
 
     path_shape_stats = coverage.get("path_shape_corpus_stats") or {}
@@ -1102,13 +1180,16 @@ def main(argv: list[str] | None = None) -> int:
 
     audit = build_audit()
     collection = None
+    oracle_collection = None
     if not args.no_collect:
         collection = _collect_pytest_nodes(args.pytest_arg)
+        oracle_collection = _collect_oracle_pytest_nodes()
 
     markdown = render_markdown(
         audit=audit,
         collection=collection,
         include_collect=not args.no_collect,
+        oracle_collection=oracle_collection,
     )
     output = args.output
     if not output.is_absolute():
